@@ -1,0 +1,35 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"   # weekly, Monday 05:23 UTC
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, actions]   # Shell (install.sh) isn't a CodeQL language — covered by Gitleaks + secret-scan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none            # Python is interpreted; Actions needs no build
+          queries: security-and-quality
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
