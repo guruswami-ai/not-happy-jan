@@ -49,11 +49,11 @@ Mac (`shazza`), and a full uninstall → **default/`--full`** install on `Om`.
 - [ ] **Branch protection requires CI + secret-scan checks** — *blocked until public;
       applied to the fresh public repo by `scripts/go-public.sh` (requires `gitleaks` ·
       `package` · `test (3.10)` · `test (3.12)`).*
-- [x] Code scanning (CodeQL): **explicitly deferred for the alpha.** Rationale — the
-      codebase is a small pure-Python + shell surface with no web/server attack surface
-      exposed by default (MCP/TTS bind loopback), secret leakage is already gated by the
-      history-aware Gitleaks workflow, and Dependabot covers dependency CVEs. CodeQL will
-      be enabled after the alpha (one-liner in `scripts/go-public.sh`'s closing notes).
+- [x] Code scanning (CodeQL): **enabled** via advanced setup —
+      `.github/workflows/codeql.yml` analyzes `python` + `actions` (build-mode none,
+      `security-and-quality` queries) on push to `main`, PRs, and weekly. Results land in
+      Security → Code scanning. (Not a required merge check yet — let the first scans come
+      back clean before adding `CodeQL` to branch protection.)
 
 ## Transition order — clean public release (perform in this sequence)
 
@@ -76,7 +76,7 @@ automates steps 1–4; steps 5–6 are manual.
    — tick the last installer-gate box.
 6. Verify the `SECURITY.md` reporting link resolves; update any local clones' remotes.
 
-CodeQL is deferred (above); re-enable post-alpha with the command in `go-public.sh`.
+CodeQL is enabled (above) via `.github/workflows/codeql.yml`.
 
 Do not publish until every non-flip item above is complete or explicitly removed through
 a reviewed change explaining why it is not required.
