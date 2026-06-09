@@ -21,14 +21,9 @@ no third-party material is embedded.
 
 ## Manifest
 
-The machine-readable allowlist of approved patterns is
-[`scripts/media-manifest.txt`](../scripts/media-manifest.txt); the bundle builder
-(`scripts/build-media-bundles.sh`) validates every file against it and rejects
-anything unlisted plus macOS metadata (`.DS_Store`, `._*`) and working dirs.
-
 | Asset group | Files | How produced | Redistribution basis |
 |---|---|---|---|
-| **Sound effects** — handset, ring, tones, glitches, buttons | `audio/sfx/handset/*.wav`, `audio/sfx/{tones,glitches,buttons}/*.wav`, `audio/sfx/phone_ringing.wav`, `transfer.wav`, `failed_transfer.wav` | **AI-generated** with `stabilityai/stable-audio-open-1.0` via [`scripts/generate-sfx.py`](../scripts/generate-sfx.py) (prompts recorded there). Stability AI Community License grants the generator ownership of outputs. | **CC0** (public domain). No third-party samples. |
+| **Sound effects** — handset, ring, tones, glitches, buttons | `audio/sfx/handset/*.wav`, `audio/sfx/{tones,glitches,buttons}/*.wav`, `audio/sfx/phone_ringing.wav`, `transfer.wav`, `failed_transfer.wav` | **AI-generated** with `stabilityai/stable-audio-open-1.0` from text prompts (the generation tooling + exact prompts are retained in the project's private dev archive). Stability AI Community License grants the generator ownership of outputs. | **CC0** (public domain). No third-party samples. |
 | **Hold-tone clicks & censor beep** | `audio/sfx/call_on_hold.wav`, `audio/sfx/call_off_hold.wav`, `audio/sfx/censor-beep.mp3` | **Synthesised procedurally in code** (original DSP — the censor beep is a generated tone at the censor-beep frequency), phone-band filtered. | **CC0** (original work). |
 | **Hold music** | `audio/music/*.m4a` | **Generated with [Suno](https://suno.com)** under a **paid plan that grants distribution rights**. | Redistribution permitted under Suno's paid-plan commercial terms. |
 | **Bundled voice bank** (ships in the package) | `clips/{jan,bazza,karren,jan-whispering}/<state>/*.wav` → `nhj/_bundled/clips/…` | **AI-generated** with Qwen3-TTS from the synthetic voice refs — bare-marker lines so a minimal install speaks in-character with no model download. No human voice. | **CC0** (AI-generated). |

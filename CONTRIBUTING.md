@@ -17,7 +17,6 @@ Before opening a pull request, run:
 uv run --extra dev pytest -q
 uv run --extra dev ruff check src tests   # lint policy in pyproject [tool.ruff.lint]
 bash -n install.sh
-bash -n scripts/build-media-bundles.sh
 uv build
 ```
 
