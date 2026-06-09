@@ -80,7 +80,7 @@ It's driven by Claude Code's lifecycle hooks: muzak starts/resumes on `UserPromp
 
 The bundled 4+ hours of hold music (and the SFX / voice clips / ambient beds) install via `nhj setup-media`, which pulls the `audio/` and `voices/` bundles from the [`media`](https://github.com/guruswami-ai/not-happy-jan/releases/tag/media) GitHub release — re-run it anytime to refresh, or set `NHJ_MEDIA_BASE` to host the bundles elsewhere.
 
-> **While the repo is private**, the release assets need authentication, so run **`gh auth login`** once before `nhj setup-media` (it falls back to `gh release download` automatically when the plain URL 404s). Once the repo is public the direct URL just works — no `gh` needed.
+> The release assets are public, so `nhj setup-media` downloads them directly — no `gh` or authentication needed. (If you fork into a private repo, or otherwise gate the release, `setup-media` automatically falls back to `gh release download` when the plain URL returns 401/403/404.)
 
 Drop your own tracks (`.m4a`, `.mp3`, `.wav`…) into `audio/music/`, or point `NHJ_MUZAK_DIR` at a folder; they shuffle-cycle. Set the level with `NHJ_MUZAK_VOLUME` (0–1, default `0.5`).
 
