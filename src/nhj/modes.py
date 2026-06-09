@@ -74,6 +74,7 @@ BUILTIN_MODES = {
     "call-centre": {
         "muzak": "on", "audio_mode": "call-centre", "scenario": _CALLCENTRE_SCENARIO,
         "display": "normal", "voice": "", "haptic": "full", "ambient": "callcentre",
+        "ambient_gated": True,
         "dials": {"jan": {"ockerism": 1, "competence": 1},
                   "bazza": {"stress": 1, "competence": 2},
                   "karren": {"karren": 6}},

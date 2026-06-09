@@ -60,6 +60,7 @@ modes:
     muzak: on                   # on-hold hold music — pauses when the "operator" picks up
     audio_mode: call-centre
     ambient: callcentre
+    ambient_gated: true           # room bed only sounds UNDER the operator's voice, not on a continuous loop
     display: normal
     scenario: "You are a bored, apathetic government call-centre worker on a crackly phone line. You clearly don't care, you're mildly rude and annoyed the caller rang, you keep putting them on hold and fumbling the details. Flat affect, minimal effort, unhelpful — 'that's not my department'. Not bogan, just over it."
     dials: { jan: {ockerism: 1, competence: 1}, bazza: {stress: 1, competence: 2}, karren: {karren: 6} }
