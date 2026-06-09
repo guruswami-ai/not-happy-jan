@@ -770,7 +770,7 @@ def _install_ocker_launchagent(gguf_path: str, port: int) -> Path:
   </array>
   <key>WorkingDirectory</key><string>{resources.data_dir()}</string>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
-  <key>ProcessType</key><string>Background</string>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>{resources.log_dir() / "ocker-bogan-nano.log"}</string>
   <key>StandardErrorPath</key><string>{resources.log_dir() / "ocker-bogan-nano.log"}</string>
 </dict></plist>
@@ -805,7 +805,7 @@ def _install_tts_launchagent(port: int) -> Path:
   </array>
   <key>WorkingDirectory</key><string>{resources.data_dir()}</string>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
-  <key>ProcessType</key><string>Background</string>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>{resources.log_dir() / "tts.log"}</string>
   <key>StandardErrorPath</key><string>{resources.log_dir() / "tts.log"}</string>
 </dict></plist>
@@ -1057,7 +1057,7 @@ def _install_mcp_launchagent(listen: str, port: int) -> Path:
         },
         "RunAtLoad": True,
         "KeepAlive": True,
-        "ProcessType": "Background",
+        "ProcessType": "Interactive",
         "StandardOutPath": str(resources.log_dir() / "mcp.log"),
         "StandardErrorPath": str(resources.log_dir() / "mcp.log"),
     }

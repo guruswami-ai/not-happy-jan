@@ -493,3 +493,14 @@ def test_install_hook_backup_matches_parsed_settings(tmp_path):
     bak = settings.with_suffix(".json.pre-nhj.bak")
     assert bak.exists()
     assert json.loads(bak.read_text()) == original
+
+
+def test_launchagents_not_qos_throttled():
+    """LaunchAgents must NOT use ProcessType Background — it drops the process to macOS
+    background QoS (priority ~4 / App Nap), which throttled TTS synth ~4x (3.8s vs 0.85s).
+    TTS / LLM / MCP are latency-critical, so they run Interactive (full QoS)."""
+    cli_src = (Path(__file__).resolve().parents[1] / "src" / "nhj" / "cli.py").read_text()
+    assert "ProcessType</key><string>Background</string>" not in cli_src
+    assert '"ProcessType": "Background"' not in cli_src
+    # all three agents (TTS, LLM, MCP) declare Interactive QoS
+    assert cli_src.count("Interactive") >= 3
