@@ -65,6 +65,17 @@ experience — venv, Qwen3-TTS voice model, the `ocker-bogan-nano` LLM, bundled
 media, Claude Code hooks, and MCP server (stdio, localhost-only) — using
 **on-demand model loading** (no always-on daemon, so no resident RAM cost at idle).
 
+> **👉 Just run `bash install.sh` — and go for the full experience.** The default *is*
+> the full experience, and it's what Not-Happy-Jan is *for*: Jan, Bazza and Karren in
+> their own **live, cloned voices**, the **dynamic `ocker-bogan-nano` brain** writing a
+> fresh in-character line every time, and **4+ hours of hold music** ducking under it
+> all — 100% local, loaded on demand (nothing resident at idle). It's a one-off ~5 GB
+> download on an Apple Silicon Mac, then it just works.
+>
+> `--minimal` (pre-recorded bank, zero downloads) is there for CI and RAM-tight machines —
+> the cast still speaks, but you miss the live voices, the dynamic lines, and the music.
+> Don't reach for it unless you have to.
+
 | Profile | Command | What you get |
 |---|---|---|
 | **Default** | `bash install.sh` | Full experience — Qwen3-TTS + the `ocker-bogan-nano` LLM + hold music, on-demand loading; hooks + MCP wired |
