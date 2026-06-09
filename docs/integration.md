@@ -80,7 +80,7 @@ NHJ exposes an MCP tool `nhj_vibe` that works with any MCP-compatible agent:
 | Agent | Integration method |
 |---|---|
 | Claude Code | Stop hook (marker-based) or MCP tool |
-| OpenCode | MCP tool via `.mcp.json` |
+| OpenCode | MCP tool via `opencode.json` |
 | Cursor | MCP tool via MCP server config |
 | Aider | `--after-completion` shell hook |
 | Cline | MCP tool |
@@ -88,6 +88,57 @@ NHJ exposes an MCP tool `nhj_vibe` that works with any MCP-compatible agent:
 | JetBrains AI | MCP server |
 
 For remote agents (fleet nodes) set `NHJ_REMOTE_URL` to the NHJ SSE daemon on your local machine.
+
+## OpenCode integration
+
+[OpenCode](https://opencode.ai) is a CLI-based AI coding agent that uses MCP for tool integration.
+NHJ's MCP server works with OpenCode's stdio transport out of the box.
+
+### Quick install
+
+```bash
+nhj install-opencode   # writes ~/.config/opencode/opencode.json (backs it up first)
+```
+
+This merges the NHJ MCP entry into your OpenCode config. Re-running is idempotent.
+
+### Manual configuration
+
+```json
+// ~/.config/opencode/opencode.json
+{
+  "mcp": {
+    "not-happy-jan": {
+      "type": "local",
+      "command": ["nhj", "serve-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Example usage
+
+OpenCode calls the `nhj_vibe` MCP tool directly:
+
+```
+nhj_vibe(intent="ok", message="Task completed")
+nhj_vibe(intent="err", message="Build failed")
+nhj_vibe(intent="celebrate")
+```
+
+### Verify connectivity
+
+```bash
+nhj test ok          # fires a test vibe locally
+nhj serve-mcp        # start the MCP server in the foreground (stdio)
+```
+
+### Remove
+
+```bash
+nhj remove-opencode  # removes the NHJ entry from opencode.json
+```
 
 ## Security nudge — Karren catches leaked secrets
 
