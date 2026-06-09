@@ -466,11 +466,11 @@ def muzak(action: str = typer.Argument("status", help="on | continuous | rave | 
     a = action.lower()
     if a in ("on", "true", "1", "yes"):
         set_flag("muzak", True); set_flag("muzak_continuous", False); set_flag("muzak_rave", False)
-        _rave_display(False)
+        _rave_display(False); im.enable()                    # clear any leftover stop flag (off→on wedge)
         app.print("[green]✓[/green] inference muzak [bold]ON[/bold] (on-hold: silence when idle, music while busy)")
     elif a in ("continuous", "cont", "background", "bg"):
         set_flag("muzak", True); set_flag("muzak_continuous", True); set_flag("muzak_rave", False)
-        _rave_display(False)
+        _rave_display(False); im.enable()                    # clear stop + start the bed now (continuous)
         app.print("[green]✓[/green] inference muzak [bold]CONTINUOUS[/bold] (background — never auto-pauses)")
     elif a in ("rave", "party"):
         from nhj import modes as M

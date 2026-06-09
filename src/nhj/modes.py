@@ -148,8 +148,10 @@ def _apply_muzak(state: str) -> None:
         im.start()
     elif s in ("continuous", "cont", "background", "bg"):
         set_flag("muzak", True); set_flag("muzak_continuous", True); set_flag("muzak_rave", False)
+        im.enable()                                  # clear stop + start the bed (never-pause)
     else:  # "on" = on-hold
         set_flag("muzak", True); set_flag("muzak_continuous", False); set_flag("muzak_rave", False)
+        im.enable()                                  # clear any leftover stop flag (off→on wedge)
 
 
 def apply_mode(name: str) -> dict:
