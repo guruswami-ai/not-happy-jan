@@ -26,7 +26,7 @@ Ever feel like you're on hold, waiting for your agent to finish processing?
 
 ## What it does
 
-By default NHJ generates its voices with a **local TTS model**, running right on your own machine — building on the great work from **AgentVibes**. But it goes further. NHJ is **extensible** to a whole range of feedback tools: from the haptic Logitech MX Master mouse to $60 Ulanzi pixel displays, LaMetric Time, the Divoom Times Gate / Frame — or anything you can POST to, like a Vestaboard. When Karren's not happy, Jan *and you* are going to know about it.
+By default NHJ generates its voices with a **local TTS model**, running right on your own machine — building on earlier agent-feedback work, but going much further. NHJ is **extensible** to a whole range of feedback tools: from the haptic Logitech MX Master mouse to $60 Ulanzi pixel displays, LaMetric Time, the Divoom Times Gate / Frame — or anything you can POST to, like a Vestaboard. When Karren's not happy, Jan *and you* are going to know about it.
 
 When Claude Code (or any MCP-compatible agent) completes a task, NHJ fires across every output channel you have configured:
 
@@ -125,7 +125,7 @@ nhj status                  # show current settings
 | **[Dynamic voices](docs/dynamic-voices.md)** | The `ocker-bogan-nano` brain — why/what/install, BYO model, swearing & the bleep |
 | **[Minimum specs](docs/minimum-specs.md)** | The three tiers: silent · pre-recorded samples · the full live bogan call-centre |
 | **[Configuration & requirements](docs/configuration.md)** | `.env`, devices, inference muzak, TTS backends, specs |
-| **[Integration](docs/integration.md)** | Claude Code hooks, AgentVibes supersession, other agents, the secret guard, adding a device |
+| **[Integration](docs/integration.md)** | Claude Code hooks, legacy-hook supersession, other agents, the secret guard, adding a device |
 | **[Audio Standard](docs/AUDIO-STANDARD.md)** | The single-stream mixer, fidelity tiers, gapless hold, every audio control |
 | **[AWTRIX display setup](docs/awtrix-display-setup.md)** | A Ulanzi pixel clock running in ~10 minutes |
 | **[Haptic mouse setup](docs/haptic-mouse-setup.md)** | MX Master 4 firmware haptics |
@@ -137,7 +137,7 @@ NHJ is fully customisable: **72 HR-approved hold-music tracks** (over **4 hours*
 
 ## Credits
 
-Built on [haptic-wakey-wakey](https://github.com/guruswami-ai/haptic-wakey-wakey) by Paul Nevin.
+Evolved from an earlier personal agent-feedback project by Paul Nevin.
 TTS powered by [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit) via [mlx-audio](https://github.com/ml-explore/mlx-audio).
 
 ## License

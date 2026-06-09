@@ -35,13 +35,16 @@ The skill uses `nhj status`, `nhj set`, and related CLI commands. Live overrides
 resource conventions: checkout `.env` during source use, otherwise the platform config dir
 (`NHJ_CONFIG_DIR` override), plus the platform state dir / `NHJ_STATE_FILE` for runtime state.
 
-> **Coming from AgentVibes?** NHJ is its successor and reuses the **same `[vibes:]` markers**, so `install-hook` *supersedes* it rather than stacking on top:
+> **Supersedes legacy `[vibes:]` Stop hooks.** NHJ uses the same `[vibes:]` marker
+> contract as some earlier agent-feedback tools, so `install-hook` *supersedes* a
+> legacy shared-marker Stop hook rather than stacking on top:
 > - It first backs up `~/.claude/settings.json` → **`settings.json.pre-nhj.bak`**.
-> - It then **removes the legacy AgentVibes (and `haptic-wakey-wakey`) Stop hook** before adding NHJ's hooks — otherwise both would fire on every marker and you'd hear each notification **twice**.
-> - Only the `settings.json` hook *entry* is changed — **AgentVibes' own files are left untouched**, NHJ never installs or bundles it.
-> - `nhj remove-hook` removes NHJ's hooks but does **not** auto-restore AgentVibes — bring it back from the backup if you want it.
+> - If it finds a legacy shared-`[vibes:]`-marker Stop hook, it **removes that entry**
+>   before adding NHJ's — otherwise both would fire and you'd hear each notification **twice**.
+> - Only the `settings.json` hook *entry* is touched; no other tool's files are removed.
+> - `nhj remove-hook` removes NHJ's hooks (restore from the backup to revert).
 >
-> If you weren't running AgentVibes, there's nothing to strip and it just adds NHJ's hooks.
+> If you've no prior agent-feedback Stop hook, it simply adds NHJ's.
 
 Claude emits markers anywhere in its response:
 ```
