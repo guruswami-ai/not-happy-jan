@@ -24,7 +24,6 @@ jobs:
       - run: uv run --python ${{ matrix.python }} --extra dev pytest -q
       - run: uv run --python ${{ matrix.python }} --extra dev ruff check src tests
       - run: bash -n install.sh
-      - run: bash -n scripts/build-media-bundles.sh
 
   package:
     runs-on: macos-14

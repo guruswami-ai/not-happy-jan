@@ -34,9 +34,6 @@ wip-*
 # Bundled audio — music / sfx / voice samples / ambient beds (GitHub release asset, pulled by `nhj setup-media`)
 audio/
 
-# Transient license file staged into media bundles by scripts/build-media-bundles.sh
-/MEDIA-LICENSE.txt
-
 # Fine-tune tooling/artifacts — removed from the repo; ignore any local remnants
 /finetune/
 
