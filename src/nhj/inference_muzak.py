@@ -189,8 +189,16 @@ def enable() -> bool:
     Clears any leftover `stop` flag — otherwise an `off → on` toggle leaves `stop=True` set
     and the next controller exits the instant it spawns (silencing music AND voice, which
     share the mixer). Starts the controller now only if something should already be playing
-    (continuous, or a session already busy); on-hold otherwise waits for the next mark_busy."""
-    _update(lambda d: d.pop("stop", None))
+    (continuous, or a session already busy); on-hold otherwise waits for the next mark_busy.
+
+    Also drops any leftover forced-play session (`_MANUAL`, set by rave/continuous via
+    `start()` or `nhj muzak start`): otherwise switching rave → normal leaves that
+    never-expiring session in `busy`, so on-hold's `_should_play()` stays True and the
+    music never pauses."""
+    def _reset(d):
+        d.pop("stop", None)
+        d.get("busy", {}).pop(_MANUAL, None)
+    _update(_reset)
     return start_controller() if _should_play() else False
 
 

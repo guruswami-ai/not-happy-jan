@@ -43,3 +43,18 @@ def test_enable_starts_controller_when_should_play(monkeypatch):
     monkeypatch.setattr(M, "start_controller", lambda: started.append(True) or True)
     M.enable()
     assert started == [True]            # spawns the bed when it should be playing
+
+
+def test_enable_drops_forced_play_session_but_keeps_real(monkeypatch):
+    """rave/continuous set a never-expiring _MANUAL session via start(); switching back to
+    on-hold (enable) must drop it — else _should_play() stays True and the music never
+    pauses — while keeping any real (inference) session and clearing the stop flag."""
+    import nhj.inference_muzak as M
+    state = {"busy": {M._MANUAL: 9e9, "real-session": 123.0}, "stop": True}
+    monkeypatch.setattr(M, "_update", lambda fn: fn(state))
+    monkeypatch.setattr(M, "_should_play", lambda: False)
+    monkeypatch.setattr(M, "start_controller", lambda: True)
+    M.enable()
+    assert M._MANUAL not in state["busy"]       # forced-play session dropped
+    assert "real-session" in state["busy"]      # real inference session kept
+    assert "stop" not in state                  # stop flag cleared
