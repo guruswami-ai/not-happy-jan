@@ -131,6 +131,7 @@ nhj status                  # show current settings
 
 | Guide | What's inside |
 |---|---|
+| **[Architecture](docs/ARCHITECTURE.md)** | The serious technical design — custom LLM, fine-tuned TTS, hooks, queue + sequencing, multi-sensory dispatch, and the latency/resource tradeoffs behind it all |
 | **[Characters & dials](docs/characters.md)** | The cast, the dials, tuning live, adding your own voice |
 | **[Modes](docs/modes.md)** | One-word vibe switches (rave, call-centre, quiet, special-forces…) |
 | **[Dynamic voices](docs/dynamic-voices.md)** | The `ocker-bogan-nano` brain — why/what/install, BYO model, swearing & the bleep |
