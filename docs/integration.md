@@ -89,6 +89,42 @@ NHJ exposes an MCP tool `nhj_vibe` that works with any MCP-compatible agent:
 
 For remote agents (fleet nodes) set `NHJ_REMOTE_URL` to the NHJ SSE daemon on your local machine.
 
+## OpenCode integration
+
+OpenCode uses MCP for tool integration. Configure NHJ by adding to your `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "not-happy-jan": {
+      "type": "local",
+      "command": ["nhj", "serve-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Or install automatically:
+
+```bash
+nhj install-opencode
+```
+
+The MCP server exposes the `nhj_vibe` tool for triggering feedback events:
+
+```python
+# Example OpenCode usage
+await nhj_vibe(intent="ok", message="Task completed successfully")
+await nhj_vibe(intent="err", message="Build failed on line 47")
+await nhj_vibe(intent="celebrate")
+```
+
+**Requirements:**
+- NHJ installed and on PATH
+- MCP server transport set to stdio (default)
+- OpenCode configured to load local MCP tools
+
 ## Security nudge — Karren catches leaked secrets
 
 If you paste something secret-shaped into the chat (an API key, password, token,
