@@ -86,7 +86,7 @@ BUILTIN_MODES = {
     "special-forces": {
         "muzak": "off", "audio_mode": "normal", "scenario": _SPECFORCES_SCENARIO,
         "display": "off", "voice": "jan-whispering", "haptic": "simple",
-        "ambient": "special-forces-radio",
+        "ambient": "special-forces-radio", "ambient_gated": True,
         "dials": {"jan": {"ockerism": 3, "competence": 9},
                   "bazza": {"stress": 2, "competence": 9},
                   "karren": {"karren": 3}},
@@ -174,6 +174,7 @@ def apply_mode(name: str) -> dict:
     set_setting("haptic_style", haptic)
     set_setting("censor", _norm(p.get("censor"), "quack"))   # default quack; went-full-bogan = off
     set_setting("ambient_mode", _norm(p.get("ambient"), ""))
+    set_setting("ambient_gated", bool(p.get("ambient_gated", False)))  # ambient sounds only under the voice
 
     # --- dials: resolve friendly names → level/chaos (the keys characters actually
     #     read), then swap in the whole set under one locked write so a mode switch is a

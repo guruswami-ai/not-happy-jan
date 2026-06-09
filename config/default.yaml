@@ -73,6 +73,7 @@ modes:
     voice: jan-whispering       # swaps the ref voice sample for ALL characters → voices/jan-whispering/ (whispered & quiet)
     haptic: simple
     ambient: special-forces-radio
+    ambient_gated: true           # radio bed only sounds UNDER the voice (comms backdrop), silent otherwise
     scenario: "You are a special-forces operator on comms during a covert op. Terse, calm, ultra-competent, whispering. Minimal words, military brevity ('copy', 'go', 'target acquired', 'stand by'). No banter, no ocker — disciplined and quiet."
     dials: { jan: {ockerism: 3, competence: 9}, bazza: {stress: 2, competence: 9}, karren: {karren: 3} }
   went-full-bogan:              # max swearing (unbleeped), razor competent, no stupid questions — friendly & playful

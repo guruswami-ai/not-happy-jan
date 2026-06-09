@@ -14,10 +14,22 @@ def test_apply_mode_publishes_ambient_bed(monkeypatch):
     monkeypatch.setattr(modes, "_apply_muzak", lambda *a, **k: None)
 
     modes.apply_mode("call-centre")
-    modes.apply_mode("special-forces")
-
     assert ("ambient_mode", "callcentre") in calls
+    assert ("ambient_gated", False) in calls          # call-centre room tone is continuous
+
+    calls.clear()
+    modes.apply_mode("special-forces")
     assert ("ambient_mode", "special-forces-radio") in calls
+    assert ("ambient_gated", True) in calls           # radio bed only sounds under the voice
+
+
+def test_set_ambient_loop_voice_gated_flag(monkeypatch):
+    monkeypatch.setattr(duck_player, "_decode_file", lambda path: np.zeros((4, 2), dtype=np.float32))
+    mixer = duck_player.Mixer([])
+    mixer.set_ambient_loop("radio.wav", gain=0.5, voice_gated=True)
+    assert mixer._ambient_gated is True
+    mixer.set_ambient_loop("room.wav", gain=0.5)      # default: continuous (not gated)
+    assert mixer._ambient_gated is False
 
 
 def test_ambient_loop_wraps_and_clears(monkeypatch):
