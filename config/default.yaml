@@ -44,7 +44,7 @@ flags:
 #   dials: friendly names (ockerism/competence/stress/karren), resolved like `nhj set`
 modes:
   normal:                       # the reset baseline
-    muzak: continuous
+    muzak: on                   # on-hold: music while busy, pauses to speak (how you know inference is done)
     audio_mode: normal
     ambient: ""
     display: normal
@@ -57,7 +57,7 @@ modes:
     display: party
     dials: { jan: {ockerism: 8, competence: 6} }
   call-centre:                  # phone-line voice + tinny hold music + bored operator + room tone
-    muzak: continuous
+    muzak: on                   # on-hold hold music — pauses when the "operator" picks up
     audio_mode: call-centre
     ambient: callcentre
     display: normal
@@ -76,7 +76,7 @@ modes:
     scenario: "You are a special-forces operator on comms during a covert op. Terse, calm, ultra-competent, whispering. Minimal words, military brevity ('copy', 'go', 'target acquired', 'stand by'). No banter, no ocker — disciplined and quiet."
     dials: { jan: {ockerism: 3, competence: 9}, bazza: {stress: 2, competence: 9}, karren: {karren: 3} }
   went-full-bogan:              # max swearing (unbleeped), razor competent, no stupid questions — friendly & playful
-    muzak: continuous
+    muzak: on                   # mirrors normal — on-hold, pauses to speak
     audio_mode: normal
     ambient: ""
     display: normal

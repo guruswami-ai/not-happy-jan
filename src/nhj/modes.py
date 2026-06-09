@@ -10,7 +10,7 @@ so new scenes need no code. The granular commands (`nhj set`, `nhj muzak on/off`
 still tweak *within* the current mode.
 
 A preset is a dict with any of:
-  muzak:     off | on | continuous | rave        (default: continuous)
+  muzak:     off | on | continuous | rave        (default: on — on-hold, pauses to speak)
   audio_mode: normal | call-centre | agent-vibes (voice bus FX; default normal)
   scenario:  persona prompt for the dynamic LLM   ("" = none)
   display:   normal | party | off                 (AWTRIX behaviour)
@@ -62,7 +62,7 @@ _FULLBOGAN_SCENARIO = (
 
 BUILTIN_MODES = {
     "normal": {
-        "muzak": "continuous", "audio_mode": "normal", "scenario": "",
+        "muzak": "on", "audio_mode": "normal", "scenario": "",
         "display": "normal", "voice": "", "haptic": "full", "ambient": "",
         "dials": _BASE_DIALS,
     },
@@ -72,7 +72,7 @@ BUILTIN_MODES = {
         "dials": {"jan": {"ockerism": 8, "competence": 6}},
     },
     "call-centre": {
-        "muzak": "continuous", "audio_mode": "call-centre", "scenario": _CALLCENTRE_SCENARIO,
+        "muzak": "on", "audio_mode": "call-centre", "scenario": _CALLCENTRE_SCENARIO,
         "display": "normal", "voice": "", "haptic": "full", "ambient": "callcentre",
         "dials": {"jan": {"ockerism": 1, "competence": 1},
                   "bazza": {"stress": 1, "competence": 2},
@@ -92,7 +92,7 @@ BUILTIN_MODES = {
                   "karren": {"karren": 3}},
     },
     "went-full-bogan": {
-        "muzak": "continuous", "audio_mode": "normal", "scenario": _FULLBOGAN_SCENARIO,
+        "muzak": "on", "audio_mode": "normal", "scenario": _FULLBOGAN_SCENARIO,
         "display": "normal", "voice": "", "haptic": "full", "censor": "off", "ambient": "",
         "dials": {"jan": {"ockerism": 11, "competence": 10},
                   "bazza": {"stress": 5, "competence": 10},
@@ -139,7 +139,7 @@ def current_mode() -> str:
 def _apply_muzak(state: str) -> None:
     """Set the muzak flags for a mode and (re)start/stop the player to match."""
     from nhj import inference_muzak as im
-    s = (state or "continuous").lower()
+    s = (state or "on").lower()
     if s in ("off", "false", "none"):
         set_flag("muzak", False); set_flag("muzak_continuous", False); set_flag("muzak_rave", False)
         im.stop()
