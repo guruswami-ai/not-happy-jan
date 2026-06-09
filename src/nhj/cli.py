@@ -1130,6 +1130,79 @@ def install_mcp_service(
         )
 
 
+@cli.command("serve-mcp")
+def serve_mcp():
+    """Start the NHJ MCP server (stdio transport; for use by OpenCode and other agents)."""
+    from nhj import mcp_server
+    mcp_server.run()
+
+
+# ---------------------------------------------------------------------------
+# OpenCode MCP integration
+# ---------------------------------------------------------------------------
+_OPENCODE_CONFIG_KEY = "not-happy-jan"
+_OPENCODE_DEFAULT_CONFIG = Path.home() / ".config" / "opencode" / "opencode.json"
+
+
+@cli.command("install-opencode")
+def install_opencode(
+    config: Path = typer.Option(
+        _OPENCODE_DEFAULT_CONFIG,
+        help="Path to OpenCode config file (default: ~/.config/opencode/opencode.json)",
+    ),
+):
+    """Register the NHJ MCP server with OpenCode.
+
+    Merges the NHJ stdio MCP entry into ~/.config/opencode/opencode.json.
+    Idempotent — re-running updates the entry without creating duplicates.
+    """
+    cfg: dict = {}
+    if config.exists():
+        try:
+            cfg = json.loads(config.read_text())
+        except json.JSONDecodeError:
+            pass
+        bak = config.with_suffix(".json.pre-nhj.bak")
+        if not bak.exists():
+            bak.write_text(config.read_text())
+            app.print(f"[dim]backup → {bak.name}[/dim]")
+
+    mcp_block = cfg.setdefault("mcp", {})
+    mcp_block[_OPENCODE_CONFIG_KEY] = {
+        "type": "local",
+        "command": ["nhj", "serve-mcp"],
+        "enabled": True,
+    }
+
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(json.dumps(cfg, indent=2))
+    app.print("[green]✓[/green] NHJ MCP server registered with OpenCode:")
+    app.print('  [dim]command:[/dim] ["nhj", "serve-mcp"]')
+    app.print(f"  [dim]→ {config}[/dim]")
+    app.print("test it:  [bold]nhj test ok[/bold]")
+
+
+@cli.command("remove-opencode")
+def remove_opencode(
+    config: Path = typer.Option(
+        _OPENCODE_DEFAULT_CONFIG,
+        help="Path to OpenCode config file",
+    ),
+):
+    """Remove the NHJ MCP server registration from OpenCode config."""
+    if not config.exists():
+        app.print("[yellow]OpenCode config not found[/yellow]")
+        return
+    cfg = json.loads(config.read_text())
+    mcp_block = cfg.get("mcp", {})
+    if _OPENCODE_CONFIG_KEY in mcp_block:
+        del mcp_block[_OPENCODE_CONFIG_KEY]
+        config.write_text(json.dumps(cfg, indent=2))
+        app.print(f"[green]✓[/green] NHJ MCP server removed from {config.name}")
+    else:
+        app.print(f"[dim]NHJ MCP server not found in {config.name}[/dim]")
+
+
 @cli.command("install-mcp")
 def install_mcp(
     settings: Path = typer.Option(
