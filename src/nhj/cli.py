@@ -155,6 +155,53 @@ def install_skill(
     app.print(f"  [dim]→ {target}[/dim]")
 
 
+@cli.command("install-opencode")
+def install_opencode(
+    config_path: Path = typer.Option(
+        resources.opencode_config_path(),
+        help="Path to OpenCode configuration file",
+    ),
+):
+    """Install NHJ MCP configuration for OpenCode."""
+    config = config_path.expanduser()
+    app.print(f"[cyan]Configuring OpenCode MCP for Not-Happy-Jan...[/cyan]")
+
+    # Create directory if needed
+    config.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load existing config or create new
+    if config.exists():
+        try:
+            current = json.loads(config.read_text())
+        except json.JSONDecodeError:
+            app.print(f"[yellow]Warning: Invalid JSON in {config}, creating fresh config[/yellow]")
+            current = {}
+    else:
+        current = {}
+
+    # Ensure mcp section exists
+    if "mcp" not in current:
+        current["mcp"] = {}
+
+    # Add NHJ MCP config
+    nhj_mcp = {
+        "type": "local",
+        "command": ["nhj", "serve-mcp"],
+        "enabled": True
+    }
+    current["mcp"]["not-happy-jan"] = nhj_mcp
+
+    # Write back
+    config.write_text(json.dumps(current, indent=2))
+    app.print("[green]✓[/green] Added NHJ MCP configuration to OpenCode")
+    app.print(f"  [dim]→ {config}[/dim]")
+    app.print("")
+    app.print("[yellow]Next steps:[/yellow]")
+    app.print("  1. Restart OpenCode to load the new MCP tool")
+    app.print("  2. Use nhj_vibe(intent='ok') to trigger feedback")
+    app.print("  3. Run 'nhj test ok' to verify the setup")
+
+
 @cli.command("remove-hook")
 def remove_hook(
     settings: Path = typer.Option(

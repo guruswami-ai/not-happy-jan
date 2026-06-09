@@ -230,3 +230,24 @@ def audio_dir() -> Path:
 
 def env_file() -> Path:
     return (_CHECKOUT_ROOT / ".env") if _is_checkout() else (config_dir(create=False) / ".env")
+
+
+def opencode_config_path(home: Path | None = None) -> Path:
+    """Path to OpenCode configuration file."""
+    base = home if home is not None else Path.home()
+    return base / ".config" / "opencode" / "opencode.json"
+
+
+def opencode_mcp_config_template() -> str:
+    """Generate OpenCode MCP configuration for NHJ."""
+    import json
+    config = {
+        "mcp": {
+            "not-happy-jan": {
+                "type": "local",
+                "command": ["nhj", "serve-mcp"],
+                "enabled": True
+            }
+        }
+    }
+    return json.dumps(config, indent=2)
