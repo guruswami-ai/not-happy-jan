@@ -15,7 +15,7 @@ def test_apply_mode_publishes_ambient_bed(monkeypatch):
 
     modes.apply_mode("call-centre")
     assert ("ambient_mode", "callcentre") in calls
-    assert ("ambient_gated", False) in calls          # call-centre room tone is continuous
+    assert ("ambient_gated", True) in calls           # room bed only sounds under the operator's voice
 
     calls.clear()
     modes.apply_mode("special-forces")
