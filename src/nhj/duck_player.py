@@ -205,6 +205,7 @@ class Mixer:
         self._fx: list[_Clip] = []                           # concurrent one-shots
         self._ambient: list[_Clip] = []                      # concurrent beds (low; duck under voice)
         self._ambient_loop: _Clip | None = None              # looping mode bed (call-centre etc.)
+        self._ambient_gated = False                          # True → loop sounds only while voice is active
         self._voiceq: collections.deque = collections.deque()  # pending voice clips
         self._voice_cur: _Clip | None = None                 # sequential head
         try:
@@ -279,9 +280,13 @@ class Mixer:
             # ambient loop — persistent mode bed, wrapped across callbacks
             loop = self._ambient_loop
             if loop is not None and len(loop.data):
-                idx = (np.arange(frames) + loop.pos) % len(loop.data)
-                out[:frames] += loop.data[idx] * loop.gain * amb_g
-                loop.pos = (loop.pos + frames) % len(loop.data)
+                # voice-gated bed sounds only under the voice (silent otherwise); the
+                # normal bed is prominent when idle and ducks under the voice.
+                loop_g = (1.0 if voice_active else 0.0) if self._ambient_gated else amb_g
+                if loop_g:
+                    idx = (np.arange(frames) + loop.pos) % len(loop.data)
+                    out[:frames] += loop.data[idx] * loop.gain * loop_g
+                loop.pos = (loop.pos + frames) % len(loop.data)   # advance even when muted → continuous bed
             # voice — strictly sequential, one clip at a time in submission order
             if self._voice_cur is None and self._voiceq:
                 self._voice_cur = self._voiceq.popleft()
@@ -363,8 +368,11 @@ class Mixer:
             else:
                 self._voiceq.append(clip)                    # voice → sequential queue
 
-    def set_ambient_loop(self, path: str | None, gain: float = 1.0) -> None:
-        """Set or clear the looping mode bed mixed through the ambient bus."""
+    def set_ambient_loop(self, path: str | None, gain: float = 1.0,
+                         voice_gated: bool = False) -> None:
+        """Set or clear the looping mode bed mixed through the ambient bus. When
+        voice_gated, the bed sounds ONLY while a voice clip is active (a comms backdrop
+        under the line, e.g. special-forces radio) — silent otherwise."""
         clip = None
         if path:
             data = _decode_file(path)
@@ -372,6 +380,7 @@ class Mixer:
                 clip = _Clip(data, gain)
         with self._lock:
             self._ambient_loop = clip
+            self._ambient_gated = voice_gated
 
     def play_sequence(self, items: list, bus: str = "voice") -> None:
         """Play several clips as ONE gapless one-shot — concatenated buffer, per-part gain
@@ -534,6 +543,15 @@ def run_duck_controller() -> int:
             bed = ""
         return str(bed or "").strip().lower().replace("_", "-")
 
+    def _ambient_gated() -> bool:
+        """The mode bed should sound only under the voice (e.g. special-forces radio)."""
+        try:
+            from nhj.state import get_setting
+            v = get_setting("ambient_gated", False)
+        except Exception:
+            return False
+        return v is True or str(v).strip().lower() in ("1", "true", "yes", "on")
+
     def _rave() -> bool:
         """Rave party: continuous grab-bag at full volume (skip the long-session
         floor). Still ducks under the TTS line via the voice sidechain, so alerts
@@ -685,7 +703,8 @@ def run_duck_controller() -> int:
                 active_ambient = ambient
                 bed = resources.audio_dir() / "ambient" / f"{ambient}.wav" if ambient else None
                 mixer.set_ambient_loop(str(bed) if bed and bed.exists() else None,
-                                       gain=_f("NHJ_MODE_AMBIENT_VOLUME", "0.5"))
+                                       gain=_f("NHJ_MODE_AMBIENT_VOLUME", "0.5"),
+                                       voice_gated=_ambient_gated())
             if not music_on and not mixer.paused:            # switched to agent-vibes mid-music
                 mixer.pause()
 
