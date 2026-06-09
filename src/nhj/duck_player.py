@@ -336,6 +336,11 @@ class Mixer:
     def paused(self) -> bool:
         return self._paused_evt.is_set()
 
+    def voice_busy(self) -> bool:
+        """True while any voice/fx clip is queued or playing (e.g. the on-hold intro +
+        click). Used to hold the music bed paused until that sequence finishes."""
+        return bool(self._fx) or self._voice_cur is not None or bool(self._voiceq)
+
     def play(self, path: str, bus: str = "voice", gain: float = 1.0,
              rate: float = 1.0, effect: str = "", pre: float = 0.0) -> None:
         data = _decode_file(path)
@@ -547,7 +552,9 @@ def run_duck_controller() -> int:
         return str(random.choice(clips)) if clips else None
 
     def _onhold():
-        """Going ON hold: handset putdown → hold tone, one gapless clip, then music resumes."""
+        """Going ON hold: handset putdown → hold tone, one gapless clip. On the sequential
+        VOICE bus so it lands AFTER the intro ("hold please"); the music resumes only once
+        this finishes (see resume_pending), so the order is intro → on-hold click → music."""
         seq: list = []
         hs = _handset_clip()
         if hs and _on("NHJ_PUTDOWN"):                        # set the receiver down…
@@ -556,7 +563,7 @@ def run_duck_controller() -> int:
         if _on("NHJ_MUZAK_TRANSFER") and tone.exists():      # …*click*, on hold
             seq.append((str(tone), float(os.getenv("NHJ_MUZAK_TRANSFER_VOLUME", "0.85"))))
         if seq:
-            mixer.play_sequence(seq, bus="fx")
+            mixer.play_sequence(seq, bus="voice")
 
     def _offhold():
         """Coming off hold — the music has just frozen and a character may be about to speak.
@@ -624,6 +631,7 @@ def run_duck_controller() -> int:
 
     M._patch(controller_pid=os.getpid(), child_pid=None, stop=False)
     on_hold = False                                          # in an active inference (music playing)?
+    resume_pending = False                                   # resume the music bed only after the on-hold intro+click play
     active_since = None
     idle_since = time.monotonic()
     rave_adapter = None                                      # lazy AWTRIX adapter for rave display cycling
@@ -688,11 +696,12 @@ def run_duck_controller() -> int:
             if not M._should_play():                         # all sessions idle
                 if on_hold:                                  # → just came OFF hold
                     on_hold = False
+                    resume_pending = False
                     active_since = None
                     mixer.music_floor = 1.0
                     if not mixer.paused:
-                        mixer.pause()
-                    _offhold()                               # *click* off hold + handset pickup → vibe
+                        mixer.pause()                        # music pauses FIRST…
+                    _offhold()                               # …then *click* off hold + handset pickup → vibe
                 idle_since = idle_since or now
                 if now - idle_since > M._IDLE_STOP_S:
                     break
@@ -708,8 +717,13 @@ def run_duck_controller() -> int:
                         if not _openmic():                   # rare hot-mic aside, else…
                             _intro()                         # "hold please"
                     _onhold()                                # …putdown clunk + *click* going on hold
-                    if mixer.paused:
-                        mixer.resume()
+                    resume_pending = True                    # don't resume yet — wait for that to finish
+
+            # Resume the music bed only once the on-hold intro + click have actually played,
+            # so the order is intro → on-hold click → music (not music starting underneath them).
+            if resume_pending and music_on and mixer.paused and not mixer.voice_busy():
+                mixer.resume()
+                resume_pending = False
 
             # long-session ducking: ease the muzak floor down over a long think, snap back on idle.
             # Rave stays at full volume (but the voice sidechain still ducks it under the alert).

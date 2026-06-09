@@ -184,6 +184,16 @@ def start() -> bool:
     return start_controller()
 
 
+def enable() -> bool:
+    """Re-enable muzak (CLI `on`/`continuous`, mode-apply) WITHOUT forcing a play session.
+    Clears any leftover `stop` flag — otherwise an `off → on` toggle leaves `stop=True` set
+    and the next controller exits the instant it spawns (silencing music AND voice, which
+    share the mixer). Starts the controller now only if something should already be playing
+    (continuous, or a session already busy); on-hold otherwise waits for the next mark_busy."""
+    _update(lambda d: d.pop("stop", None))
+    return start_controller() if _should_play() else False
+
+
 def stop() -> None:
     """Clear all sessions + stop the controller (CLI off/stop)."""
     d = _read()
