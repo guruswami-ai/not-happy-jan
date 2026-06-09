@@ -717,7 +717,7 @@ def run_duck_controller() -> int:
                 mixer.music_floor = 1.0
             elif music_on and _on("NHJ_LONGHOLD") and active_since is not None:
                 el = now - active_since
-                after, ramp = _f("NHJ_LONGHOLD_AFTER", "20"), max(0.1, _f("NHJ_LONGHOLD_RAMP", "4"))
+                after, ramp = _f("NHJ_LONGHOLD_AFTER", "5"), max(0.1, _f("NHJ_LONGHOLD_RAMP", "4"))
                 if el <= after:
                     mixer.music_floor = 1.0
                 else:
