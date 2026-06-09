@@ -1,6 +1,8 @@
 # Public release checklist
 
-This checklist is the publication gate for the first public alpha. Items are checked
+This checklist was the publication gate for the first public alpha. **Released as a
+public alpha on 2026-06-09** (clean fresh repo from a squashed snapshot; full dev
+history retained privately at `guruswami-ai/not-happy-jan-private`). Items are checked
 when verified, with evidence noted inline.
 
 ## Automated gates — ✅ green on `main`
@@ -43,40 +45,32 @@ Mac (`shazza`), and a full uninstall → **default/`--full`** install on `Om`.
 - [x] The `media` release assets are published with GitHub SHA-256 digests; the bundle
       validator (`scripts/validate_media_bundle.py`) passes.
 - [x] Repository description, topics, MIT license, `SECURITY.md`, `CONTRIBUTING.md` present.
-- [ ] **GitHub private vulnerability reporting enabled** — *blocked until public (not
-      available on the current private plan); applied to the fresh public repo by
-      `scripts/go-public.sh`.*
-- [ ] **Branch protection requires CI + secret-scan checks** — *blocked until public;
-      applied to the fresh public repo by `scripts/go-public.sh` (requires `gitleaks` ·
-      `package` · `test (3.10)` · `test (3.12)`).*
-- [x] Code scanning (CodeQL): **enabled** via advanced setup —
-      `.github/workflows/codeql.yml` analyzes `python` + `actions` (build-mode none,
-      `security-and-quality` queries) on push to `main`, PRs, and weekly. Results land in
-      Security → Code scanning. (Not a required merge check yet — let the first scans come
-      back clean before adding `CodeQL` to branch protection.)
+- [x] **GitHub private vulnerability reporting enabled** on the public repo.
+- [x] **Branch protection on `main`** requires `gitleaks` · `package` · `test (3.10)` ·
+      `test (3.12)` · `Analyze (python)` · `Analyze (actions)`; `enforce_admins=true`;
+      force-push/deletes blocked.
+- [x] Code scanning (CodeQL): **enabled and required** — `.github/workflows/codeql.yml`
+      analyzes `python` + `actions` (build-mode none, `security-and-quality` queries) on
+      push to `main`, PRs, and weekly; first scans returned **0 alerts**; the `Analyze`
+      checks are required to merge (see branch protection above).
 
-## Transition order — clean public release (perform in this sequence)
+## Transition order — clean public release (✅ completed 2026-06-09)
 
-We publish a **clean** repo rather than flipping the existing one: a visibility flip
-would retroactively expose all commit history, every PR/review thread, and every issue,
-including internal infrastructure references. **`bash scripts/go-public.sh --confirm`**
-automates steps 1–4; steps 5–6 are manual.
+We published a **clean** repo rather than flipping the existing one (a flip would have
+exposed all history, PRs, issues, and the internal infra references in them). Steps 1–4
+were run by `bash scripts/go-public.sh --confirm`:
 
-1. **Archive** — rename the current repo to `guruswami-ai/not-happy-jan-private` (stays
-   private; full history / PRs / issues preserved as the dev archive).
-2. **Publish** — create a fresh public `guruswami-ai/not-happy-jan` from a **single
-   squashed snapshot** of `main` (one "Initial public alpha release" commit, no legacy).
-3. **Media** — re-create the `media` release on the public repo (assets copied from the
-   archive) so the `nhj setup-media` / one-liner fetch keeps working.
-4. **Controls** — enable private vulnerability reporting + branch protection on `main`
-   (requires `gitleaks` · `package` · `test (3.10)` · `test (3.12)`; force-push/deletes
-   blocked; `enforce_admins=true`).
-5. Run the **literal public one-liner** on a clean Mac, then `nhj uninstall`:
+1. ✅ **Archive** — renamed the original repo to `guruswami-ai/not-happy-jan-private`
+   (private; full history / PRs / issues preserved).
+2. ✅ **Publish** — fresh public `guruswami-ai/not-happy-jan` from a single squashed
+   "Initial public alpha release" commit (no legacy, no infra leak).
+3. ✅ **Media** — `media` release re-created on the public repo.
+4. ✅ **Controls** — private vulnerability reporting + branch protection (now also
+   requiring the CodeQL `Analyze` checks).
+
+Remaining post-publish:
+
+- [ ] Run the **literal public one-liner** on a clean Mac, then `nhj uninstall`:
    `curl -fsSL https://raw.githubusercontent.com/guruswami-ai/not-happy-jan/main/install.sh | bash`
-   — tick the last installer-gate box.
-6. Verify the `SECURITY.md` reporting link resolves; update any local clones' remotes.
-
-CodeQL is enabled (above) via `.github/workflows/codeql.yml`.
-
-Do not publish until every non-flip item above is complete or explicitly removed through
-a reviewed change explaining why it is not required.
+   (the URL resolves; the script is byte-identical to the verified source path).
+- [ ] Verify the `SECURITY.md` reporting link resolves; update any local clones' remotes.
