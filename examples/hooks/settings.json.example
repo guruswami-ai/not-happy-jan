@@ -1,0 +1,29 @@
+{
+  "_comment": "Run `nhj install-hook` to write these into ~/.claude/settings.json for your install (it fills in the right interpreter and is idempotent). Shown here for reference only. NHJ installs THREE lifecycle hooks: Stop = the [vibes:] feedback; UserPromptSubmit + SessionEnd = the hold-music busy-set (ref-counted across sessions) + the secret guard. Replace <python> with your venv's python.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "<python> -m nhj.hook" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "<python> -m nhj.prompt_hook" }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "<python> -m nhj.prompt_hook" }
+        ]
+      }
+    ]
+  }
+}

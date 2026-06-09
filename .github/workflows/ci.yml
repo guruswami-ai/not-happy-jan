@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv run --python ${{ matrix.python }} --extra dev pytest -q
+      - run: uv run --python ${{ matrix.python }} --extra dev ruff check src tests
+      - run: bash -n install.sh
+      - run: bash -n scripts/build-media-bundles.sh
+
+  package:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv build
+      - name: Smoke-test wheel outside the checkout
+        run: |
+          uv venv /tmp/nhj-wheel
+          uv pip install --python /tmp/nhj-wheel/bin/python dist/*.whl
+          cd /tmp
+          /tmp/nhj-wheel/bin/python -c "from nhj import resources; assert not resources._is_checkout(); assert resources.config_file().is_file(); assert resources.hooks_file().is_file(); assert resources.claude_skill_file().is_file()"
+          /tmp/nhj-wheel/bin/nhj --help >/dev/null

@@ -1,0 +1,156 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "not-happy-jan"
+version = "0.1.0"
+description = "Multi-sensory agent feedback for Claude Code and other AI coding tools — haptics, visual displays, and TTS personality characters"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Paul Nevin" }]
+keywords = ["haptic", "logitech", "lametric", "ulanzi", "tts", "claude-code", "agent", "notification", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "hidapi>=0.14.0",
+    "requests>=2.28",
+    "python-dotenv>=1.0",
+    "fastmcp>=2.3",
+    "pyyaml>=6.0",
+    "typer>=0.9",
+    "rich>=13.0",
+    "av>=17.0.1",
+    "sounddevice>=0.5.5",
+    "numpy>=2.2.6",
+    "paho-mqtt>=2.0",
+    "scipy>=1.9",
+    "setproctitle>=1.3",
+]
+
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "soundfile>=0.12",
+    # Local Qwen3-TTS inference (the warm tts_server). Apple Silicon only —
+    # MLX is macOS/arm64. NHJ v1 targets macOS; elsewhere run with TTS_ENGINE=none.
+    "mlx-audio>=0.4.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
+dev = [
+    "build>=1.2",
+    "hatchling>=1.27",
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.scripts]
+nhj = "nhj.cli:main"
+
+[project.entry-points."nhj.adapters"]
+audio    = "nhj.adapters.audio:AudioAdapter"
+haptic   = "nhj.adapters.haptic:HapticAdapter"
+lametric = "nhj.adapters.lametric:LaMetricAdapter"
+ulanzi   = "nhj.adapters.ulanzi:UlanziAdapter"
+esp32    = "nhj.adapters.esp32_bell:ESP32BellAdapter"
+divoom   = "nhj.adapters.divoom:DivoomAdapter"
+
+[project.urls]
+Homepage   = "https://github.com/guruswami-ai/not-happy-jan"
+Repository = "https://github.com/guruswami-ai/not-happy-jan"
+Issues     = "https://github.com/guruswami-ai/not-happy-jan/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nhj"]
+
+# Ship immutable runtime data INSIDE the package (nhj/_bundled/…) so a wheel install
+# works with no source checkout. Resolved by nhj/resources.py. Downloaded media
+# (ref.wav / audio) is NOT bundled — it comes via `nhj setup-media` to the user data dir.
+[tool.hatch.build.targets.wheel.force-include]
+"config/default.yaml"                  = "nhj/_bundled/config/default.yaml"
+"hooks/hooks.json"                     = "nhj/_bundled/hooks/hooks.json"
+"hooks/markers.md"                     = "nhj/_bundled/hooks/markers.md"
+"skills/not-happy-jan/SKILL.md"        = "nhj/_bundled/claude-skills/not-happy-jan/SKILL.md"
+"voices/jan/character.yaml"            = "nhj/_bundled/voices/jan/character.yaml"
+"voices/jan/fillers.txt"              = "nhj/_bundled/voices/jan/fillers.txt"
+"voices/bazza/character.yaml"          = "nhj/_bundled/voices/bazza/character.yaml"
+"voices/karren/character.yaml"         = "nhj/_bundled/voices/karren/character.yaml"
+"voices/jan-whispering/character.yaml" = "nhj/_bundled/voices/jan-whispering/character.yaml"
+# Pre-rendered bare-marker voice bank (CC0, generated) — ships in the package so a
+# minimal install speaks in-character with no model download. See docs/media-provenance.md.
+"clips"                                = "nhj/_bundled/clips"
+
+[tool.hatch.build.targets.sdist]
+# Patterns are gitignore-style: a leading slash anchors to the project root so a
+# generic name like README.md does not also sweep in nested copies (e.g. under
+# untracked finetune/ or ocker-dataset/ working dirs). The exclude list is a
+# defensive denylist for those local-only trees regardless of include matches.
+include = [
+    "/.claude-plugin/plugin.json",
+    "/.env.example",
+    "/CONTRIBUTING.md",
+    "/LICENSE",
+    "/README.md",
+    "/SECURITY.md",
+    "/clips",
+    "/config",
+    "/docs",
+    "/examples",
+    "/hooks",
+    "/install.sh",
+    "/pyproject.toml",
+    "/scripts",
+    "/skills",
+    "src/nhj",
+    "/tests",
+    "/uv.lock",
+    "/voices/*/character.yaml",
+    "/voices/jan/fillers.txt",
+]
+exclude = [
+    "**/.DS_Store",
+    "**/._*",
+    "/finetune",
+    "/ocker-dataset",
+    "/archive",
+    "/demo",
+    "/logs",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Lint policy (issue #56): keep the always-on correctness rules (E9 syntax, the
+# pyflakes F-class — undefined names, unused imports, etc.) and drop the
+# cosmetic/compact-style rules NHJ uses deliberately:
+#   E701/E702 — compact one-liners (`if x: return`, `os.kill(pid, 0); return True`)
+#   E402      — intentional late/after-setup module imports
+# Real dead code (unused imports, empty f-strings) is fixed, not ignored.
+ignore = ["E402", "E701", "E702"]
+
+[tool.pytest.ini_options]
+# Canonical test command:  uv run --extra dev pytest
+# Tests live ONLY in tests/. Utility scripts elsewhere are not tests and must
+# not be collected — tests/test_collection_guard.py enforces this.
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+norecursedirs = [".venv", "audio", "voices", "media", "archive", "docs"]
+markers = [
+    "macos: requires macOS / Apple Silicon (TTS, launchd, sounddevice) — skipped elsewhere",
+    "slow: longer-running test",
+]

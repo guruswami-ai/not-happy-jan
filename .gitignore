@@ -1,0 +1,56 @@
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+.op/
+.env*
+!.env.example
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+*.log
+
+# Model weights — never commit
+*.pth
+*.ckpt
+*.safetensors
+*.gguf
+*.bin
+
+# Pre-rendered audio bank — generated locally, not committed
+voices/*/ref.wav
+voices/*/ref.txt
+
+# macOS
+.DS_Store
+._*
+
+# Patch / WIP files
+*.patch
+wip-*
+
+# Bundled audio — music / sfx / voice samples / ambient beds (GitHub release asset, pulled by `nhj setup-media`)
+audio/
+
+# Transient license file staged into media bundles by scripts/build-media-bundles.sh
+/MEDIA-LICENSE.txt
+
+# Fine-tune tooling/artifacts — removed from the repo; ignore any local remnants
+/finetune/
+
+# Model weights
+*.gguf
+
+# Internal session handoff (infra paths) — not for public release
+HANDOFF.md
+
+# Separate data workspace (6.5GB)
+ocker-dataset/
+
+# Source masters / working archive — kept locally, not for the repo or the media bundle
+archive/
+
+# Generated voice demo clips (derived voices — not for redistribution)
+demo/

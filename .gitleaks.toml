@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic detector fixtures and documented placeholder values"
+paths = [
+  '''(^|/)tests/''',
+  '''(^|/)src/nhj/secret_scan\.py$''',
+  '''(^|/)\.env\.example$''',
+  '''(^|/)ocker-dataset/\.env\.example$''',
+]

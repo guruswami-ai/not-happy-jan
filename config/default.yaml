@@ -1,0 +1,167 @@
+# Not-Happy-Jan default configuration — shipped read-only (packaged installs bundle this
+# file inside the wheel). To override, create your OWN config.yaml at ~/.config/nhj/config.yaml
+# (in a source checkout you may also place it beside this file). Mappings merge key-by-key;
+# lists/scalars replace wholesale. Env vars (NHJ_*) win for settings that read them.
+# Full reference: docs/configuration.md.
+
+routing:
+  # Escalation ladder (rungs, low -> high seniority). Add/remove characters here.
+  ladder: [jan, bazza, karren]
+  # Which rung handles each intent. Jan does the day-to-day; Bazza (middle manager)
+  # takes warnings; Karren (manager) steps in when it's serious.
+  rung_by_intent:
+    ok: jan
+    step: jan
+    celebrate: jan
+    warn: bazza
+    err: karren
+    attn: karren
+  # Legacy fallback (still honoured if rung_by_intent is absent):
+  default: jan
+  on_err: karren
+  on_attn: karren
+
+# Per-character dials (1-10). Override via env NHJ_<NAME>_<DIAL> (e.g. NHJ_JAN_LEVEL=8, NHJ_JAN_CHAOS=9).
+#   level = intensity (bogan / manager / karen)
+#   chaos = Jan's incompetence: garbles the message ("inference" -> "in-fur-france"), umms, trails off
+characters:
+  jan:    { level: 4, chaos: 5 }   # bogan 1..10 ; chaos 0 faithful .. 10 total shambles
+  bazza:  { level: 5 }             # manager dial: 1 apathetic ... 10 anxious/fast
+  karren: { level: 7 }             # karen dial:   1 blunt ... 10 full meltdown (wants the manager)
+
+# Runtime flags. These are defaults only; `nhj mute`, `nhj muzak`, and similar commands
+# write live overrides to the state file.
+flags:
+  stop_failure_vibe: false         # StopFailure always unwinds muzak; warn vibe is opt-in
+
+# Mode macros — one named scene sets ALL behaviours at once (muzak, audio FX,
+# persona, dials, display, voice, haptics, ambient). `nhj mode <name>` applies a preset and
+# resets whatever the last mode left behind, so modes are mutually exclusive.
+# These override the built-in fallbacks in src/nhj/modes.py — add your own freely.
+#   muzak: off|on|continuous|rave · audio_mode: normal|call-centre|agent-vibes
+#   display: normal|party|off · voice: ""|<tts voice> · haptic: full|simple|off
+#   ambient: ""|<bed name> · mode-specific looping room tone / radio bed
+#   dials: friendly names (ockerism/competence/stress/karren), resolved like `nhj set`
+modes:
+  normal:                       # the reset baseline
+    muzak: continuous
+    audio_mode: normal
+    ambient: ""
+    display: normal
+    haptic: full
+    censor: quack               # safe bleep restored on return to normal
+    dials: { jan: {ockerism: 4, competence: 5}, bazza: {stress: 5, competence: 8}, karren: {karren: 7} }
+  rave:                         # full-volume party + display animation
+    muzak: rave
+    ambient: ""
+    display: party
+    dials: { jan: {ockerism: 8, competence: 6} }
+  call-centre:                  # phone-line voice + tinny hold music + bored operator + room tone
+    muzak: continuous
+    audio_mode: call-centre
+    ambient: callcentre
+    display: normal
+    scenario: "You are a bored, apathetic government call-centre worker on a crackly phone line. You clearly don't care, you're mildly rude and annoyed the caller rang, you keep putting them on hold and fumbling the details. Flat affect, minimal effort, unhelpful — 'that's not my department'. Not bogan, just over it."
+    dials: { jan: {ockerism: 1, competence: 1}, bazza: {stress: 1, competence: 2}, karren: {karren: 6} }
+  quiet:                        # heads-down: no music, displays off, haptic-only
+    muzak: "off"
+    ambient: ""
+    display: "off"
+  special-forces:               # simple haptics + whispered comms voice + radio bed
+    muzak: "off"
+    display: "off"
+    voice: jan-whispering       # swaps the ref voice sample for ALL characters → voices/jan-whispering/ (whispered & quiet)
+    haptic: simple
+    ambient: special-forces-radio
+    scenario: "You are a special-forces operator on comms during a covert op. Terse, calm, ultra-competent, whispering. Minimal words, military brevity ('copy', 'go', 'target acquired', 'stand by'). No banter, no ocker — disciplined and quiet."
+    dials: { jan: {ockerism: 3, competence: 9}, bazza: {stress: 2, competence: 9}, karren: {karren: 3} }
+  went-full-bogan:              # max swearing (unbleeped), razor competent, no stupid questions — friendly & playful
+    muzak: continuous
+    audio_mode: normal
+    ambient: ""
+    display: normal
+    haptic: full
+    censor: "off"               # raw swears — maximum swearing, no bleep
+    scenario: "You are a sharp, switched-on Aussie bogan — you swear constantly and creatively, but you're genuinely brilliant at the job and nail it first go, no fumbling. You've got zero patience for stupid questions and will cheekily take the piss, but you're warm, matey, playful and clearly having a laugh. Crude, friendly, dead competent."
+    dials: { jan: {ockerism: 11, competence: 10}, bazza: {stress: 5, competence: 10}, karren: {karren: 6} }
+
+# Active notification adapters (in fire order).
+# Each adapter is enabled only if its required config is present.
+adapters:
+  - haptic      # Logitech MX Master HID++ — enabled if device detected
+  - lametric    # LaMetric Time — enabled if LAMETRIC_DEVICE_IP set
+  - ulanzi      # ULANZI TC001 — enabled if ULANZI_DEVICE_IP set
+  - esp32       # ESP32 bell — enabled if ESP32_BELL_URL set
+  - divoom      # Divoom Times Gate / Times Frame — enabled if DIVOOM_DEVICE_IP set
+  - audio       # TTS synthesis + afplay — always last
+
+# AWTRIX 3 / Ulanzi TC001 LED-matrix displays (the `ulanzi` adapter above).
+# Disabled unless `displays` is set (or ULANZI_MQTT_PREFIXES / ULANZI_HTTP_HOSTS in .env).
+# Each fire shows the intent as a random icon from its pool + a per-intent visual
+# treatment + in-character text. No audio. See src/nhj/adapters/ulanzi.py for the
+# icon pools / colours / effects (the visual language).
+awtrix:
+  transport: http          # http (POST each display — easy, no broker) | mqtt (broadcast via broker)
+  mqtt_host: ""            # broker host for transport: mqtt   (env: ULANZI_MQTT_HOST)
+  mqtt_port: 1883
+  displays: []             # e.g. [awtrix_96895c.local]  — AWTRIX advertises mDNS as awtrix_<chipid>.local
+                           #       (string = host, prefix = first label; or {prefix: awtrix1, http: awtrix1.lan}).
+                           #       HTTP needs same-LAN reach; MQTT crosses subnets. See docs/awtrix-display-setup.md
+  brightness: null         # 0-255, or null to leave the display's own setting alone  (env: ULANZI_BRIGHTNESS)
+  auto_brightness: null    # true = follow ambient light sensor; false = fixed; null = leave alone
+  install_icons: true      # upload the bundled intent icons to each display on first run (HTTP)
+  text_style: ocker        # ocker | plain  (fixed fallback wording when no message / no LLM)
+  dynamic_text: true       # use the LLM for a 2-3 word headline when NHJ_DYNAMIC is on
+
+# Haptic mouse feedback (the `haptic` adapter). OFF by default — it needs a
+# Logitech MX Master 4 (the only Logitech mouse with a haptic motor; the MX Master
+# 3/3S and everything else have no actuator). When enabled it talks STRAIGHT to the
+# mouse over HID++ — no Logitech software (Options+/Solaar) required. Auto-disables
+# if no MX Master 4 is found. Full write-up: docs/haptic-mouse-setup.md
+haptic:
+  enabled: false           # opt-in. (env: NHJ_HAPTIC_ENABLED=1)
+  intensity: 5             # firmware vibration strength 0-5 (5 = strongest); null = leave device default
+  device_index: null       # HID++ device slot; null = auto-discover (fallback 2)  (env: NHJ_HAPTIC_DEVICE_INDEX)
+  # Tap style per intent: which firmware waveform + how many repeats (insistence).
+  # Higher-stakes intents repeat more so they feel more urgent. Waveform names are
+  # the firmware library (see adapters/haptic.py WAVEFORMS) or a numeric id.
+  taps:
+    step:      { waveform: subtle_collision, repeat: 1 }   # gentle progress tick
+    ok:        { waveform: completed,        repeat: 1 }   # satisfying "done"
+    celebrate: { waveform: firework,         repeat: 1 }   # celebratory flourish
+    warn:      { waveform: knock,            repeat: 2 }   # knock-knock
+    err:       { waveform: angry_alert,      repeat: 2 }   # sharp double-jab
+    attn:      { waveform: ringing,          repeat: 3 }   # insistent "look at me"
+
+# Intent → LaMetric/Divoom icon + sound, and the human label.
+intents:
+  ok:
+    icon: ok
+    sound: positive4
+    label: "Done"
+  err:
+    icon: err
+    sound: negative1
+    label: "Error"
+  warn:
+    icon: warn
+    sound: notification
+    label: "Warning"
+  attn:
+    icon: attn
+    sound: knock-knock
+    label: "Attention"
+  celebrate:
+    icon: celebrate
+    sound: win
+    label: "Celebration"
+  step:
+    icon: progress
+    sound: null
+    label: "Progress"
+
+# Audio bank — pre-rendered clips for instant zero-latency playback.
+# Populated by: nhj build-bank
+audio_bank:
+  root: "~/Library/Application Support/not-happy-jan/clips"
+  max_cache_entries: 300

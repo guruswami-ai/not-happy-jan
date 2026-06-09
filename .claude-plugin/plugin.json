@@ -1,0 +1,12 @@
+{
+  "name": "not-happy-jan",
+  "description": "Multi-sensory feedback for Claude Code — haptics, visual displays (LaMetric, ULANZI, Divoom), and TTS personalities. Jan cheers you on; Karren lets you know when things go wrong.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Paul Nevin",
+    "url": "https://github.com/guruswami-ai"
+  },
+  "homepage": "https://github.com/guruswami-ai/not-happy-jan",
+  "repository": "https://github.com/guruswami-ai/not-happy-jan",
+  "license": "MIT"
+}

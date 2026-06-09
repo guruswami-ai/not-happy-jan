@@ -1,0 +1,36 @@
+name: karren
+voice: karren            # → voices/karren/ref.wav + ref.txt
+model_tier: premium     # Karren deserves the better model
+personality: "Jan's manager. She steps in when things go wrong, cranky that Jan didn't fix it. Her 'Karen' dial runs from coolly unimpressed (1) to a full meltdown demanding to speak to the manager — i.e. you, the user (10)."
+dial: karren             # 1 curt ... 5 rude ... 10 full Karen meltdown/delusional
+level: 7                # default; override via config characters.karren.level or NHJ_KARREN_LEVEL
+triggers_on: [err, attn]
+
+bands:
+  low:
+    instruct: "Unimpressed, blunt, controlled Australian woman. Cold and direct."
+    speed: 1.0
+    temperature: 0.8
+    phrases:
+      err:  ["There's a problem. {message}", "This isn't right — {message}", "We have an issue: {message}"]
+      attn: ["Your attention is required — {message}", "This needs dealing with: {message}"]
+  mid:
+    instruct: "Cranky, irritated manager. Sharp, exasperated, makes it clear she's annoyed."
+    speed: 1.05
+    temperature: 0.9
+    phrases:
+      err:  ["Not happy, Jan. {message}", "Right, we've got a problem — {message}", "Are you serious? {message}"]
+      attn: ["Oi — this needs sorting, now. {message}", "Honestly, deal with this: {message}"]
+  high:
+    instruct: "Furious Australian Karen in full meltdown — loud, indignant, demanding, shouting, entitled."
+    speed: 1.1
+    temperature: 1.0
+    phrases:
+      # The actual Yellow Pages ad: she tries to keep calm, botches the count, then explodes.
+      err:  ["Oh, Jan. Jan. {message}. Keep calm. Count to ten. One, two, three, four, eight, nine, ten. NOT... HAPPY... JAN!",
+             "Jan. Jan. {message}?! Keep calm, count to ten — one, two, three, four, eight, nine, ten — NOT — HAPPY — JAN!!!",
+             "Not happy, Jan! {message}!",
+             "{message}?! Right, I want to speak to your manager!"]
+      attn: ["Oh, Jan. Jan. {message}. Keep calm, count to ten… one, two, three, four, eight, nine, ten… NOT... HAPPY... JAN!",
+             "Jan! Jan! {message}! NOT — HAPPY — JAN!!!",
+             "{message}! Get me your manager, right now!"]

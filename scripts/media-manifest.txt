@@ -1,0 +1,30 @@
+# Approved media bundle contents (issue #52).
+# One fnmatch glob per line; blank lines and #-comments ignored.
+# The bundle builder rejects any file that matches none of these patterns,
+# and rejects macOS metadata (.DS_Store, ._*) unconditionally.
+#
+# This file is a build allow-list ONLY — it is not a licensing statement and must
+# not be read as one. The assets have MIXED provenance (CC0 AI-generated / procedural
+# clips + Suno paid-plan tracks under their redistribution terms). The authoritative,
+# per-source provenance + licensing is docs/media-provenance.md, and the notice that
+# ships inside each bundle is scripts/media-license.txt.
+
+# License/attribution that ships inside each bundle
+MEDIA-LICENSE.txt
+
+# Character voice references (cleared for redistribution)
+voices/jan/ref.wav
+voices/jan/ref.txt
+voices/bazza/ref.wav
+voices/bazza/ref.txt
+voices/karren/ref.wav
+voices/karren/ref.txt
+voices/jan-whispering/ref.wav
+voices/jan-whispering/ref.txt
+
+# Audio tree — original music, sfx, voice clips, ambient beds (any depth).
+# fnmatch '*' crosses '/', so these cover audio/music, audio/sfx/handset,
+# audio/voice/intros, etc. Only these media file types are approved under audio/.
+audio/*.m4a
+audio/*.wav
+audio/*.mp3
