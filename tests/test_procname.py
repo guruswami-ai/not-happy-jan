@@ -27,15 +27,18 @@ def test_set_title_sets_when_available():
     assert "NHJ test-proc" in sp.getproctitle()
 
 
-def test_ocker_plist_runs_through_named_supervisor(tmp_path, monkeypatch):
+def test_llm_plist_runs_through_named_supervisor(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     from nhj import cli
     monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: None)
     monkeypatch.setattr("time.sleep", lambda *_: None)
-    dest = cli._install_ocker_launchagent("/models/ocker.gguf", 9991)
+    dest = cli._install_llm_launchagent("/models/ocker.gguf", 9991)
     plist = dest.read_text()
+    assert dest.name == "com.guruswami.nhj-llm.plist"   # named for consistency with nhj-tts/nhj-mcp
+    assert "<string>com.guruswami.nhj-llm</string>" in plist
     assert "nhj.llm_server" in plist            # launched via the named supervisor
     assert "llama-server" in plist              # which still runs the real binary
+    assert "ocker-bogan-nano" in plist          # the model alias served on the API is unchanged
     assert "/models/ocker.gguf" in plist
 
 

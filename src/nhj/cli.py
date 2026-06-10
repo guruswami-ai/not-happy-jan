@@ -249,7 +249,7 @@ def _stop_nhj_services() -> list[str]:
     import shutil as _sh
     removed: list[str] = []
     la_dir = Path.home() / "Library" / "LaunchAgents"
-    labels = (_TTS_LABEL, _OCKER_LABEL, _MCP_LABEL)
+    labels = (_TTS_LABEL, _LLM_LABEL, _MCP_LABEL, *_LEGACY_LLM_LABELS)
     if _sh.which("launchctl"):
         uid = os.getuid()
         for lbl in labels:                                    # unload running agents
@@ -768,11 +768,24 @@ def _set_env_vars(env_path: Path, kv: dict) -> None:
     env_path.write_text("\n".join(lines) + "\n")
 
 
-_OCKER_LABEL = "com.guruswami.nhj-ocker-bogan-nano"
+_LLM_LABEL = "com.guruswami.nhj-llm"
+# Pre-rename label (the service was once named after the model it serves). Cleaned up on
+# (re)install and uninstall so an upgrader never ends up running both the old and new agent.
+_LEGACY_LLM_LABELS = ("com.guruswami.nhj-ocker-bogan-nano",)
 
 
-def _install_ocker_launchagent(gguf_path: str, port: int) -> Path:
-    """Write + (re)load a LaunchAgent serving ocker-bogan-nano via llama-server on the given port."""
+def _retire_legacy_llm_agents(uid: str) -> None:
+    """Unload + delete any pre-rename LLM LaunchAgent so it can't linger beside nhj-llm."""
+    la_dir = Path.home() / "Library" / "LaunchAgents"
+    for lbl in _LEGACY_LLM_LABELS:
+        subprocess.run(["launchctl", "bootout", f"gui/{uid}/{lbl}"], capture_output=True)
+        (la_dir / f"{lbl}.plist").unlink(missing_ok=True)
+
+
+def _install_llm_launchagent(gguf_path: str, port: int) -> Path:
+    """Write + (re)load the LaunchAgent serving the local LLM (ocker-bogan-nano) via
+    llama-server on the given port. Named ``nhj-llm`` for consistency with ``nhj-tts`` /
+    ``nhj-mcp``; the model alias served on the API stays ``ocker-bogan-nano``."""
     import shutil
     import sys
     llama = shutil.which("llama-server") or "/opt/homebrew/bin/llama-server"
@@ -781,7 +794,7 @@ def _install_ocker_launchagent(gguf_path: str, port: int) -> Path:
     plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>{_OCKER_LABEL}</string>
+  <key>Label</key><string>{_LLM_LABEL}</string>
   <key>ProgramArguments</key><array>
     <string>{sys.executable}</string>
     <string>-m</string><string>nhj.llm_server</string>
@@ -796,15 +809,16 @@ def _install_ocker_launchagent(gguf_path: str, port: int) -> Path:
   <key>WorkingDirectory</key><string>{resources.data_dir()}</string>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
   <key>ProcessType</key><string>Interactive</string>
-  <key>StandardOutPath</key><string>{resources.log_dir() / "ocker-bogan-nano.log"}</string>
-  <key>StandardErrorPath</key><string>{resources.log_dir() / "ocker-bogan-nano.log"}</string>
+  <key>StandardOutPath</key><string>{resources.log_dir() / "llm.log"}</string>
+  <key>StandardErrorPath</key><string>{resources.log_dir() / "llm.log"}</string>
 </dict></plist>
 """
-    dest = Path.home() / "Library" / "LaunchAgents" / f"{_OCKER_LABEL}.plist"
+    dest = Path.home() / "Library" / "LaunchAgents" / f"{_LLM_LABEL}.plist"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(plist)
     uid = str(os.getuid())
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{_OCKER_LABEL}"],
+    _retire_legacy_llm_agents(uid)                   # migrate off the old nhj-ocker-bogan-nano agent
+    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{_LLM_LABEL}"],
                    capture_output=True)  # ignore "not loaded"
     import time; time.sleep(1)                        # let the old job fully tear down (avoid bootstrap race)
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(dest)], capture_output=True)
@@ -910,7 +924,7 @@ def install_model(
 
     import platform
     if service and platform.system() == "Darwin":
-        dest = _install_ocker_launchagent(model_path, port)
+        dest = _install_llm_launchagent(model_path, port)
         app.print(f"[green]✓[/green] LaunchAgent loaded ({dest.name}) — starts on login + now")
     else:
         if service:        # --service requested on a non-macOS host (LaunchAgents are macOS-only)
@@ -1034,7 +1048,7 @@ def servers_cmd(choice: str = typer.Argument("status", help="persistent | on-dem
     choice = choice.strip().lower().replace("ondemand", "on-demand")
     if choice in ("persistent", "on-demand"):
         set_setting("servers", choice)
-        labels = (_TTS_LABEL, _OCKER_LABEL)
+        labels = (_TTS_LABEL, _LLM_LABEL, *_LEGACY_LLM_LABELS)
         if platform.system() == "Darwin":
             uid = str(os.getuid())
             if choice == "on-demand":
