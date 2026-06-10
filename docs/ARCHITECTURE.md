@@ -340,7 +340,45 @@ tell you the dataset needs to be far larger than you guessed.
 
 ---
 
-## 7. Honest limitations
+## 7. A broader implication — alignment as a silent confound in distilled data
+
+The swearing-Australian case was useful precisely because its failure mode is *loud*: a
+safety-tuned teacher visibly cannot produce the register, so the distortion is impossible to
+miss and trivial to measure. That makes it a clean instrument for a more uncomfortable,
+general observation.
+
+**A model's output is not a distillation of truth.** It is a function of its training corpus
+*and* of the alignment / censorship applied afterwards — and that post-training does not
+behave like a clean filter bolted on top. It shifts the model's *distribution*: it changes
+what the model says, how it frames things, and what it omits, often in ways the alignment's
+authors did not specifically intend. When that model is then used as a **teacher** — to
+generate synthetic data, to label, to distil, to seed a fine-tune or a LoRA — those shifts are
+**inherited by the student**. The student learns the teacher's distortions along with its
+competence.
+
+In NHJ the effect was **significant and obvious**: alignment didn't merely soften the output,
+it *capped the achievable character* — the distilled model could not fully "talk like an ocker
+Australian" because the teacher signal it was built from had that register filtered out. We
+could see it, so we measured it and routed around it (an abliterated teacher + the
+character-fidelity harness).
+
+The unsettling question is the **subtle** cases. Where the target behaviour is factual, or
+medical, or legal, or merely stylistically neutral, the same mechanism is presumably
+operating — alignment shaping the teacher's distribution — but the failure mode is *quiet*:
+there is no "oh *bother*" to tip you off that the synthetic data is skewed, hedged, sanitised,
+or systematically omitting a region of the space. The student inherits a bias no one chose and
+no obvious test catches.
+
+The practical takeaway is **not** "abliterate everything". It is: **don't assume the impact is
+negligible.** When a model is the *source* of your training data, its alignment is a *variable
+in your pipeline*, not a constant to ignore — so treat it like any other confound and **try to
+quantify it for your specific domain** (a targeted eval, as here) rather than assuming a
+frontier teacher hands you neutral ground truth. The louder your domain's failure mode, the
+luckier you are: you got to *see* the distortion that quieter pipelines are silently carrying.
+
+---
+
+## 8. Honest limitations
 
 NHJ is **not** a pragmatic everyday tool for most people, and this document does not pretend
 otherwise. The full experience wants an Apple-Silicon Mac, ~5 GB of local models, and
