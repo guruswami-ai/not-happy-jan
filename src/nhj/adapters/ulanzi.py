@@ -34,6 +34,7 @@ import json
 import os
 import random
 import socket
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -47,6 +48,12 @@ if TYPE_CHECKING:
     from nhj.characters import Character
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def _warn(msg: str) -> None:
+    """Surface a send failure to stderr (captured in worker.log). A silently-swallowed
+    publish is why a dark screen is otherwise undiagnosable."""
+    print(f"[nhj] ulanzi: {msg}", file=sys.stderr)
 
 _ASSETS = Path(__file__).resolve().parent / "awtrix_assets"
 
@@ -356,6 +363,7 @@ class UlanziAdapter(NotificationAdapter):
 
     def _fire_mqtt(self, body: dict) -> bool:
         if not self._broker_up():
+            _warn(f"broker {self.mqtt_host}:{self.mqtt_port} unreachable — vibe not shown")
             return False
         try:
             import paho.mqtt.publish as publish
@@ -365,7 +373,8 @@ class UlanziAdapter(NotificationAdapter):
             publish.multiple(msgs, hostname=self.mqtt_host, port=self.mqtt_port,
                              auth=auth, client_id="nhj-ulanzi")
             return bool(msgs)
-        except Exception:
+        except Exception as e:
+            _warn(f"MQTT publish to {self.mqtt_host}:{self.mqtt_port} failed: {e}")
             return False
 
     def _fire_http(self, body: dict) -> bool:
@@ -377,6 +386,7 @@ class UlanziAdapter(NotificationAdapter):
             try:
                 requests.post(f"http://{host}/api/notify", json=body, timeout=3).raise_for_status()
                 ok = True
-            except Exception:
+            except Exception as e:
+                _warn(f"HTTP notify to {host} failed: {e}")
                 continue
         return ok

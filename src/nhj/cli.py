@@ -377,6 +377,12 @@ def voices():
 @cli.command()
 def devices():
     """List configured notification adapters."""
+    # Load .env first — display/haptic adapters resolve their devices from env vars
+    # (ULANZI_*, LAMETRIC_*, …) exactly like the worker does. Without this, env-only
+    # adapters wrongly report unavailable and the table shows audio alone.
+    from dotenv import load_dotenv
+    from nhj import resources
+    load_dotenv(resources.env_file())
     from nhj.adapters import load_adapters
     from nhj.config import ADAPTER_ORDER
     adapters = load_adapters(ADAPTER_ORDER)
