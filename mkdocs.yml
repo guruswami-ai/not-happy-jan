@@ -44,6 +44,11 @@ markdown_extensions:
   - attr_list
   - md_in_html
   - tables
+  # Renders :material-*: / :fontawesome-*: icon shortcodes (e.g. the home-page card grid)
+  # as inline SVGs instead of literal text.
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - toc:
       permalink: true
   - pymdownx.details
