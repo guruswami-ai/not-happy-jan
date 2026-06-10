@@ -339,20 +339,39 @@ def uninstall(
 
 @cli.command()
 def voices():
-    """List available voice characters."""
+    """List available voice characters.
+
+    A voice speaks if EITHER channel is present: the bundled/built pre-rendered bank
+    (no model, no download — the minimal-install contract) or a live-TTS reference clip
+    (ref.wav, for fresh synthesis). They're reported separately so a clean minimal install
+    reads as usable, not broken.
+    """
     from nhj.characters import Character
+    from nhj.adapters.audio import bank_clip_count
     t = Table(title="NHJ Voices", show_header=True)
-    t.add_column("Name"); t.add_column("Voice"); t.add_column("Tier"); t.add_column("ref.wav"); t.add_column("Triggers")
+    t.add_column("Name"); t.add_column("Voice"); t.add_column("Tier")
+    t.add_column("Bank (bare markers)"); t.add_column("Live ref (synthesis)")
+    t.add_column("Status"); t.add_column("Triggers")
     for d in sorted(resources.character_defs_dir().iterdir()):
         if not d.is_dir():
             continue
         try:
             c = Character.load(d.name)
-            ref_ok = "✓" if c.ref_wav() else "✗ missing"
-            t.add_row(c.name, c.voice, c.model_tier, ref_ok, ", ".join(c.triggers_on) or "all")
+            n = bank_clip_count(c.voice)
+            has_ref = c.ref_wav() is not None
+            bank = f"[green]✓ {n} clips[/green]" if n else "[dim]— none[/dim]"
+            ref = "[green]✓ ref.wav[/green]" if has_ref else "[yellow]✗ missing[/yellow]"
+            status = ("[green]ready[/green]" if (n or has_ref)
+                      else "[red]unavailable[/red]")
+            t.add_row(c.name, c.voice, c.model_tier, bank, ref, status,
+                      ", ".join(c.triggers_on) or "all")
         except Exception:
-            t.add_row(d.name, "?", "?", "?", "?")
+            t.add_row(d.name, "?", "?", "?", "?", "?", "?")
     Console().print(t)
+    Console().print(
+        "[dim]Bank = pre-rendered clips (speaks with no model). "
+        "Live ref = ref.wav for fresh TTS synthesis. A voice is ready if either is present; "
+        "run [/dim][cyan]nhj setup-media[/cyan][dim] to add live references.[/dim]")
 
 
 @cli.command()

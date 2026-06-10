@@ -122,6 +122,20 @@ def pick_bank_clip(voice: str, intent: str) -> Optional[str]:
     return None
 
 
+def bank_clip_count(voice: str) -> int:
+    """Distinct pre-rendered bank clips for *voice* across the user cache and the bundled
+    package bank (the same two roots `pick_bank_clip` resolves). >0 means the voice speaks
+    with no model and no live reference — the minimal-install contract. Deduped by
+    (intent, filename) so a user-built clip shadowing a bundled one isn't double-counted."""
+    names: set[tuple[str, str]] = set()
+    for root in (_CLIPS_ROOT, resources.bundled("clips")):
+        base = root / voice
+        if base.is_dir():
+            for wav in base.glob("*/*.wav"):
+                names.add((wav.parent.name, wav.name))
+    return len(names)
+
+
 def _cache_path(voice: str, text: str, variant: str = "") -> Path:
     # variant (intensity band) keeps the same novel line cached separately per dial level
     digest = hashlib.sha256(f"{voice}::{variant}::{text}".encode()).hexdigest()[:32]
