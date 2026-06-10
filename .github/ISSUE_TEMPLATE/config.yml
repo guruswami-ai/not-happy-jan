@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Questions, ideas & show-and-tell
+    url: https://github.com/guruswami-ai/not-happy-jan/discussions
+    about: Not a bug? Ask a question, suggest a feature, or show off your bogans here.
+  - name: 📖 Docs & architecture
+    url: https://github.com/guruswami-ai/not-happy-jan/tree/main/docs
+    about: Install profiles, configuration, the audio standard, and the technical architecture.
