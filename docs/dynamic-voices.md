@@ -1,6 +1,6 @@
 # Dynamic voices — the `ocker-bogan-nano` brain
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 By default each character speaks from a **static phrase bank** — fast, offline, deterministic. Flip on **dynamic mode** and a local LLM rephrases every notification *in character* instead — fresh slang every time, scaled by each character's bogan/intensity and competence dials. *"Build passed"* becomes *"yeah nice one, all green"* one time and *"beauty, she's a ripper"* the next.
 

@@ -1,6 +1,6 @@
 # Minimum specs & the three ways to run NHJ
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 Not-Happy-Jan scales from *"runs on anything, quietly"* to *"the full Australian bogan
 call-centre, live."* It's all the one install — these tiers are just switches.

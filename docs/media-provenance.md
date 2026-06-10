@@ -1,6 +1,6 @@
 # Media provenance & redistribution
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 This document is the provenance manifest for every media asset Not-Happy-Jan
 redistributes through the `media` GitHub release (the bundles `nhj setup-media`

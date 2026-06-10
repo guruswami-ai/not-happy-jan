@@ -1,6 +1,6 @@
 # Integration — Claude Code, other agents & devices
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 ## Claude Code integration
 

@@ -61,6 +61,7 @@ markdown_extensions:
 # live in it → wire it up → tune it → operate it → trust it → build on it.
 nav:
   - Home: index.md
+  - Watch the demo: watch-the-demo.md
   - Getting started:
       - Requirements & tiers: minimum-specs.md
       - Install profiles: install-profiles.md
@@ -84,3 +85,10 @@ nav:
       - Media provenance & licenses: media-provenance.md
       - Security policy: https://github.com/guruswami-ai/not-happy-jan/blob/main/SECURITY.md
   - Contribute: https://github.com/guruswami-ai/not-happy-jan/blob/main/CONTRIBUTING.md
+
+# Reachable via in-page links, not top-level nav (suppresses the "not in nav" warning
+# under --strict): transcript pages live under their video, the assets note is for editors.
+not_in_nav: |
+  /assets/README.md
+  /transcripts/overview.md
+  /transcripts/setup.md

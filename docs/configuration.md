@@ -1,6 +1,6 @@
 # Configuration & requirements
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 Edit `.env` — all settings are documented there. For the full audio control surface (ducking, modes, hold sounds, scenes, filters) see **[Audio Standard & Pipeline](AUDIO-STANDARD.md)**; for the dynamic-LLM settings see **[Dynamic voices](dynamic-voices.md)**.
 

@@ -4,7 +4,7 @@
 explains the **why** (the AI-pipeline design and its tradeoffs), this one is the **how**:
 which module does what, the contracts they share, and how to extend the system.*
 
-*← back to the [README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 ---
 
@@ -243,7 +243,7 @@ cd not-happy-jan
 uv run --extra dev pytest -q          # tests live ONLY in tests/
 ```
 
-Before opening a PR (from [CONTRIBUTING.md](../CONTRIBUTING.md)):
+Before opening a PR (from [CONTRIBUTING.md](https://github.com/guruswami-ai/not-happy-jan/blob/main/CONTRIBUTING.md)):
 
 ```bash
 uv run --extra dev pytest -q

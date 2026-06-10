@@ -1,6 +1,6 @@
 # Characters — the call-centre cast
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 When your coding agent wants your attention, you'll hear from Jan, Bazza or Karren — depending on the severity. Be warned: if **Karren** picks up the call, you know something's gone wrong. She'll be wanting to speak to a manager. That's you.
 
@@ -41,4 +41,4 @@ voices/
     character.yaml # name, model_tier, preamble, phrases
 ```
 
-Add your own characters by dropping a `ref.wav`, `ref.txt`, and `character.yaml` into `voices/<name>/`. Each character is a standalone voice with its own reference clip. See [`../voices/jan/character.yaml`](../voices/jan/character.yaml) for a full example.
+Add your own characters by dropping a `ref.wav`, `ref.txt`, and `character.yaml` into `voices/<name>/`. Each character is a standalone voice with its own reference clip. See [`voices/jan/character.yaml`](https://github.com/guruswami-ai/not-happy-jan/blob/main/voices/jan/character.yaml) for a full example.

@@ -1,6 +1,6 @@
 # Modes — switch the whole vibe at once
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 A **mode** is a one-word macro that reconfigures *everything* together — hold music, audio FX, persona, dials, the displays, the TTS voice and the mouse haptics — and clears whatever the previous mode left behind. They're mutually exclusive, so you never end up with (say) a rave *and* a call-centre running at once.
 

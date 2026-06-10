@@ -1,6 +1,6 @@
 # Install profiles — default · full · minimal
 
-*← back to the [Not-Happy-Jan README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 NHJ ships with three install profiles so a single command works on any machine — from a powerful Mac Studio to a RAM-tight laptop in a CI environment.
 
