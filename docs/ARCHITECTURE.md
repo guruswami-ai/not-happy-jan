@@ -134,6 +134,10 @@ in the marker itself, not inferred.
 > **Transferable pattern:** a tiny, text-only side-channel (`[…]` markers in the model's
 > own output) turns an opaque agent into an event source — no tool calls, no API, ~5 tokens.
 
+> **Lineage:** the `[vibes:]` marker mechanism originates with
+> **[AgentVibes](https://github.com/paulpreibisch/AgentVibes)** (TTS for Claude Code) by Paul
+> Preibisch — the core idea Not-Happy-Jan is built on and then took to an extreme.
+
 ### 4.2 Message queue + concurrency
 
 The Stop hook is a short-lived process; the work is dispatched asynchronously. A

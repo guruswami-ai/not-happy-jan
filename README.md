@@ -11,6 +11,8 @@ your mouse or a flash on a pixel display to match — all **100% on your own mac
 
 > *"Not happy, Jan — the issue is…"*
 
+*Built on the agent-feedback idea from **[AgentVibes](https://github.com/paulpreibisch/AgentVibes)** — and taken way too far.*
+
 📖 **[Read the docs](https://guruswami-ai.github.io/not-happy-jan/)** · 🎬 **[Watch the demo](https://guruswami-ai.github.io/not-happy-jan/watch-the-demo/)** (videos coming soon)
 
 <!-- READY TO PUBLISH: drop docs/assets/video/demo-thumbnail.webp + replace VIDEO_ID, then uncomment.
@@ -106,7 +108,10 @@ only (no `sudo`) and fully reversible. Report vulnerabilities via [SECURITY.md](
 
 ## Credits & license
 
-Evolved from an earlier personal agent-feedback project by Paul Nevin. TTS powered by
+The core idea — narrating your coding agent's status via `[vibes:]` markers — comes from
+**[AgentVibes](https://github.com/paulpreibisch/AgentVibes)** (TTS for Claude Code) by Paul
+Preibisch, an actively-developed project with its own evolving character system. Not-Happy-Jan
+is an independent, unapologetically over-engineered take on that idea. TTS powered by
 [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit) via
 [mlx-audio](https://github.com/ml-explore/mlx-audio).
 
