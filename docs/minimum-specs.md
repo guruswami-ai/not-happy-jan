@@ -59,10 +59,7 @@ you've never heard before.
 
 ### About that ~3.2 GB — and how to get it back
 
-<p align="center">
-  <img src="assets/diagrams/model-lifecycle.svg" width="560"
-    alt="Models are downloaded once into ~/Library/Caches (about 5 GB) and served two ways. On-demand (default): the first vibe starts the server, it serves the line holding about 3 GB of RAM, then after about ten minutes idle it unloads and frees the RAM, repeating each cycle. Persistent (full profile): the daemons stay always warm at about 3.2 GB resident for sub-second replies with no cold start.">
-</p>
+![Models are downloaded once into ~/Library/Caches (about 5 GB) and served two ways. On-demand (default): the first vibe starts the server, it serves the line holding about 3 GB of RAM, then after about ten minutes idle it unloads and frees the RAM, repeating each cycle. Persistent (full profile): the daemons stay always warm at about 3.2 GB resident for sub-second replies with no cold start.](assets/diagrams/model-lifecycle.svg){ width="560" .center }
 
 Warm daemons give sub-second replies (no cold-start), at ~2.1 GB (TTS) + ~1.1 GB (LLM)
 resident while loaded — nothing on a Mac Studio, noticeable on a 16 GB laptop.
