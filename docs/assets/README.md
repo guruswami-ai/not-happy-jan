@@ -13,6 +13,18 @@ Drop launch/demo media here.
 Keep clips short and compressed — they ship in the repo. A few seconds of the *experience*
 sells this faster than any prose.
 
+**`awtrix-demo.webp`** — the AWTRIX/Ulanzi matrix reacting to a vibe (used in the README and
+[Watch the demo](../watch-the-demo.md)). Animated **WebP**, lossless, 526×130 — ~56 KB.
+WebP renders inline on GitHub *and* the docs site; prefer it over GIF for animated captures
+(this clip was 1.5 MB as a raw GIF). Recipe to re-optimise a capture — half-size,
+nearest-neighbour to keep pixels crisp, 12 fps, lossless WebP:
+
+```sh
+ffmpeg -i capture.gif -vf "fps=12,scale=iw/2:ih/2:flags=neighbor,palettegen=max_colors=8:stats_mode=full" pal.png
+ffmpeg -i capture.gif -i pal.png -lavfi "fps=12,scale=iw/2:ih/2:flags=neighbor[x];[x][1:v]paletteuse=dither=none" out.gif
+gif2webp -m 6 out.gif -o out.webp     # lossless animated WebP — tiny for flat pixel art
+```
+
 ## Video thumbnails (YouTube embeds)
 
 For the longer demos hosted on YouTube (see **[Watch the demo](../watch-the-demo.md)** and
