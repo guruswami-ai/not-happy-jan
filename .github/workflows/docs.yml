@@ -30,10 +30,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r docs/requirements.txt
-      # Non-strict: existing guides keep GitHub-relative back-links (e.g. ../README.md)
-      # that don't resolve inside the site tree. GitHub stays the primary markdown surface;
-      # repointing those to index.md is a tracked follow-up.
-      - run: mkdocs build --site-dir _site
+      # Strict: fail the build on any broken internal link or page missing from nav.
+      - run: mkdocs build --strict --site-dir _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

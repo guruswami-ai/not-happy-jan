@@ -11,7 +11,15 @@ your mouse or a flash on a pixel display to match — all **100% on your own mac
 
 > *"Not happy, Jan — the issue is…"*
 
-📖 **[Read the docs](https://guruswami-ai.github.io/not-happy-jan/)** · 🎬 demo (coming soon)
+📖 **[Read the docs](https://guruswami-ai.github.io/not-happy-jan/)** · 🎬 **[Watch the demo](https://guruswami-ai.github.io/not-happy-jan/watch-the-demo/)** (videos coming soon)
+
+<!-- READY TO PUBLISH: drop docs/assets/video/demo-thumbnail.webp + replace VIDEO_ID, then uncomment.
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=VIDEO_ID">
+    <img src="docs/assets/video/demo-thumbnail.webp" alt="Watch Not-Happy-Jan narrate a Claude Code session" width="640">
+  </a>
+</p>
+-->
 
 > ⚠️ **Public alpha** — an early, for-fun release that *will* have rough edges.
 > [Open an issue](https://github.com/guruswami-ai/not-happy-jan/issues/new/choose) or

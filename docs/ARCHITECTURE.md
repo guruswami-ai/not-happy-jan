@@ -2,7 +2,7 @@
 
 *A serious architecture note for a deliberately unserious product.*
 
-*← back to the [README](../README.md)*
+*← [Not-Happy-Jan docs](index.md)*
 
 ---
 
