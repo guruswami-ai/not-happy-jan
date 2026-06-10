@@ -51,3 +51,8 @@ archive/
 
 # Generated voice demo clips (derived voices — not for redistribution)
 demo/
+
+# MkDocs site build output
+_site/
+site/
+.cache/

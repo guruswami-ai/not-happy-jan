@@ -1,0 +1,49 @@
+name: Docs
+
+# Build the MkDocs site from docs/ and publish to GitHub Pages.
+# Requires: repo Settings → Pages → Source = "GitHub Actions" (one-time, by the owner).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Don't cancel an in-progress production deploy; let the latest commit queue.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r docs/requirements.txt
+      # Non-strict: existing guides keep GitHub-relative back-links (e.g. ../README.md)
+      # that don't resolve inside the site tree. GitHub stays the primary markdown surface;
+      # repointing those to index.md is a tracked follow-up.
+      - run: mkdocs build --site-dir _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,4 @@
+# Build deps for the MkDocs documentation site (docs/ → GitHub Pages).
+# Used by .github/workflows/docs.yml. Kept separate from the package deps so the
+# site build never pulls in the runtime/TTS stack.
+mkdocs-material>=9.5

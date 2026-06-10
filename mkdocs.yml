@@ -1,0 +1,86 @@
+site_name: Not-Happy-Jan
+site_description: >-
+  Multi-sensory feedback for AI coding agents — an Australian call-centre of
+  cloned voices (Jan, Bazza, Karren) that narrates your build, 100% on-device.
+site_url: https://guruswami-ai.github.io/not-happy-jan/
+repo_url: https://github.com/guruswami-ai/not-happy-jan
+repo_name: guruswami-ai/not-happy-jan
+edit_uri: edit/main/docs/
+docs_dir: docs
+
+# Markdown in the repo stays the single source of truth; this just renders it.
+# Add a page by dropping a .md in docs/ and listing it in nav below.
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: pink
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: pink
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+# Information architecture (issue #12). Audience flows top → bottom: try it →
+# live in it → wire it up → tune it → operate it → trust it → build on it.
+nav:
+  - Home: index.md
+  - Getting started:
+      - Requirements & tiers: minimum-specs.md
+      - Install profiles: install-profiles.md
+      - Quick start: quickstart.md
+  - The experience:
+      - Characters & dials: characters.md
+      - Modes: modes.md
+      - Audio & hold music: AUDIO-STANDARD.md
+  - Integrate:
+      - Agents, hooks & devices: integration.md
+      - AWTRIX pixel display: awtrix-display-setup.md
+      - Haptic mouse: haptic-mouse-setup.md
+      - Devices overview: devices/README.md
+  - Customize:
+      - Dynamic voices (the LLM): dynamic-voices.md
+      - Configuration: configuration.md
+  - Under the hood:
+      - Architecture: ARCHITECTURE.md
+      - Developer guide: DEVELOPER-GUIDE.md
+  - Trust:
+      - Media provenance & licenses: media-provenance.md
+      - Security policy: https://github.com/guruswami-ai/not-happy-jan/blob/main/SECURITY.md
+  - Contribute: https://github.com/guruswami-ai/not-happy-jan/blob/main/CONTRIBUTING.md
