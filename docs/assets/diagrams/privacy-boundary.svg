@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 404" role="img"
+     aria-labelledby="pb-title pb-desc"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="pb-title">Privacy &amp; network boundary</title>
+  <desc id="pb-desc">Everything runs on your Mac. The local MCP, TTS, and LLM services all bind
+    to 127.0.0.1 (loopback); the cloned-voice references stay on the machine; nothing about
+    your code or prompts leaves at runtime. The only outbound traffic is at install time —
+    downloading the models and packages from Hugging Face and registries. Serving NHJ to other
+    Macs on your LAN is a deliberate opt-in (--listen 0.0.0.0).</desc>
+  <style>
+    .ext   { fill:#f3eefb; stroke:#7a5bd6; stroke-width:1.5; }
+    .bound { fill:#f6fbf7; stroke:#2f9e57; stroke-width:2.5; }
+    .chip  { fill:#ffffff; stroke:#5b5bd6; stroke-width:1.5; }
+    .ok    { fill:#e7f5ec; stroke:#2f9e57; stroke-width:1.5; }
+    .optin { fill:#fdf3e3; stroke:#d98a1f; stroke-width:1.5; stroke-dasharray:5 4; }
+    .th    { font-size:13px; font-weight:700; fill:#1f2333; text-anchor:middle; }
+    .t     { font-size:12.5px; fill:#1f2333; text-anchor:middle; }
+    .mono  { font-size:11.5px; fill:#5b5bd6; text-anchor:middle;
+             font-family:'SF Mono', ui-monospace, Menlo, Consolas, monospace; }
+    .note  { font-size:11.5px; fill:#6b7180; }
+    .conn  { stroke:#8a8fa3; stroke-width:2; fill:none; }
+    .dash  { stroke:#d98a1f; stroke-width:2; fill:none; stroke-dasharray:5 4; }
+  </style>
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8fa3"/>
+    </marker>
+    <marker id="a3o" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#d98a1f"/>
+    </marker>
+  </defs>
+
+  <!-- external source (install time only) -->
+  <rect class="ext" x="150" y="10" width="260" height="44" rx="10"/>
+  <text class="th" x="280" y="37">🌐 Hugging Face · registries</text>
+  <path class="conn" d="M280 54 L280 86" marker-end="url(#a3)"/>
+  <text class="note" x="292" y="76">install time only — models + deps</text>
+
+  <!-- the machine boundary -->
+  <rect class="bound" x="24" y="90" width="512" height="234" rx="16"/>
+  <text class="th" x="280" y="116">🖥  Your Mac — all inference runs here</text>
+
+  <!-- loopback services -->
+  <rect class="chip" x="44"  y="134" width="150" height="46" rx="10"/>
+  <text class="th" x="119" y="156" font-size="12.5">MCP</text>
+  <text class="mono" x="119" y="172">127.0.0.1:8765</text>
+  <rect class="chip" x="205" y="134" width="150" height="46" rx="10"/>
+  <text class="th" x="280" y="156" font-size="12.5">TTS</text>
+  <text class="mono" x="280" y="172">127.0.0.1:9992</text>
+  <rect class="chip" x="366" y="134" width="150" height="46" rx="10"/>
+  <text class="th" x="441" y="156" font-size="12.5">LLM</text>
+  <text class="mono" x="441" y="172">127.0.0.1:9991</text>
+
+  <rect class="chip" x="44" y="194" width="472" height="38" rx="10"/>
+  <text class="t" x="280" y="218">🔒 cloned-voice references stay on this Mac</text>
+
+  <rect class="ok" x="44" y="244" width="472" height="40" rx="10"/>
+  <text class="th" x="280" y="269" font-size="12.5">✓ nothing about your code or prompts leaves at runtime</text>
+
+  <text class="note" x="280" y="306" text-anchor="middle">↑ inbound install only · ↓ outbound is opt-in</text>
+
+  <!-- optional LAN opt-in -->
+  <path class="dash" d="M280 324 L280 348" marker-end="url(#a3o)"/>
+  <rect class="optin" x="120" y="350" width="320" height="44" rx="10"/>
+  <text class="t" x="280" y="370">opt-in: --listen 0.0.0.0</text>
+  <text class="note" x="280" y="386" font-size="11">serve NHJ to other Macs on your LAN</text>
+</svg>

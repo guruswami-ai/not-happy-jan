@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 312" role="img"
+     aria-labelledby="sm-title sm-desc"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="sm-title">Where Not-Happy-Jan stores things on macOS</title>
+  <desc id="sm-desc">Five locations. ~/Library/Application Support/not-happy-jan holds config
+    (.env, config.yaml), runtime state, and the Python runtime. ~/Library/Caches/not-happy-jan
+    holds the downloaded models (Qwen3-TTS and ocker-bogan-nano), the clip cache, and media.
+    ~/Library/Logs/not-happy-jan holds the worker, TTS, LLM, MCP, and hook logs. ~/.claude
+    holds NHJ's Claude Code hooks, MCP server registration, skill, and CLAUDE.md markers.
+    ~/Library/LaunchAgents holds the nhj-tts, nhj-llm, and nhj-mcp services on the full profile.
+    Everything is under your home folder; uninstall removes all of it.</desc>
+  <style>
+    .path { font-size:12.5px; font-weight:700;
+            font-family:'SF Mono', ui-monospace, Menlo, Consolas, monospace; }
+    .c    { font-size:12px; fill:#3a3f52; }
+    .tag  { font-size:10px; font-weight:700; fill:#ffffff; text-anchor:middle; }
+  </style>
+
+  <!-- 1 · Application Support -->
+  <rect x="20" y="12" width="560" height="50" rx="10" fill="#eef1fb" stroke="#5b5bd6" stroke-width="1.5"/>
+  <rect x="20" y="12" width="150" height="50" rx="10" fill="#5b5bd6"/>
+  <rect x="56" y="12" width="114" height="50" fill="#5b5bd6"/>
+  <text class="tag" x="95" y="33">CONFIG</text><text class="tag" x="95" y="47">+ STATE</text>
+  <text class="path" x="184" y="33" fill="#3b3b8f">~/Library/Application Support/not-happy-jan</text>
+  <text class="c" x="184" y="51">.env · config.yaml · state.json · the Python runtime (.venv)</text>
+
+  <!-- 2 · Caches -->
+  <rect x="20" y="70" width="560" height="50" rx="10" fill="#eef1fb" stroke="#5b5bd6" stroke-width="1.5"/>
+  <rect x="20" y="70" width="150" height="50" rx="10" fill="#7a7fd0"/>
+  <rect x="56" y="70" width="114" height="50" fill="#7a7fd0"/>
+  <text class="tag" x="95" y="99">MODELS</text>
+  <text class="path" x="184" y="91" fill="#3b3b8f">~/Library/Caches/not-happy-jan</text>
+  <text class="c" x="184" y="109">Qwen3-TTS · ocker-bogan-nano · clip cache · media</text>
+
+  <!-- 3 · Logs -->
+  <rect x="20" y="128" width="560" height="50" rx="10" fill="#f3f4f8" stroke="#8a8fa3" stroke-width="1.5"/>
+  <rect x="20" y="128" width="150" height="50" rx="10" fill="#8a8fa3"/>
+  <rect x="56" y="128" width="114" height="50" fill="#8a8fa3"/>
+  <text class="tag" x="95" y="157">LOGS</text>
+  <text class="path" x="184" y="149" fill="#55596b">~/Library/Logs/not-happy-jan</text>
+  <text class="c" x="184" y="167">worker · tts · llm · mcp · hook  (.log)</text>
+
+  <!-- 4 · Claude integration -->
+  <rect x="20" y="186" width="560" height="50" rx="10" fill="#fdeef7" stroke="#d6409f" stroke-width="1.5"/>
+  <rect x="20" y="186" width="150" height="50" rx="10" fill="#d6409f"/>
+  <rect x="56" y="186" width="114" height="50" fill="#d6409f"/>
+  <text class="tag" x="95" y="207">CLAUDE</text><text class="tag" x="95" y="221">CODE</text>
+  <text class="path" x="184" y="207" fill="#a02c75">~/.claude</text>
+  <text class="c" x="184" y="225">NHJ's hooks · MCP server · skill · CLAUDE.md markers</text>
+
+  <!-- 5 · LaunchAgents -->
+  <rect x="20" y="244" width="560" height="50" rx="10" fill="#fdf3e3" stroke="#d98a1f" stroke-width="1.5"/>
+  <rect x="20" y="244" width="150" height="50" rx="10" fill="#d98a1f"/>
+  <rect x="56" y="244" width="114" height="50" fill="#d98a1f"/>
+  <text class="tag" x="95" y="265">SERVICES</text><text class="tag" x="95" y="279">(full)</text>
+  <text class="path" x="184" y="265" fill="#8a5510">~/Library/LaunchAgents</text>
+  <text class="c" x="184" y="283">com.guruswami.nhj-tts · nhj-llm · nhj-mcp</text>
+</svg>
