@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 560" role="img"
+     aria-labelledby="flow-title flow-desc"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="flow-title">How Not-Happy-Jan reacts</title>
+  <desc id="flow-desc">A four-step flow. 1: your agent (Claude Code or any MCP agent)
+    finishes a task and emits a status marker. 2: an NHJ hook or MCP reads the marker.
+    3: the right character answers, chosen by severity — Jan, Bazza, or Karren. 4: the
+    notification reaches your senses across channels — voice, haptic, display, and bell.
+    Throughout, hold music plays while the agent is busy and pauses when someone answers.</desc>
+  <style>
+    .stage { fill:#eef1fb; stroke:#5b5bd6; stroke-width:1.5; }
+    .head  { fill:#1f2333; font-weight:700; font-size:16px; }
+    .sub   { fill:#3a3f52; font-size:13.5px; }
+    .cjan  { fill:#e7f5ec; stroke:#2f9e57; stroke-width:1.5; }
+    .cbaz  { fill:#fdf3e3; stroke:#d98a1f; stroke-width:1.5; }
+    .ckar  { fill:#fdebec; stroke:#d64550; stroke-width:1.5; }
+    .tjan  { fill:#1b5e34; }
+    .tbaz  { fill:#8a5510; }
+    .tkar  { fill:#8c2a31; }
+    .chip  { fill:#ffffff; stroke:#5b5bd6; stroke-width:1.5; }
+    .tchip { fill:#1f2333; }
+    .clab  { font-size:12.5px; font-weight:600; text-anchor:middle; }
+    .music { fill:#f3eefb; stroke:#7a5bd6; stroke-width:1.5; }
+    .tmusic{ fill:#3a2f52; font-size:12.5px; font-weight:600; text-anchor:middle; }
+    .conn  { stroke:#8a8fa3; stroke-width:2; fill:none; }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8fa3"/>
+    </marker>
+  </defs>
+
+  <!-- 1 -->
+  <rect class="stage" x="60" y="44" width="360" height="72" rx="12"/>
+  <text class="head" x="80" y="74">1 · Your agent finishes</text>
+  <text class="sub"  x="80" y="98">Claude Code / any MCP agent emits a marker</text>
+
+  <path class="conn" d="M240 116 L240 142" marker-end="url(#ah)"/>
+
+  <!-- 2 -->
+  <rect class="stage" x="60" y="144" width="360" height="72" rx="12"/>
+  <text class="head" x="80" y="174">2 · NHJ catches the event</text>
+  <text class="sub"  x="80" y="198">a Stop hook / MCP reads the marker</text>
+
+  <path class="conn" d="M240 216 L240 242" marker-end="url(#ah)"/>
+
+  <!-- 3 -->
+  <rect class="stage" x="60" y="244" width="360" height="104" rx="12"/>
+  <text class="head" x="80" y="272">3 · The right person answers</text>
+  <text class="sub"  x="80" y="293">chosen by severity</text>
+  <rect class="cjan" x="80"  y="302" width="100" height="30" rx="8"/>
+  <text class="clab tjan" x="130" y="322">Jan</text>
+  <rect class="cbaz" x="190" y="302" width="100" height="30" rx="8"/>
+  <text class="clab tbaz" x="240" y="322">Bazza</text>
+  <rect class="ckar" x="300" y="302" width="100" height="30" rx="8"/>
+  <text class="clab tkar" x="350" y="322">Karren</text>
+
+  <path class="conn" d="M240 348 L240 374" marker-end="url(#ah)"/>
+
+  <!-- 4 -->
+  <rect class="stage" x="60" y="376" width="360" height="104" rx="12"/>
+  <text class="head" x="80" y="404">4 · It reaches your senses</text>
+  <rect class="chip" x="66"  y="418" width="84" height="32" rx="8"/>
+  <text class="clab tchip" x="108" y="439">🔊 Voice</text>
+  <rect class="chip" x="154" y="418" width="84" height="32" rx="8"/>
+  <text class="clab tchip" x="196" y="439">📳 Haptic</text>
+  <rect class="chip" x="242" y="418" width="84" height="32" rx="8"/>
+  <text class="clab tchip" x="284" y="439">🟦 Display</text>
+  <rect class="chip" x="330" y="418" width="84" height="32" rx="8"/>
+  <text class="clab tchip" x="372" y="439">🔔 Bell</text>
+
+  <!-- hold music, alongside the whole flow -->
+  <rect class="music" x="60" y="506" width="360" height="40" rx="12"/>
+  <text class="tmusic" x="240" y="531">🎷 Hold music plays while busy, pauses when answered</text>
+</svg>

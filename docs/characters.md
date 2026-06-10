@@ -6,6 +6,11 @@ When your coding agent wants your attention, you'll hear from Jan, Bazza or Karr
 
 It's a three-tier escalation ladder — like a support line where the problem keeps getting bumped up the chain. Each character has its own voice (zero-shot cloned from a reference sample), a phrase bank, and dials you can tune live.
 
+<p align="center">
+  <img src="assets/diagrams/escalation-ladder.svg" width="440"
+    alt="A severity ladder rising bottom to top. Jan (reception) handles routine work and all-done — fires on ok, step, celebrate. Bazza (middle management) handles something that needs a look — fires on warn. Karren (the manager) takes over when it broke or is urgent — fires on err and attn.">
+</p>
+
 ## The dials
 
 Each character has an **intensity** dial and (for Jan and Bazza) a **competence** dial — 1 = useless, 10 = sharp:

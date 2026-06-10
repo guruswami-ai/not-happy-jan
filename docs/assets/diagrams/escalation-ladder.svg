@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 408" role="img"
+     aria-labelledby="ladder-title ladder-desc"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="ladder-title">The character escalation ladder</title>
+  <desc id="ladder-desc">Three characters answer depending on severity, which rises from
+    bottom to top. Jan (reception) handles routine work and all-done — fires on ok, step,
+    and celebrate. Bazza (middle management) handles something that needs a look — fires on
+    warn. Karren (the manager) takes over when it broke or is urgent — fires on err and attn.</desc>
+  <style>
+    .head { font-weight:700; font-size:16px; }
+    .sub  { font-size:13.5px; }
+    .pill { fill:#ffffff; stroke-width:1.5; }
+    .ev   { font-size:12.5px; font-weight:600; }
+    .axis { stroke:#8a8fa3; stroke-width:2; fill:none; }
+    .axlab{ fill:#5b5bd6; font-size:12.5px; font-weight:700; letter-spacing:1px; }
+    .kbox { fill:#fdebec; stroke:#d64550; stroke-width:1.5; } .ktx { fill:#8c2a31; }
+    .bbox { fill:#fdf3e3; stroke:#d98a1f; stroke-width:1.5; } .btx { fill:#8a5510; }
+    .jbox { fill:#e7f5ec; stroke:#2f9e57; stroke-width:1.5; } .jtx { fill:#1b5e34; }
+  </style>
+  <defs>
+    <marker id="up" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8fa3"/>
+    </marker>
+  </defs>
+
+  <!-- severity axis (rises upward) -->
+  <path class="axis" d="M44 384 L44 28" marker-end="url(#up)"/>
+  <text class="axlab" transform="rotate(-90 26 206)" x="26" y="206" text-anchor="middle">SEVERITY</text>
+
+  <!-- Karren — top -->
+  <rect class="kbox" x="96" y="24" width="336" height="104" rx="12"/>
+  <text class="head ktx" x="116" y="56">📣  Karren — the manager</text>
+  <text class="sub ktx"  x="116" y="80">it broke / something urgent</text>
+  <rect class="pill" stroke="#d64550" x="116" y="92" width="250" height="26" rx="8"/>
+  <text class="ev ktx" x="128" y="110">fires on  err · attn</text>
+
+  <!-- Bazza — middle -->
+  <rect class="bbox" x="96" y="152" width="336" height="104" rx="12"/>
+  <text class="head btx" x="116" y="184">🧑‍💼  Bazza — middle management</text>
+  <text class="sub btx"  x="116" y="208">something needs a look</text>
+  <rect class="pill" stroke="#d98a1f" x="116" y="220" width="250" height="26" rx="8"/>
+  <text class="ev btx" x="128" y="238">fires on  warn</text>
+
+  <!-- Jan — bottom -->
+  <rect class="jbox" x="96" y="280" width="336" height="104" rx="12"/>
+  <text class="head jtx" x="116" y="312">👩  Jan — reception</text>
+  <text class="sub jtx"  x="116" y="336">routine work &amp; all-done</text>
+  <rect class="pill" stroke="#2f9e57" x="116" y="348" width="250" height="26" rx="8"/>
+  <text class="ev jtx" x="128" y="366">fires on  ok · step · celebrate</text>
+</svg>
