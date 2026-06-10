@@ -90,6 +90,7 @@ nhj mode rave                     # one-word vibe switch; nhj status to see curr
 
 **[📖 guruswami-ai.github.io/not-happy-jan](https://guruswami-ai.github.io/not-happy-jan/)** — the full task-oriented docs site. By audience:
 
+- **New here** → [What is NHJ?](docs/what-is-nhj.md) — the full story in plain language
 - **Trying it / choosing a profile** → [Requirements & tiers](docs/minimum-specs.md) · [Install profiles](docs/install-profiles.md) · [Quick start](docs/quickstart.md)
 - **Living in it** → [Characters & dials](docs/characters.md) · [Modes](docs/modes.md) · [Audio & hold music](docs/AUDIO-STANDARD.md)
 - **Wiring up devices & agents** → [Integration](docs/integration.md) · [AWTRIX display](docs/awtrix-display-setup.md) · [Haptic mouse](docs/haptic-mouse-setup.md) · [Devices](docs/devices/README.md)
