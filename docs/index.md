@@ -24,6 +24,20 @@ mouse or a flash on a pixel display to match — all running **100% on your own 
 - 🎚️ **Tune each character** — boganism, competence, chaos — just by asking Claude in plain language.
 - 📟 **Fan out across devices** you already have: a haptic mouse, $60 pixel clocks, a LaMetric, even a physical bell — or nothing but your speakers.
 
+## How it works
+
+<p align="center">
+  <img src="assets/diagrams/flow.svg" width="420"
+    alt="Four steps: 1, your agent (Claude Code or any MCP agent) finishes and emits a status marker; 2, an NHJ hook or MCP catches it; 3, the right character answers — Jan, Bazza, or Karren, chosen by severity; 4, it reaches your senses across voice, haptic, display, and bell. Hold music plays while the agent is busy and pauses when someone answers.">
+</p>
+
+**Severity picks who answers** — the worse it gets, the higher you climb the ladder:
+
+<p align="center">
+  <img src="assets/diagrams/escalation-ladder.svg" width="420"
+    alt="A severity ladder rising bottom to top. Jan (reception) handles routine work and all-done — fires on ok, step, celebrate. Bazza (middle management) handles something that needs a look — fires on warn. Karren (the manager) takes over when it broke or is urgent — fires on err and attn.">
+</p>
+
 ## Install
 
 ```bash

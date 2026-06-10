@@ -36,6 +36,11 @@ your mouse or a flash on a pixel display to match — all **100% on your own mac
 
 → Meet the cast and the one-word modes: **[Characters & dials](docs/characters.md)** · **[Modes](docs/modes.md)**
 
+<p align="center">
+  <img src="docs/assets/diagrams/flow.svg" width="440"
+    alt="Four steps: your agent finishes and emits a status marker; an NHJ hook or MCP catches it; the right character answers — Jan, Bazza, or Karren, chosen by severity; it reaches your senses across voice, haptic, display, and bell. Hold music plays while busy and pauses when answered.">
+</p>
+
 ## Install
 
 ```bash

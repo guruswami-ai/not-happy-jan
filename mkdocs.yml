@@ -95,5 +95,6 @@ nav:
 # under --strict): transcript pages live under their video, the assets note is for editors.
 not_in_nav: |
   /assets/README.md
+  /assets/diagrams/README.md
   /transcripts/overview.md
   /transcripts/setup.md
