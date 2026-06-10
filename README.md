@@ -41,6 +41,12 @@ your mouse or a flash on a pixel display to match — all **100% on your own mac
     alt="Four steps: your agent finishes and emits a status marker; an NHJ hook or MCP catches it; the right character answers — Jan, Bazza, or Karren, chosen by severity; it reaches your senses across voice, haptic, display, and bell. Hold music plays while busy and pauses when answered.">
 </p>
 
+<p align="center">
+  <img src="docs/assets/awtrix-demo.webp" width="480"
+    alt="A Ulanzi AWTRIX LED matrix scrolling an in-character Not-Happy-Jan message in green pixels with a tick icon — a vibe landing on the display channel.">
+  <br><em>…and on a $60 pixel display.</em>
+</p>
+
 ## Install
 
 ```bash

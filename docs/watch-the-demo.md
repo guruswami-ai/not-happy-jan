@@ -1,9 +1,14 @@
 # Watch the demo
 
-!!! info "Demos are on the way"
-    Video walkthroughs are being recorded. This page is wired and ready — each embed
-    below just needs a YouTube ID dropped in. Until then, the
-    [Quick start](quickstart.md) is the fastest way to see NHJ work.
+<p align="center">
+  <img src="assets/awtrix-demo.webp" width="526"
+    alt="A Ulanzi AWTRIX LED matrix scrolling an in-character Not-Happy-Jan message in green pixels, with a tick icon — the visual channel reacting to a vibe.">
+</p>
+<p align="center"><em>A vibe landing on the AWTRIX display — one of NHJ's notification channels.</em></p>
+
+!!! info "Full video walkthroughs are on the way"
+    The page is wired and ready — each embed below just needs a YouTube ID dropped in.
+    Until then, the [Quick start](quickstart.md) is the fastest way to see NHJ work.
 
 Videos are hosted on **YouTube** (not stored in the repo). Every embed uses the
 privacy-enhanced `youtube-nocookie` player, never autoplays, and ships with a plain link
