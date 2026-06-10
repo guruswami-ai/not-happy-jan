@@ -35,9 +35,10 @@ The skill uses `nhj status`, `nhj set`, and related CLI commands. Live overrides
 resource conventions: checkout `.env` during source use, otherwise the platform config dir
 (`NHJ_CONFIG_DIR` override), plus the platform state dir / `NHJ_STATE_FILE` for runtime state.
 
-> **Supersedes legacy `[vibes:]` Stop hooks.** NHJ uses the same `[vibes:]` marker
-> contract as some earlier agent-feedback tools, so `install-hook` *supersedes* a
-> legacy shared-marker Stop hook rather than stacking on top:
+> **Supersedes a shared `[vibes:]` Stop hook.** NHJ uses the same `[vibes:]` marker
+> contract as [AgentVibes](https://github.com/paulpreibisch/AgentVibes) (which it builds on),
+> so if you already run AgentVibes (or another tool sharing the contract), `install-hook`
+> *supersedes* its Stop hook rather than stacking on top:
 > - It first backs up `~/.claude/settings.json` → **`settings.json.pre-nhj.bak`**.
 > - If it finds a legacy shared-`[vibes:]`-marker Stop hook, it **removes that entry**
 >   before adding NHJ's — otherwise both would fire and you'd hear each notification **twice**.
