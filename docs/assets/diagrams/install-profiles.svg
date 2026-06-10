@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 252" role="img"
+     aria-labelledby="ip-title ip-desc"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="ip-title">Install profiles compared</title>
+  <desc id="ip-desc">Three install profiles. Minimal: the cast speaks from the bundled bank
+    with no models, roughly package-sized on disk, about nil resident RAM — best for CI and
+    low-RAM machines. Default: live cloned voices loaded on demand, about 5 GB on disk, about
+    nil RAM at rest and roughly 3 GB only while talking — best for most people. Full: the
+    same, with always-warm daemons, about 5 GB on disk and roughly 3.2 GB resident — best for
+    sub-second responses on powerful Macs. Figures are approximate.</desc>
+  <style>
+    .ttl  { font-weight:700; font-size:15px; fill:#ffffff; text-anchor:middle; }
+    .k    { font-size:10.5px; font-weight:700; fill:#6b7180; letter-spacing:.4px; }
+    .v    { font-size:12.5px; fill:#1f2333; }
+  </style>
+
+  <!-- Minimal (neutral) -->
+  <rect x="12" y="12" width="216" height="228" rx="12" fill="#eef1fb" stroke="#5b5bd6" stroke-width="1.5"/>
+  <path d="M12 24 a12 12 0 0 1 12 -12 h192 a12 12 0 0 1 12 12 v20 h-216 z" fill="#5b5bd6"/>
+  <text class="ttl" x="120" y="34">Minimal</text>
+  <text class="k" x="26" y="74">VOICES</text>      <text class="v" x="26" y="91">bundled bank · no models</text>
+  <text class="k" x="26" y="120">DISK</text>       <text class="v" x="26" y="137">≈ package only</text>
+  <text class="k" x="26" y="166">RAM AT REST</text><text class="v" x="26" y="183">~ nil</text>
+  <text class="k" x="26" y="212">BEST FOR</text>   <text class="v" x="26" y="229">CI · RAM-tight</text>
+
+  <!-- Default (recommended, green) -->
+  <rect x="252" y="12" width="216" height="228" rx="12" fill="#e7f5ec" stroke="#2f9e57" stroke-width="2.5"/>
+  <path d="M252 24 a12 12 0 0 1 12 -12 h192 a12 12 0 0 1 12 12 v20 h-216 z" fill="#2f9e57"/>
+  <text class="ttl" x="360" y="34">Default ⭐</text>
+  <text class="k" x="266" y="74">VOICES</text>      <text class="v" x="266" y="91">live, cloned · on-demand</text>
+  <text class="k" x="266" y="120">DISK</text>       <text class="v" x="266" y="137">≈ 5 GB</text>
+  <text class="k" x="266" y="166">RAM AT REST</text><text class="v" x="266" y="183">~ nil · ≈3 GB while talking</text>
+  <text class="k" x="266" y="212">BEST FOR</text>   <text class="v" x="266" y="229">most people</text>
+
+  <!-- Full (accent) -->
+  <rect x="492" y="12" width="216" height="228" rx="12" fill="#fdeef7" stroke="#d6409f" stroke-width="1.5"/>
+  <path d="M492 24 a12 12 0 0 1 12 -12 h192 a12 12 0 0 1 12 12 v20 h-216 z" fill="#d6409f"/>
+  <text class="ttl" x="600" y="34">Full</text>
+  <text class="k" x="506" y="74">VOICES</text>      <text class="v" x="506" y="91">live, cloned · always warm</text>
+  <text class="k" x="506" y="120">DISK</text>       <text class="v" x="506" y="137">≈ 5 GB</text>
+  <text class="k" x="506" y="166">RAM AT REST</text><text class="v" x="506" y="183">≈ 3.2 GB resident</text>
+  <text class="k" x="506" y="212">BEST FOR</text>   <text class="v" x="506" y="229">sub-second · power Macs</text>
+</svg>

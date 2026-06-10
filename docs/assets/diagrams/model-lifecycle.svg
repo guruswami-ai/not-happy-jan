@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 348" role="img"
+     aria-labelledby="ml-title ml-desc"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="ml-title">Local model lifecycle</title>
+  <desc id="ml-desc">Models are downloaded once into ~/Library/Caches (about 5 GB) and then
+    served in one of two modes. On-demand (the default): the first vibe starts the server,
+    it serves the line holding about 3 GB of RAM, then after about ten minutes idle it unloads
+    and frees the RAM — repeating each cycle. Persistent (the full profile): the daemons stay
+    always warm at about 3.2 GB resident, giving sub-second replies with no cold start.</desc>
+  <style>
+    .stage { fill:#eef1fb; stroke:#5b5bd6; stroke-width:1.5; }
+    .box   { fill:#ffffff; stroke:#5b5bd6; stroke-width:1.5; }
+    .boxp  { fill:#ffffff; stroke:#d6409f; stroke-width:1.5; }
+    .hdr   { fill:#eef1fb; stroke:#5b5bd6; stroke-width:1.5; }
+    .hdrp  { fill:#fdeef7; stroke:#d6409f; stroke-width:1.5; }
+    .t     { font-size:13px; fill:#1f2333; }
+    .th    { font-size:12.5px; font-weight:700; fill:#1f2333; letter-spacing:.3px; }
+    .note  { font-size:11.5px; fill:#6b7180; }
+    .conn  { stroke:#8a8fa3; stroke-width:2; fill:none; }
+  </style>
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8fa3"/>
+    </marker>
+  </defs>
+
+  <!-- downloaded once -->
+  <rect class="stage" x="70" y="12" width="420" height="52" rx="12"/>
+  <text class="th" x="280" y="34" text-anchor="middle">Models downloaded once</text>
+  <text class="note" x="280" y="52" text-anchor="middle">~/Library/Caches/not-happy-jan  ·  ≈ 5 GB on disk</text>
+
+  <path class="conn" d="M280 64 L280 78" />
+  <path class="conn" d="M280 78 L145 78 L145 98" marker-end="url(#a2)"/>
+  <path class="conn" d="M280 78 L415 78 L415 98" marker-end="url(#a2)"/>
+
+  <!-- on-demand column -->
+  <rect class="hdr" x="30" y="98" width="230" height="30" rx="8"/>
+  <text class="th" x="145" y="118" text-anchor="middle">ON-DEMAND · default</text>
+  <rect class="box" x="30" y="138" width="230" height="44" rx="10"/>
+  <text class="t" x="46" y="165">① first vibe → start server</text>
+  <path class="conn" d="M145 182 L145 196" marker-end="url(#a2)"/>
+  <rect class="box" x="30" y="196" width="230" height="44" rx="10"/>
+  <text class="t" x="46" y="223">② serves the line · ≈3 GB RAM</text>
+  <path class="conn" d="M145 240 L145 254" marker-end="url(#a2)"/>
+  <rect class="box" x="30" y="254" width="230" height="52" rx="10"/>
+  <text class="t" x="46" y="276">③ idle ~10 min → unload</text>
+  <text class="note" x="46" y="294">RAM freed (NHJ_SERVER_IDLE)</text>
+  <text class="note" x="145" y="328" text-anchor="middle">↺ repeats every cycle</text>
+
+  <!-- persistent column -->
+  <rect class="hdrp" x="300" y="98" width="230" height="30" rx="8"/>
+  <text class="th" x="415" y="118" text-anchor="middle">PERSISTENT · --full</text>
+  <rect class="boxp" x="300" y="138" width="230" height="44" rx="10"/>
+  <text class="t" x="316" y="165">always warm · ≈ 3.2 GB</text>
+  <path class="conn" d="M415 182 L415 196" marker-end="url(#a2)"/>
+  <rect class="boxp" x="300" y="196" width="230" height="44" rx="10"/>
+  <text class="t" x="316" y="223">sub-second · no cold start</text>
+  <text class="note" x="415" y="294" text-anchor="middle">RAM held while logged in</text>
+</svg>

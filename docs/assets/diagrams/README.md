@@ -11,10 +11,10 @@ on a screen reader, or on GitHub where SVGs don't theme.
 |---|---|---|
 | `flow.svg` | What happens: agent → hook → character → channels | home, README |
 | `escalation-ladder.svg` | Jan → Bazza → Karren by severity | home, characters guide |
-| `install-profiles.svg` | minimal · default · full (planned) | install profiles |
-| `model-lifecycle.svg` | download → on-demand → idle-unload → persistent (planned) | configuration |
-| `privacy-boundary.svg` | local-only, loopback services, opt-in (planned) | security/privacy |
-| `storage-map.svg` | macOS Application Support / Caches / Logs (planned) | configuration |
+| `install-profiles.svg` | minimal · default · full (disk/RAM) | install profiles |
+| `model-lifecycle.svg` | download → on-demand → idle-unload → persistent | minimum specs |
+| `privacy-boundary.svg` | local-only, loopback services, opt-in | install profiles (MCP/network) |
+| `storage-map.svg` | macOS Application Support / Caches / Logs | configuration |
 
 ## Palette
 

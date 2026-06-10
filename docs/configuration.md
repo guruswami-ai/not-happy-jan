@@ -116,6 +116,17 @@ at a specific repo id or local model path. Set `NHJ_DYNAMIC_*` to use a differen
 > whisper-large-v3-turbo to transcribe the clip — an extra ~1.5 GB of RAM and latency. NHJ's
 > server path avoids this by using `voices/<name>/ref.txt`.
 
+## Where NHJ stores things (macOS)
+
+Everything lives under your home folder — no `sudo`, and `nhj uninstall` removes all of it.
+
+<p align="center">
+  <img src="assets/diagrams/storage-map.svg" width="620"
+    alt="Five macOS locations. ~/Library/Application Support/not-happy-jan holds config (.env, config.yaml), state.json, and the Python runtime. ~/Library/Caches/not-happy-jan holds the downloaded models (Qwen3-TTS, ocker-bogan-nano), the clip cache, and media. ~/Library/Logs/not-happy-jan holds the worker, tts, llm, mcp, and hook logs. ~/.claude holds NHJ's Claude Code hooks, MCP server, skill, and CLAUDE.md markers. ~/Library/LaunchAgents holds the nhj-tts, nhj-llm, and nhj-mcp services on the full profile.">
+</p>
+
+Override any root with `NHJ_CONFIG_DIR` / `NHJ_CACHE_DIR` / `NHJ_STATE_DIR` / `NHJ_LOG_DIR` / `NHJ_DATA_DIR`.
+
 ## Requirements & minimum specs
 
 For the three ways to run NHJ — silent, pre-recorded samples, or the full live experience — and the RAM/disk each needs, see **[Minimum specs](minimum-specs.md)**.
