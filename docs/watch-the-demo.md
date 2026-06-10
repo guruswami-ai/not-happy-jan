@@ -60,22 +60,3 @@ default vs full vs minimal → the local/private architecture → uninstall.*
 
 ▶ **[Watch on YouTube](https://www.youtube.com/watch?v=VIDEO_ID)** · 📝 **[Transcript](transcripts/setup.md)**
 -->
-
----
-
-## Publishing checklist (per video)
-
-When a recording is ready, before uncommenting its block:
-
-- [ ] Upload to YouTube **unlisted or public**; copy the 11-character video ID.
-- [ ] Add a **WebP thumbnail** at `docs/assets/video/<name>-thumbnail.webp` (~1280×720).
-- [ ] Replace every `VIDEO_ID` in this page's block, then uncomment it.
-- [ ] Fill the matching transcript page ([overview](transcripts/overview.md) · [setup](transcripts/setup.md)) — full, human-reviewed.
-- [ ] **Human-review the captions** on YouTube — don't ship auto-captions as-is.
-- [ ] Add **chapters** and a descriptive title/description on YouTube.
-- [ ] Mix so **music doesn't obscure speech**; describe important visual-only events in the
-      narration or transcript.
-- [ ] Don't rely on colour alone to distinguish characters or statuses.
-
-For the README, the same thumbnail-link pattern sits HTML-commented near the top — uncomment
-it once `docs/assets/video/demo-thumbnail.webp` exists.
