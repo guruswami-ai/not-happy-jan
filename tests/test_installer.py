@@ -504,3 +504,129 @@ def test_launchagents_not_qos_throttled():
     assert '"ProcessType": "Background"' not in cli_src
     # all three agents (TTS, LLM, MCP) declare Interactive QoS
     assert cli_src.count("Interactive") >= 3
+
+
+# ---------------------------------------------------------------------------
+# install-opencode
+# ---------------------------------------------------------------------------
+
+def test_install_opencode_creates_config(tmp_path):
+    """install-opencode writes the NHJ MCP entry to an empty opencode.json."""
+    config = tmp_path / "opencode.json"
+
+    cli.install_opencode(config=config)
+
+    data = json.loads(config.read_text())
+    assert "mcp" in data
+    assert "not-happy-jan" in data["mcp"]
+    entry = data["mcp"]["not-happy-jan"]
+    assert entry["type"] == "local"
+    assert entry["command"] == ["nhj", "serve-mcp"]
+    assert entry["enabled"] is True
+
+
+def test_install_opencode_idempotent(tmp_path):
+    """Running install-opencode twice must not create duplicate entries."""
+    config = tmp_path / "opencode.json"
+
+    cli.install_opencode(config=config)
+    cli.install_opencode(config=config)
+
+    data = json.loads(config.read_text())
+    mcp = data["mcp"]
+    assert list(mcp.keys()).count("not-happy-jan") == 1
+
+
+def test_install_opencode_preserves_other_entries(tmp_path):
+    """install-opencode must not remove pre-existing unrelated mcp entries."""
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({"mcp": {"other-tool": {"type": "local", "command": ["other"]}}}))
+
+    cli.install_opencode(config=config)
+
+    data = json.loads(config.read_text())
+    assert "other-tool" in data["mcp"]
+    assert "not-happy-jan" in data["mcp"]
+
+
+def test_install_opencode_writes_backup(tmp_path):
+    """install-opencode writes a .pre-nhj.bak backup when a config already exists."""
+    config = tmp_path / "opencode.json"
+    original = {"mcp": {"other": {"type": "local", "command": ["x"]}}}
+    config.write_text(json.dumps(original))
+
+    cli.install_opencode(config=config)
+
+    bak = config.with_suffix(".json.pre-nhj.bak")
+    assert bak.exists()
+    assert json.loads(bak.read_text()) == original
+
+
+def test_install_opencode_does_not_overwrite_existing_backup(tmp_path):
+    """install-opencode does not overwrite an already-existing backup."""
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({"mcp": {}}))
+    bak = config.with_suffix(".json.pre-nhj.bak")
+    bak.write_text('{"preserved": true}')
+
+    cli.install_opencode(config=config)
+
+    assert json.loads(bak.read_text()) == {"preserved": True}
+
+
+def test_install_opencode_creates_parent_dirs(tmp_path):
+    """install-opencode creates parent directories if they do not exist."""
+    config = tmp_path / "nested" / "dir" / "opencode.json"
+
+    cli.install_opencode(config=config)
+
+    assert config.exists()
+    data = json.loads(config.read_text())
+    assert "not-happy-jan" in data["mcp"]
+
+
+def test_remove_opencode_cleans_up(tmp_path):
+    """remove-opencode removes the NHJ entry and leaves other entries intact."""
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({
+        "mcp": {
+            "not-happy-jan": {"type": "local", "command": ["nhj", "serve-mcp"], "enabled": True},
+            "other-tool": {"type": "local", "command": ["x"]},
+        }
+    }))
+
+    cli.remove_opencode(config=config)
+
+    data = json.loads(config.read_text())
+    assert "not-happy-jan" not in data["mcp"]
+    assert "other-tool" in data["mcp"]
+
+
+def test_remove_opencode_noop_when_not_registered(tmp_path):
+    """remove-opencode is a no-op when the entry is not present."""
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({"mcp": {"other": {"type": "local"}}}))
+
+    cli.remove_opencode(config=config)   # must not raise
+
+    assert "other" in json.loads(config.read_text())["mcp"]
+
+
+def test_remove_opencode_noop_when_config_missing(tmp_path):
+    """remove-opencode is a no-op when the config file does not exist."""
+    config = tmp_path / "opencode.json"
+
+    cli.remove_opencode(config=config)   # must not raise
+
+
+def test_install_opencode_merges_with_existing_top_level_keys(tmp_path):
+    """install-opencode preserves other top-level config keys."""
+    config = tmp_path / "opencode.json"
+    original = {"theme": "dark", "mcp": {}}
+    config.write_text(json.dumps(original))
+
+    cli.install_opencode(config=config)
+
+    data = json.loads(config.read_text())
+    assert data["theme"] == "dark"
+    assert "not-happy-jan" in data["mcp"]
