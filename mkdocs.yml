@@ -66,6 +66,7 @@ markdown_extensions:
 # live in it → wire it up → tune it → operate it → trust it → build on it.
 nav:
   - Home: index.md
+  - What is NHJ?: what-is-nhj.md
   - Watch the demo: watch-the-demo.md
   - Getting started:
       - Requirements & tiers: minimum-specs.md
