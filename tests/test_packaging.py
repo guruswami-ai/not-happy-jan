@@ -347,7 +347,7 @@ def test_install_model_skips_launchagent_off_darwin(tmp_path, monkeypatch):
     monkeypatch.setenv("NHJ_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(cli, "_set_env_vars", lambda *a, **k: None)
     calls = {"n": 0}
-    monkeypatch.setattr(cli, "_install_ocker_launchagent",
+    monkeypatch.setattr(cli, "_install_llm_launchagent",
                         lambda *a, **k: (calls.__setitem__("n", calls["n"] + 1), tmp_path)[1])
     cli.install_model(repo="x/y", gguf="m.gguf", port=9991, service=True)
     assert calls["n"] == 0                       # LaunchAgent NOT installed on Linux

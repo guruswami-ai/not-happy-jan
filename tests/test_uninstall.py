@@ -80,17 +80,18 @@ def test_uninstall_stops_services_and_removes_plists(tmp_path, monkeypatch):
     calls = _isolate_home(tmp_path, monkeypatch)
     la = tmp_path / "Library" / "LaunchAgents"
     la.mkdir(parents=True, exist_ok=True)
-    labels = (cli._TTS_LABEL, cli._OCKER_LABEL, cli._MCP_LABEL)
+    # the three current services + the legacy LLM label (renamed nhj-ocker-bogan-nano → nhj-llm)
+    labels = (cli._TTS_LABEL, cli._LLM_LABEL, cli._MCP_LABEL, *cli._LEGACY_LLM_LABELS)
     for lbl in labels:
         (la / f"{lbl}.plist").write_text("<plist/>")
 
     cli.uninstall(yes=True)
 
-    # plists gone
+    # plists gone — including the legacy LLM agent, so an upgrader is left clean
     assert not any((la / f"{lbl}.plist").exists() for lbl in labels)
-    # one user-domain `launchctl bootout gui/<uid>/<label>` per service — never `system/` (no sudo)
+    # one user-domain `launchctl bootout gui/<uid>/<label>` per label — never `system/` (no sudo)
     boots = [a for a in calls if a[:2] == ["launchctl", "bootout"]]
-    assert len(boots) == 3
+    assert len(boots) == len(labels)
     assert all(a[2].startswith("gui/") for a in boots)
     assert not any("system/" in " ".join(a) for a in calls)
     # stray on-demand processes pkill'd
