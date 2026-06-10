@@ -394,7 +394,8 @@ the whole chain rather than a notebook cell of any one part.
 ---
 
 *Companion material: a YouTube walkthrough discusses these decisions narratively; this
-document is the written, citable reference. Component-level docs:
-[Audio Standard](AUDIO-STANDARD.md) · [Dynamic voices](dynamic-voices.md) ·
+document is the written, citable reference. For the code-level map (module responsibilities,
+shared contracts, extension recipes) see the **[Developer Guide](DEVELOPER-GUIDE.md)**.
+Component-level docs: [Audio Standard](AUDIO-STANDARD.md) · [Dynamic voices](dynamic-voices.md) ·
 [Integration](integration.md) · [Install profiles](install-profiles.md) ·
 [Minimum specs](minimum-specs.md).*
