@@ -1,20 +1,26 @@
 # Watch the demo
 
 <p align="center">
-  <img src="assets/awtrix-demo.webp" width="526"
-    alt="A Ulanzi AWTRIX LED matrix scrolling an in-character Not-Happy-Jan message in green pixels, with a tick icon — the visual channel reacting to a vibe.">
+  <video controls preload="metadata" width="720" playsinline
+         poster="../assets/video/demo-thumbnail.webp" style="max-width:100%;height:auto;border-radius:8px">
+    <source src="../assets/video/demo.mp4" type="video/mp4">
+    <track kind="captions" srclang="en" label="English" src="../assets/video/demo.vtt" default>
+    Your browser can't play this video — <a href="../assets/video/demo.mp4">download the MP4</a> instead.
+  </video>
 </p>
-<p align="center"><em>A vibe landing on the AWTRIX display — one of NHJ's notification channels.</em></p>
+<p class="caption">Not-Happy-Jan in 47 seconds — the cast and the integrations, with sound. Captions included; full <a href="transcripts/overview.md">transcript</a>.</p>
 
-!!! info "Full video walkthroughs are on the way"
-    The page is wired and ready — each embed below just needs a YouTube ID dropped in.
-    Until then, the [Quick start](quickstart.md) is the fastest way to see NHJ work.
+…and the same vibes land on a Ulanzi pixel display:
 
-Videos are hosted on **YouTube** (not stored in the repo). Every embed uses the
-privacy-enhanced `youtube-nocookie` player, never autoplays, and ships with a plain link
-plus a full **transcript** so nothing depends on the video alone.
+![A Ulanzi AWTRIX LED matrix scrolling an in-character Not-Happy-Jan message in green pixels, with a tick icon — the visual channel reacting to a vibe.](assets/awtrix-demo.webp){ width="420" .center }
 
 ---
+
+## More to come
+
+Longer walkthroughs (a full setup demo) can be hosted on **YouTube** — the embed blocks below
+are wired and ready, each just needs a video ID. They'd use the privacy-enhanced
+`youtube-nocookie` player, never autoplay, and ship with a transcript.
 
 ## 60–90 second overview
 

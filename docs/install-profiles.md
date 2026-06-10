@@ -4,10 +4,7 @@
 
 NHJ ships with three install profiles so a single command works on any machine — from a powerful Mac Studio to a RAM-tight laptop in a CI environment.
 
-<p align="center">
-  <img src="assets/diagrams/install-profiles.svg" width="660"
-    alt="Three profiles compared. Minimal: bundled bank, no models, roughly package-sized on disk, about nil resident RAM — best for CI and RAM-tight machines. Default (recommended): live cloned voices loaded on demand, about 5 GB on disk, about nil RAM at rest and roughly 3 GB only while talking — best for most people. Full: the same plus always-warm daemons, about 5 GB on disk and roughly 3.2 GB resident — best for sub-second responses on powerful Macs. Figures approximate.">
-</p>
+![Three profiles compared. Minimal: bundled bank, no models, roughly package-sized on disk, about nil resident RAM — best for CI and RAM-tight machines. Default (recommended): live cloned voices loaded on demand, about 5 GB on disk, about nil RAM at rest and roughly 3 GB only while talking — best for most people. Full: the same plus always-warm daemons, about 5 GB on disk and roughly 3.2 GB resident — best for sub-second responses on powerful Macs. Figures approximate.](assets/diagrams/install-profiles.svg){ width="660" .center }
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/guruswami-ai/not-happy-jan/main/install.sh | bash
@@ -109,10 +106,7 @@ bash install.sh --full   # upgrades to persistent services
 
 ## MCP server — localhost by default, explicit opt-in for network
 
-<p align="center">
-  <img src="assets/diagrams/privacy-boundary.svg" width="560"
-    alt="Everything runs on your Mac. The MCP, TTS, and LLM services all bind to 127.0.0.1 (loopback); the cloned-voice references stay on the machine; nothing about your code or prompts leaves at runtime. The only outbound traffic is at install time, downloading models and packages from Hugging Face and registries. Serving NHJ to other Macs on your LAN is a deliberate opt-in with --listen 0.0.0.0.">
-</p>
+![Everything runs on your Mac. The MCP, TTS, and LLM services all bind to 127.0.0.1 (loopback); the cloned-voice references stay on the machine; nothing about your code or prompts leaves at runtime. The only outbound traffic is at install time, downloading models and packages from Hugging Face and registries. Serving NHJ to other Macs on your LAN is a deliberate opt-in with --listen 0.0.0.0.](assets/diagrams/privacy-boundary.svg){ width="560" .center }
 
 The MCP server always defaults to `127.0.0.1` regardless of profile. Network exposure requires an explicit flag in two places:
 

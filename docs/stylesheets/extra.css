@@ -1,0 +1,4 @@
+/* Block-center images/videos tagged { .center } (Markdown images are inline by default). */
+.md-typeset img.center,
+.md-typeset video.center { display: block; margin-inline: auto; }
+.md-typeset .caption { text-align: center; color: var(--md-default-fg-color--light); font-size: .85em; margin-top: .3em; }
