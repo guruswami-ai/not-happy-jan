@@ -8,6 +8,16 @@ Multi-sensory feedback for AI coding agents. When your agent finishes a task, Ja
 
 > *"Not happy Jan, the issue is…"*
 
+> ⚠️ **Public alpha** — an early, for-fun release that *will* have rough edges. Found a bug?
+> [Open an issue](https://github.com/guruswami-ai/not-happy-jan/issues/new/choose). Got an idea,
+> a question, or want to show off your bogans? [Start a discussion](https://github.com/guruswami-ai/not-happy-jan/discussions).
+> The **minimal install speaks instantly** with the bundled voice bank (no downloads); the full
+> live experience wants an Apple-Silicon Mac and ~5 GB of local models.
+
+<!-- Demo: once recorded, drop it at docs/assets/demo.gif and uncomment:
+<p align="center"><img src="docs/assets/demo.gif" alt="Not-Happy-Jan in action" width="640"></p>
+-->
+
 ## ☎️ The Call-Centre Experience
 
 Ever feel like you're on hold, waiting for your agent to finish processing?

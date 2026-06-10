@@ -1,0 +1,61 @@
+name: Bug report
+description: Something broke or behaved unexpectedly
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Not-Happy-Jan! It's a public alpha, so bug reports are genuinely welcome.
+        For questions, ideas, or showing off your setup, use
+        [Discussions](https://github.com/guruswami-ai/not-happy-jan/discussions) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: false
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Install profile
+      options:
+        - minimal (bundled bank, no model downloads)
+        - default (TTS + dynamic LLM)
+        - full (persistent LaunchAgents)
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: macOS version + chip
+      placeholder: "e.g. macOS 15.5, Apple M2 Pro"
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: "`nhj status` output"
+      description: Paste the output of `nhj status` (and `nhj servers` if it's an audio/model issue).
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: TTS / LLM / worker logs or the hook output if you have them. Redact anything sensitive.
+      render: text
+    validations:
+      required: false
