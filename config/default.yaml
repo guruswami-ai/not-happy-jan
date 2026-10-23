@@ -103,6 +103,15 @@ adapters:
 playback:
   output_device: ""
 
+# Several agents at once: the music plays while ANY session is busy. In quiet-while-busy mode a
+# routine completion (ok/celebrate/step) that lands while OTHER sessions are still working is a
+# soft chime (+ the silent channels) instead of a spoken result; warn/err/attn always speak, and
+# the next spoken completion says how many tasks finished meanwhile. always-speak = upstream
+# behaviour. (env: NHJ_ORCHESTRATION; chime: a file or dir, default audio/sfx/buttons)
+orchestration:
+  mode: quiet-while-busy
+  chime: ""
+
 # Voice opt-in. Silent adapters (board, displays, haptics) always fire; the voice channel
 # (TTS + hold music) is gated per project so parallel sessions do not all talk at once.
 # `nhj voice on|off [--here|--project NAME|--global]` sets rules; precedence is

@@ -55,8 +55,11 @@ def _dispatch(task, adapters) -> None:
     # [Jan:ok]/[Bazza:err] explicitly name the character; [vibes:ok] auto-routes by intent.
     character = character_by_name(who, intent) if who else resolve_character(intent)
 
-    from nhj import gate
+    from nhj import gate, orchestration
     voice_ok = gate.voice_allowed(source)
+    voice_mode = orchestration.voice_mode(intent) if voice_ok else "speak"
+    if voice_mode == "chime":
+        orchestration.note_chime(source)
 
     for adapter in adapters:
         if getattr(adapter, "channel", "") == "voice" and not voice_ok:
@@ -71,6 +74,7 @@ def _dispatch(task, adapters) -> None:
                 voice_variant=voice_variant,
                 speed=speed,
                 source=source,
+                voice_mode=voice_mode,
             )
         except Exception as e:
             print(f"[nhj] adapter {adapter.__class__.__name__} error: {e}",

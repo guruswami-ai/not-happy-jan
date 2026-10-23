@@ -262,13 +262,21 @@ class AudioAdapter(NotificationAdapter):
              vibe_level: int = 5, **kwargs) -> bool:
         tts_enabled = os.getenv("TTS_ENGINE", "qwen").lower() != "none"
 
+        # Another session is still working (see nhj.orchestration): a routine completion
+        # is only a soft chime so the music bed and the session you are waiting on are not
+        # talked over. The silent channels already fired.
+        if kwargs.get("voice_mode") == "chime":
+            from nhj import orchestration
+            return orchestration.play_chime()
+
         # Coming off hold: the mixer already beeped the instant the music froze. Jan
         # reconnects ("you still there?") before the result. Both go on the mixer's voice
         # bus, which plays them in order and auto-ducks the music — so the return clip and
         # the result never collide and the music drops under both.
         try:
+            from nhj import inference_muzak
             from nhj.state import get_flag
-            if get_flag("muzak", True):
+            if get_flag("muzak", True) and not inference_muzak._any_busy():   # only if the music really paused
                 ret = pick_return_clip()
                 if ret:
                     _emit_voice(ret, gain=0.9)
@@ -278,6 +286,11 @@ class AudioAdapter(NotificationAdapter):
 
         d = character.delivery(intent, message)
         voice, tts_text, variant = d.voice, d.text, d.band
+        if tts_text and intent in ("ok", "celebrate", "step"):
+            from nhj import orchestration
+            digest = orchestration.digest_sentence(orchestration.take_digest())
+            if digest:
+                tts_text = f"{tts_text} {digest}"
 
         # Mode can override the voice globally (e.g. special-forces -> a whisper
         # voice/sample). Empty/unset = use the character's own voice.
