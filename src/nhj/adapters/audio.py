@@ -286,11 +286,15 @@ class AudioAdapter(NotificationAdapter):
 
         d = character.delivery(intent, message)
         voice, tts_text, variant = d.voice, d.text, d.band
-        if tts_text and intent in ("ok", "celebrate", "step"):
+        # Mention completions that were only chimed while other sessions were busy. Only when a
+        # message will actually be spoken (a bare marker plays a bundled clip with no digest in
+        # it); the count is cleared below only once it has really been delivered.
+        digest_n, digest_delivered = 0, False
+        if message and tts_text and tts_enabled and intent in ("ok", "celebrate", "step"):
             from nhj import orchestration
-            digest = orchestration.digest_sentence(orchestration.take_digest())
-            if digest:
-                tts_text = f"{tts_text} {digest}"
+            digest_n = orchestration.peek_digest()
+            if digest_n:
+                tts_text = f"{tts_text} {orchestration.digest_sentence(digest_n)}"
 
         # Mode can override the voice globally (e.g. special-forces -> a whisper
         # voice/sample). Empty/unset = use the character's own voice.
@@ -306,6 +310,7 @@ class AudioAdapter(NotificationAdapter):
         path = pick_bank_clip(voice, intent) if not message else None
         if path is None and tts_text:
             path = cache_hit(voice, tts_text, variant)
+            digest_delivered = bool(digest_n and path)        # a cached clip of the same sentence
 
         # Speed is applied ONCE, at playback (below) — never at synthesis. The deployed
         # Qwen backend ignores a synth-speed kwarg, and applying it at both synth and
@@ -343,6 +348,7 @@ class AudioAdapter(NotificationAdapter):
                     _save_and_cache(voice, tts_text, wav, variant)
                 path = _write_temp_wav(wav)
                 ephemeral = True
+                digest_delivered = bool(digest_n)
 
         if path is None:
             # No bank/cache hit and no live voice (TTS_ENGINE=none, or synth failed/
@@ -352,6 +358,10 @@ class AudioAdapter(NotificationAdapter):
             path = pick_bank_clip(voice, intent)
             if path is None:
                 return False
+
+        if digest_n and digest_delivered:
+            from nhj import orchestration
+            orchestration.clear_digest(digest_n)
 
         # The single point speed is applied — by resampling at playback. Resampling shifts
         # pitch (faster = higher); a pitch-preserving time-stretch would need a DSP dep we

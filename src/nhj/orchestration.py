@@ -53,6 +53,27 @@ def note_chime(source: str = "") -> None:
     inference_muzak._update(_m)
 
 
+def peek_digest() -> int:
+    """How many chimed completions are waiting to be mentioned (does not clear them)."""
+    from nhj import inference_muzak
+    return len(inference_muzak._read().get("quiet_done") or [])
+
+
+def clear_digest(n: int) -> None:
+    """Drop the oldest *n* chimed completions once they have actually been spoken, so any
+    that arrived meanwhile stay pending."""
+    from nhj import inference_muzak
+
+    def _m(d: dict) -> None:
+        rest = (d.get("quiet_done") or [])[max(0, n):]
+        if rest:
+            d["quiet_done"] = rest
+        else:
+            d.pop("quiet_done", None)
+
+    inference_muzak._update(_m)
+
+
 def take_digest() -> int:
     """How many completions were chimed since the last spoken one; resets the count."""
     from nhj import inference_muzak

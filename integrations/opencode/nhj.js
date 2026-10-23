@@ -15,16 +15,27 @@ const DEBUG = !!process.env.NHJ_OPENCODE_DEBUG;
 const children = new Set();      // child-session ids (they carry a parentID)
 const startedAt = new Map();     // session id -> ms when the current turn went busy
 
+// Commands run ONE AT A TIME, in event order. They are separate processes, so firing them
+// independently lets `nhj vibe ok` overtake `nhj idle` (a lone session's result would then be
+// chimed instead of spoken) or `idle` overtake `busy` (a finished session left marked busy).
+// The handler never waits on the queue, so opencode is not slowed down.
+let chain = Promise.resolve();
 function nhj(args, payload) {
-  try {
-    const p = spawn(NHJ, args, { stdio: ["pipe", "ignore", "ignore"], detached: true });
-    p.on("error", () => {});
-    p.stdin.on("error", () => {});
-    p.stdin.end(JSON.stringify(payload));
-    p.unref();
-  } catch {
-    // a notification problem must never break the agent
-  }
+  chain = chain.then(() => new Promise((resolve) => {
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; resolve(); } };
+    try {
+      const p = spawn(NHJ, args, { stdio: ["pipe", "ignore", "ignore"] });
+      const timer = setTimeout(() => { try { p.kill(); } catch { /* already gone */ } finish(); }, 15000);
+      const done = () => { clearTimeout(timer); finish(); };
+      p.on("close", done);
+      p.on("error", done);
+      p.stdin.on("error", () => {});
+      p.stdin.end(JSON.stringify(payload));
+    } catch {
+      finish();                           // a notification problem must never break the agent
+    }
+  }));
 }
 
 export const Nhj = async ({ directory }) => {

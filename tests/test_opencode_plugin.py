@@ -29,7 +29,7 @@ def _run(tmp_path, events, min_seconds="0"):
         import {{ Nhj }} from "{PLUGIN}";
         const h = await Nhj({{ directory: "/work/reactor" }});
         for (const e of {json.dumps(events)}) await h.event({{ event: e }});
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 4000));
     """))
     env = {**os.environ, "NHJ_BIN": str(fake), "NHJ_OPENCODE_MIN_SECONDS": min_seconds}
     subprocess.run([shutil.which("node"), str(script)], env=env, check=True, timeout=30)
@@ -45,7 +45,8 @@ def test_turn_busy_then_idle_runs_busy_idle_and_ok(tmp_path):
         {"type": "session.status", "properties": {"sessionID": "s1", "status": {"type": "busy"}}},
         {"type": "session.idle", "properties": {"sessionID": "s1"}},
     ])
-    assert sorted(_cmds(calls)) == sorted(["busy", "idle", "vibe ok -m opencode is done"])
+    # strictly in event order: the vibe must not overtake idle, nor idle overtake busy
+    assert _cmds(calls) == ["busy", "idle", "vibe ok -m opencode is done"]
     assert json.loads(calls[0]["stdin"]) == {"session_id": "opencode-s1", "cwd": "/work/reactor"}
 
 
@@ -76,7 +77,7 @@ def test_blocked_on_you_is_attn(tmp_path, etype, msg):
 
 def test_error_releases_the_music_and_announces(tmp_path):
     calls = _run(tmp_path, [{"type": "session.error", "properties": {"sessionID": "s1"}}])
-    assert sorted(_cmds(calls)) == ["idle", "vibe err -m opencode hit an error"]
+    assert _cmds(calls) == ["idle", "vibe err -m opencode hit an error"]
 
 
 def test_subagent_sessions_are_ignored(tmp_path):

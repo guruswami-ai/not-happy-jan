@@ -43,7 +43,13 @@ HEADLINES = {
 
 
 def _cfg() -> dict:
-    return config.section("claky")
+    """The claky settings with the documented env overrides applied in ONE place, so the
+    availability check and the detached sender always agree on the effective transport."""
+    cfg = dict(config.section("claky"))
+    for key, env in (("transport", "CLAKY_TRANSPORT"), ("url", "CLAKY_URL"), ("host", "CLAKY_HOST")):
+        if os.environ.get(env):
+            cfg[key] = os.environ[env]
+    return cfg
 
 
 def wrap(text: str) -> str:
@@ -94,7 +100,7 @@ def _env_token(cfg: dict) -> str:
 
 
 def _send_bifrost(cfg: dict, text: str) -> None:
-    url = cfg.get("url") or os.environ.get("CLAKY_URL", "")
+    url = cfg.get("url", "")
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "claky-send_message", "arguments": {"message": text}}}
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={
@@ -105,7 +111,7 @@ def _send_bifrost(cfg: dict, text: str) -> None:
 
 def _send_local(cfg: dict, text: str) -> None:
     """Vestaboard Local API: needs a character grid, so use the cloud-free text->codes map."""
-    host = cfg.get("host") or os.environ.get("CLAKY_HOST", "")
+    host = cfg.get("host", "")
     key = os.environ.get(cfg.get("key_env") or "VESTABOARD_LOCAL_KEY", "")
     codes = {c: i + 1 for i, c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")}
     codes.update({c: 27 + i for i, c in enumerate("1234567890")})
@@ -159,8 +165,8 @@ class ClakyAdapter(NotificationAdapter):
     def available(self) -> bool:
         cfg = _cfg()
         if cfg.get("transport") == "local":
-            return bool(cfg.get("host") or os.environ.get("CLAKY_HOST"))
-        return bool((cfg.get("url") or os.environ.get("CLAKY_URL")) and _env_token(cfg))
+            return bool(cfg.get("host"))
+        return bool(cfg.get("url") and _env_token(cfg))
 
     def fire(self, intent: str, message: str, character: "Character",
              vibe_level: int = 5, source: str = "", **kwargs) -> bool:

@@ -179,3 +179,64 @@ def test_stdin_json_never_blocks_or_raises_on_garbage():
     assert _run(["vibe", "ok"], None).exit_code == 0
     r = CliRunner().invoke(cli.cli, ["idle"], input="not json")
     assert r.exit_code == 0
+
+
+# ---- digest delivery (review findings) --------------------------------------
+def _speak(monkeypatch, message, synth):
+    """Run AudioAdapter.fire for an `ok` with the audiocpp engine and a stubbed synth."""
+    seen = {}
+    monkeypatch.setenv("TTS_ENGINE", "audiocpp")
+    monkeypatch.setattr(audio, "_audiocpp_cfg", lambda: {})
+    monkeypatch.setattr(audio, "cache_hit", lambda *a, **k: None)
+    monkeypatch.setattr(audio, "pick_return_clip", lambda: None)
+    monkeypatch.setattr(audio, "pick_bank_clip", lambda v, i: "/bank.wav")
+    monkeypatch.setattr(audio, "_normalize_voice_wav", lambda w: w)
+    monkeypatch.setattr(audio, "_save_and_cache", lambda *a, **k: None)
+    monkeypatch.setattr(audio, "_write_temp_wav", lambda w: "/tmp/x.wav")
+    monkeypatch.setattr(audio, "_emit_voice", lambda path, **k: seen.setdefault("path", path))
+
+    def fake(text, *a, **k):
+        seen["text"] = text
+        return synth
+    monkeypatch.setattr(audio, "synth_audiocpp", fake)
+    audio.AudioAdapter().fire("ok", message, resolve_character("ok"))
+    return seen
+
+
+def test_digest_is_spoken_and_cleared_once_delivered(monkeypatch):
+    orchestration.note_chime("a"); orchestration.note_chime("b")
+    seen = _speak(monkeypatch, "all done", b"RIFF" + b"\0" * 2000)
+    assert "2 other tasks finished while you waited." in seen["text"]
+    assert orchestration.peek_digest() == 0
+
+
+def test_bare_marker_keeps_the_digest_for_the_next_spoken_completion(monkeypatch):
+    orchestration.note_chime("a")
+    seen = _speak(monkeypatch, "", b"RIFF" + b"\0" * 2000)         # bare marker -> bundled clip
+    assert seen["path"] == "/bank.wav" and "text" not in seen
+    assert orchestration.peek_digest() == 1                          # not lost
+
+
+def test_failed_synthesis_keeps_the_digest(monkeypatch):
+    orchestration.note_chime("a")
+    _speak(monkeypatch, "all done", None)                            # synth failed -> bank fallback
+    assert orchestration.peek_digest() == 1
+
+
+def test_clear_digest_only_drops_what_was_spoken():
+    for s in "abc":
+        orchestration.note_chime(s)
+    orchestration.clear_digest(2)                                    # one more arrived meanwhile
+    assert orchestration.peek_digest() == 1
+
+
+# ---- claky env overrides (review finding) -----------------------------------
+def test_env_only_local_transport_is_effective_everywhere(monkeypatch):
+    from nhj.adapters import claky
+    monkeypatch.setattr(claky.config, "section", lambda n: {"transport": "bifrost", "url": "", "token_env": "NOPE_TOKEN"})
+    monkeypatch.setattr(claky.Path, "read_text", lambda self: "")      # no ~/.env fallback token
+    monkeypatch.delenv("NOPE_TOKEN", raising=False)
+    assert claky.ClakyAdapter().available() is False                  # bifrost, nothing configured
+    monkeypatch.setenv("CLAKY_TRANSPORT", "local"); monkeypatch.setenv("CLAKY_HOST", "10.0.0.9")
+    assert claky._cfg()["transport"] == "local" and claky._cfg()["host"] == "10.0.0.9"
+    assert claky.ClakyAdapter().available() is True
