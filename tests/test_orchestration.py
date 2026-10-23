@@ -135,3 +135,47 @@ def test_owner_pid_ignores_throwaway_shells(monkeypatch):
     monkeypatch.setattr(mz.os, "getppid", lambda: 1)
     monkeypatch.setattr(mz.Path, "read_text", lambda self: "bash\n")
     assert mz._owner_pid() is None
+
+
+# ---- agent-CLI commands: nhj vibe / busy / idle -----------------------------
+import json  # noqa: E402
+
+from typer.testing import CliRunner  # noqa: E402
+
+from nhj import cli  # noqa: E402
+
+
+def _run(args, payload=None):
+    return CliRunner().invoke(cli.cli, args, input=json.dumps(payload) if payload is not None else "")
+
+
+def test_busy_and_idle_use_the_hook_payload(monkeypatch):
+    r = _run(["busy"], {"session_id": "qwen-1", "cwd": "/work/proj"})
+    assert r.exit_code == 0 and r.output == ""
+    assert "qwen-1" in mz._read()["busy"]
+    assert _run(["idle"], {"session_id": "qwen-1", "cwd": "/work/proj"}).exit_code == 0
+    assert "qwen-1" not in mz._read().get("busy", {})
+
+
+def test_busy_respects_voice_opt_out():
+    gate.set_rule("off", "quiet")
+    _run(["busy"], {"session_id": "s", "cwd": "/work/quiet"})
+    assert not mz._read().get("busy")
+
+
+def test_vibe_takes_its_source_from_the_payload_cwd(monkeypatch):
+    seen = []
+    from nhj import queue_manager
+    monkeypatch.setattr(queue_manager.QueueManager, "add", lambda self, **kw: seen.append(kw))
+    monkeypatch.setattr(queue_manager.QueueManager, "start_worker_if_needed", lambda self: None)
+    assert _run(["vibe", "ok", "-m", "done"], {"cwd": "/work/reactor"}).exit_code == 0
+    assert seen[0]["source"] == "reactor" and seen[0]["message"] == "done"
+    assert _run(["vibe", "ok", "-s", "explicit"], {"cwd": "/work/reactor"}).exit_code == 0
+    assert seen[1]["source"] == "explicit"
+    assert _run(["vibe", "bogus"]).exit_code == 2                      # invalid intent is rejected
+
+
+def test_stdin_json_never_blocks_or_raises_on_garbage():
+    assert _run(["vibe", "ok"], None).exit_code == 0
+    r = CliRunner().invoke(cli.cli, ["idle"], input="not json")
+    assert r.exit_code == 0

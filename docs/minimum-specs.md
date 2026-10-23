@@ -7,9 +7,9 @@ call-centre, live."* It's all the one install — these tiers are just switches.
 
 | Tier | What you get | Needs | Resident RAM |
 |---|---|---|---|
-| **Silent** | markers + haptics/displays, no audio | any Mac · `nhj mute` | ~nil |
-| **Pre-recorded** | the cast speaks from the **bundled** voice bank (ships in the package) | any Mac (`--minimal` install) | ~nil (no model loaded) |
-| **Full experience ⭐** | **live cloned voices + the dynamic bogan brain** | Apple Silicon M1+, 16 GB rec. | ~3.2 GB while warm |
+| **Silent** | markers + haptics/displays, no audio | any Mac or Linux box · `nhj mute` | ~nil |
+| **Pre-recorded** | the cast speaks from the **bundled** voice bank (ships in the package) | any Mac or Linux box (`--minimal` install) | ~nil (no model loaded) |
+| **Full experience ⭐** | **live cloned voices + the dynamic bogan brain** | Apple Silicon M1+ (16 GB rec.) **or** Linux + NVIDIA GPU (~5 GB VRAM for Breeze; see the [Linux guide](linux.md)) | ~3.2 GB while warm (Mac) |
 
 ## Tier 0 — Silent / text-only
 
@@ -52,7 +52,7 @@ you've never heard before.
 
 | | Requirement |
 |---|---|
-| **Chip** | **Apple Silicon (M1 or later)** — TTS and the LLM run on Metal / MLX |
+| **Chip** | **Apple Silicon (M1 or later)** — TTS and the LLM run on Metal / MLX. **Linux:** an NVIDIA GPU for the audio.cpp (Breeze) voice; the LLM runs on CPU or GPU (see [Linux guide](linux.md)) |
 | **RAM** | 8 GB works · **16 GB recommended** (~3.2 GB resident while both daemons are warm) |
 | **Disk** | ~5 GB — TTS model (~2.2 GB) + ocker-bogan-nano (~0.94 GB) + media (~250 MB) |
 | **Network** | once, to fetch the models + media — then **100% local & private** |

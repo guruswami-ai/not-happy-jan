@@ -46,7 +46,7 @@ The MCP server uses **stdio transport** (spawned locally by Claude Code per sess
 
 ## `--full` — persistent services
 
-`--full` adds persistent **LaunchAgent** services (macOS only) on top of everything the default installs:
+`--full` adds persistent **LaunchAgent** services (macOS) on top of everything the default installs. On Linux the persistent piece is `nhj install-mcp-service` (a `systemd --user` unit) and the voice/LLM servers are yours to run: see the [Linux guide](linux.md).
 
 | What's added | Notes |
 |---|---|

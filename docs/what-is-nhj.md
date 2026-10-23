@@ -63,7 +63,7 @@ Everything inference runs **locally** — the cloned-voice references never leav
 - **Minimal** speaks instantly from a bundled voice bank — no model downloads. Good for CI and
   RAM-tight machines.
 - **Default / full** is the live experience — cloned voices, the dynamic LLM, and ~4 hours of
-  hold music — on an **Apple-Silicon Mac**, a one-off ~5 GB of local models, loaded on demand.
+  hold music — on an **Apple-Silicon Mac** or a **Linux/NVIDIA** box ([Linux guide](linux.md)), a one-off ~5 GB of local models, loaded on demand.
 
 Install and uninstall run **entirely in your user account** (no `sudo`) and are fully reversible.
 

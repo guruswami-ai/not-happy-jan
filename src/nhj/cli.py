@@ -34,16 +34,50 @@ def test(
     app.print(f"[green]✓[/green] Queued [bold]{intent}[/bold]" + (f": {message}" if message else ""))
 
 
+def _stdin_json() -> dict:
+    """The JSON payload an agent CLI's hook pipes to stdin ({} when run by hand, from cron, or on
+    a platform where select() cannot poll stdin). Never blocks: a quiet stdin returns at once."""
+    import select
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return {}
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], 0.3)
+            if not ready:
+                return {}
+        except (ValueError, OSError, TypeError):      # stdin cannot be polled (Windows, in-memory streams)
+            pass                                       # -> a plain read; hooks always pipe data or close stdin
+        data = json.loads(sys.stdin.read() or "{}")
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _hook_identity(source: str, payload: dict) -> tuple[str, str]:
+    """(source label, session id) for a hook-driven command: explicit --source wins, then the
+    payload's cwd, then the process cwd; the session id comes from the payload or the label."""
+    from nhj.hook import source_label
+    label = source or source_label(str(payload.get("cwd") or payload.get("workspaceRoot") or Path.cwd()))
+    sid = str(payload.get("session_id") or payload.get("sessionId") or payload.get("conversation_id") or label or "cli")
+    return label, sid
+
+
 @cli.command()
 def vibe(
     intent: str = typer.Argument("ok", help="Intent: ok|err|warn|attn|celebrate|step"),
     message: str = typer.Option("", "--message", "-m"),
-    source: str = typer.Option("", "--source", "-s", help="who is speaking, e.g. 'reachy' or 'hog11:reachy'"),
+    source: str = typer.Option("", "--source", "-s",
+                               help="who is speaking (default: the project folder, from the hook's cwd)"),
     character: str = typer.Option("", "--character", "-c", help="explicit character (jan|bazza|karren)"),
 ):
-    """Fire a vibe from any agent or script (opencode plugin, cron, a shell one-liner)."""
+    """Fire a vibe from any agent or script (agent CLI hooks, plugins, cron, a shell one-liner).
+
+    Reads the hook's JSON payload from stdin when there is one (for the project folder), prints
+    nothing, and always exits 0 on success so it is safe inside CLIs that parse hook output.
+    """
     from nhj import event
     from nhj.queue_manager import QueueManager
+    source, _ = _hook_identity(source, _stdin_json())
     try:
         ev = event.validate(intent, message=message, character=character, source=source)
     except event.VibeValidationError as e:
@@ -52,6 +86,34 @@ def vibe(
     qm = QueueManager()
     qm.add(**ev.to_kwargs())
     qm.start_worker_if_needed()
+
+
+@cli.command()
+def busy(
+    session: str = typer.Option("", "--session", help="session id (default: from the hook payload, else the project)"),
+    source: str = typer.Option("", "--source", "-s", help="project label (default: from the payload cwd)"),
+):
+    """Mark an agent session as working: starts the hold music (and joins the multi-agent policy).
+
+    For CLIs whose hooks cannot run NHJ's Python modules: call it from their prompt-submitted /
+    agent-start hook, and `nhj idle` from their stop hook. Respects `nhj voice off`.
+    """
+    from nhj import gate, inference_muzak
+    from nhj.state import get_flag
+    label, sid = _hook_identity(source, _stdin_json())
+    if get_flag("muzak", True) and gate.voice_allowed(label):
+        inference_muzak.mark_busy(session or sid)
+
+
+@cli.command()
+def idle(
+    session: str = typer.Option("", "--session", help="session id (default: from the hook payload, else the project)"),
+    source: str = typer.Option("", "--source", "-s", help="project label (default: from the payload cwd)"),
+):
+    """Mark an agent session as finished (pairs with `nhj busy`); the music pauses when all are idle."""
+    from nhj import inference_muzak
+    _, sid = _hook_identity(source, _stdin_json())
+    inference_muzak.mark_idle(session or sid)
 
 
 # NHJ's five Claude Code hooks (Notification catches a session blocked on you). Stop = the [vibes:] voice/feedback; StopFailure =
@@ -1005,7 +1067,7 @@ def install_model(
     import platform
     if external:
         app.print(f"[dim]external server: serve {model_path} as 'ocker-bogan-nano' on :{port} "
-                  f"(see docs/linux-nvidia.md)[/dim]")
+                  f"(see docs/linux.md)[/dim]")
     elif service and platform.system() == "Darwin":
         dest = _install_llm_launchagent(model_path, port)
         app.print(f"[green]✓[/green] LaunchAgent loaded ({dest.name}) — starts on login + now")

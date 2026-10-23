@@ -182,6 +182,15 @@ if ! [ -f "$ENV_PATH" ]; then
   echo "Created .env — edit it with your device IPs and API keys."
 fi
 
+# set_env_var KEY VALUE -- idempotent .env upsert (no sed, so values may contain any character)
+set_env_var() {
+  local key="$1" value="$2" tmp
+  tmp="$(mktemp)"
+  grep -v "^${key}=" "$ENV_PATH" > "$tmp" 2>/dev/null || true
+  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  mv "$tmp" "$ENV_PATH"
+}
+
 # --minimal installs no TTS model or [server] extra, so configure text-only
 # operation. (Idempotent: applied on every minimal run, even an upgrade.)
 if [[ "$PROFILE" == "minimal" ]]; then
@@ -209,9 +218,16 @@ print('Downloading mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit ...')
 load('mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit', lazy=False)
 print('Done.')
 " || note_followup "TTS model download failed — re-run 'bash install.sh', or set TTS_ENGINE=none in $ENV_PATH for text-only."
+  elif [[ -n "${NHJ_AUDIOCPP_URL:-}" ]]; then
+    # Linux/NVIDIA (or any host with an audio.cpp server): zero-shot voices over HTTP.
+    echo "Using the audio.cpp TTS server at $NHJ_AUDIOCPP_URL (see docs/linux.md)."
+    set_env_var TTS_ENGINE audiocpp
+    set_env_var NHJ_AUDIOCPP_URL "$NHJ_AUDIOCPP_URL"
+    [[ -n "${NHJ_AUDIOCPP_VOICES:-}" ]] && set_env_var NHJ_AUDIOCPP_VOICES "$NHJ_AUDIOCPP_VOICES"
   else
-    echo "Apple Silicon not detected — set TTS_ENGINE=none in .env to run without voice."
-    note_followup "Non-Apple-Silicon host — set TTS_ENGINE=none in $ENV_PATH (local TTS is Apple Silicon only)."
+    echo "Apple Silicon not detected and no NHJ_AUDIOCPP_URL given — voice is text/clip-bank only."
+    set_env_var TTS_ENGINE none
+    note_followup "No live TTS configured. Linux/NVIDIA: run an audio.cpp server and re-run with NHJ_AUDIOCPP_URL=http://host:8092 (docs/linux.md); otherwise the bundled clip bank still speaks."
   fi
 
   # 3b. --full only: install persistent TTS LaunchAgent (macOS)
@@ -232,7 +248,9 @@ print('Done.')
   #     lines instead of the fixed bank). Needs llama.cpp; optional — the bundled bank
   #     still works without it. (--minimal skips this entire block.)
   echo "Installing dynamic LLM (ocker-bogan-nano)..."
-  "$VENV_PYTHON" -m nhj.cli install-model \
+  _model_flags=()
+  command -v llama-server >/dev/null 2>&1 || _model_flags+=(--external-server)   # no native llama.cpp: just fetch the GGUF
+  "$VENV_PYTHON" -m nhj.cli install-model ${_model_flags[@]+"${_model_flags[@]}"} \
     || note_followup "Dynamic LLM not installed — 'brew install llama.cpp' then 'nhj install-model' for freshly-generated lines (the bundled voice bank works without it)."
 
   # 4b. Model-server mode: default loads on demand + idle-unloads (no resident RAM

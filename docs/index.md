@@ -14,7 +14,7 @@ mouse or a flash on a pixel display to match — all running **100% on your own 
 
 !!! tip "New here? Three things to know"
     - **It speaks instantly on a minimal install** — the bundled voice bank needs no downloads.
-    - **The full live experience** (cloned voices + a fresh in-character line every time + hold music) wants an **Apple-Silicon Mac** and a one-off ~5 GB of local models.
+    - **The full live experience** (cloned voices + a fresh in-character line every time + hold music) wants a one-off ~5 GB of local models on an **Apple-Silicon Mac** or a **Linux/NVIDIA** box ([Linux guide](linux.md)).
     - Everything inference runs **on-device**; nothing about your code or prompts leaves the machine.
 
 ## What you'll experience

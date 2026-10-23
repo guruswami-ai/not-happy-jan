@@ -34,6 +34,10 @@ A **missing** `config.yaml` is normal. A `config.yaml` that **exists but is malf
 ```bash
 # Choose TTS backend
 TTS_ENGINE=qwen          # local Qwen3-TTS (Apple Silicon, default)
+# TTS_ENGINE=audiocpp    # audio.cpp / Breeze-TTS zero-shot server (Linux/CUDA); see linux.md
+# NHJ_AUDIOCPP_URL=http://127.0.0.1:8092
+# NHJ_OUTPUT_DEVICE=analog-stereo   # mixer output (index or name part); `nhj audio-devices`
+# NHJ_ORCHESTRATION=quiet-while-busy  # or always-speak; see orchestration.md
 # TTS_ENGINE=none        # run without voice
 
 # Choose default character
@@ -130,15 +134,16 @@ For the three ways to run NHJ — silent, pre-recorded samples, or the full live
 
 | Tier | What you need | Notes |
 |---|---|---|
-| **Required** (core) | macOS **Apple Silicon (M1+)** · Python 3.10+ · ~8 GB RAM (16 GB recommended) · ~5 GB disk | The Qwen3-TTS voice needs ~2.2 GB resident. `TTS_ENGINE=none` runs it text-only (no voice). |
+| **Required** (core) | macOS **Apple Silicon (M1+)** *or* Linux (+ NVIDIA GPU for live voices) · Python 3.10+ · ~8 GB RAM (16 GB recommended) · ~5 GB disk | The Qwen3-TTS voice needs ~2.2 GB resident (Mac); Linux uses an audio.cpp server ([Linux guide](linux.md)). `TTS_ENGINE=none` runs it text-only (no voice). |
 | **Recommended** (everything local) | **+ ocker-bogan-nano** dynamic voice brain | ~940 MB download, +~0.5 GB RAM. Everything stays on-device — the complete ocker-bogan experience, no cloud. |
 | **Optional** | Hardware feedback — LaMetric · Ulanzi/AWTRIX · Divoom · ESP32 bell · haptic mouse | Visual/physical alerts beyond audio. Deferred/experimental in v1; set device IPs in `.env`. |
 
-Local TTS is the **only** heavy component — everything else (hook, MCP, queue, mixer) is lightweight Python. NHJ v1 is **self-contained and macOS-only** — nothing phones home.
+Local TTS is the **only** heavy component — everything else (hook, MCP, queue, mixer) is lightweight Python. NHJ is **self-contained** (macOS and Linux) — nothing phones home.
 
 | You want… | Need | RAM | Disk |
 |---|---|---|---|
 | **Local Qwen voice** (offline, default) | **Apple Silicon Mac (M1+)** | 8 GB works · **16 GB recommended** | ~5 GB free |
-| **Silent** (text/markers only) | Apple Silicon Mac | minimal | minimal |
+| **Breeze zero-shot voice** (offline) | **Linux + NVIDIA GPU** | 8 GB+ | ~5 GB free |
+| **Silent** (text/markers only) | Any Mac or Linux box | minimal | minimal |
 
 Set `TTS_ENGINE=none` in `.env` to run without voice. Everything is local — no cloud, no API keys.
