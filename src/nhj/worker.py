@@ -44,6 +44,7 @@ def _dispatch(task, adapters) -> None:
     emotion       = task.get("emotion", "neutral") or "neutral"
     voice_variant = task.get("voice_variant", "") or ""
     who           = task.get("character", "") or ""
+    source        = task.get("source", "") or ""
     speed = _parse_speed(task.get("speed", 1.0))
 
     # Full message = pretext + inline message
@@ -54,7 +55,15 @@ def _dispatch(task, adapters) -> None:
     # [Jan:ok]/[Bazza:err] explicitly name the character; [vibes:ok] auto-routes by intent.
     character = character_by_name(who, intent) if who else resolve_character(intent)
 
+    from nhj import gate, orchestration
+    voice_ok = gate.voice_allowed(source)
+    voice_mode = orchestration.voice_mode(intent) if voice_ok else "speak"
+    if voice_mode == "chime":
+        orchestration.note_chime(source)
+
     for adapter in adapters:
+        if getattr(adapter, "channel", "") == "voice" and not voice_ok:
+            continue   # this project has not opted in to voice (nhj voice on)
         try:
             adapter.fire(
                 intent=intent,
@@ -64,6 +73,8 @@ def _dispatch(task, adapters) -> None:
                 emotion=emotion,
                 voice_variant=voice_variant,
                 speed=speed,
+                source=source,
+                voice_mode=voice_mode,
             )
         except Exception as e:
             print(f"[nhj] adapter {adapter.__class__.__name__} error: {e}",

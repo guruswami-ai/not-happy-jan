@@ -94,8 +94,52 @@ adapters:
   - lametric    # LaMetric Time — enabled if LAMETRIC_DEVICE_IP set
   - ulanzi      # ULANZI TC001 — enabled if ULANZI_DEVICE_IP set
   - esp32       # ESP32 bell — enabled if ESP32_BELL_URL set
+  - claky       # Vestaboard — enabled if claky.url (+ token env) or claky.host is set
   - divoom      # Divoom Times Gate / Times Frame — enabled if DIVOOM_DEVICE_IP set
   - audio       # TTS synthesis + afplay — always last
+
+# Where the mixer plays. Empty = the system default output. Otherwise a device index or a
+# case-insensitive name part ("reachy", "hdmi", "analog"); see `nhj audio-devices`. (env: NHJ_OUTPUT_DEVICE)
+playback:
+  output_device: ""
+
+# Several agents at once: the music plays while ANY session is busy. In quiet-while-busy mode a
+# routine completion (ok/celebrate/step) that lands while OTHER sessions are still working is a
+# soft chime (+ the silent channels) instead of a spoken result; warn/err/attn always speak, and
+# the next spoken completion says how many tasks finished meanwhile. always-speak = upstream
+# behaviour. (env: NHJ_ORCHESTRATION; chime: a file or dir, default audio/sfx/buttons)
+orchestration:
+  mode: quiet-while-busy
+  chime: ""
+
+# Voice opt-in. Silent adapters (board, displays, haptics) always fire; the voice channel
+# (TTS + hold music) is gated per project so parallel sessions do not all talk at once.
+# `nhj voice on|off [--here|--project NAME|--global]` sets rules; precedence is
+# project rule > global rule > this default ("on" keeps upstream behaviour).
+voice:
+  default: on
+
+# audio.cpp zero-shot TTS (Breeze-TTS on CUDA) — used when TTS_ENGINE=audiocpp.
+# `voices` maps an NHJ character voice to a voice enrolled in the server's --voice-dir
+# (a <name>.wav reference clip plus a <name>.txt transcript beside it). The real NHJ
+# characters are enrolled by copying voices/<name>/ref.wav + ref.txt in as <name>.wav/.txt
+# (24 kHz mono, author transcripts); anything not listed here uses its own name.
+audiocpp:
+  url: http://127.0.0.1:8092         # (env: NHJ_AUDIOCPP_URL)
+  voices_dir: ~/s2s/voices           # transcripts are read from here (env: NHJ_AUDIOCPP_VOICES)
+  voices: { jan-whispering: jan_whispering }   # others use the same name; audio.cpp ids avoid "-"
+
+# Vestaboard (the `claky` adapter). Disabled unless a transport target is set.
+# bifrost transport posts to the gateway's claky-send_message MCP tool (token read from
+# the env var named by token_env at send time); local transport uses the board's Local API.
+claky:
+  transport: bifrost       # bifrost | local                       (env: CLAKY_TRANSPORT)
+  url: ""                  # bifrost MCP URL, e.g. http://bifrost.example:8000/mcp  (env: CLAKY_URL)
+  token_env: BIFROST_KV_KEY
+  host: ""                 # board host for transport: local        (env: CLAKY_HOST)
+  key_env: VESTABOARD_LOCAL_KEY
+  intents: [ok, celebrate, warn, err, attn]   # `step` is left off: the board updates ~1 per 15 s
+  min_interval_s: 15
 
 # AWTRIX 3 / Ulanzi TC001 LED-matrix displays (the `ulanzi` adapter above).
 # Disabled unless `displays` is set (or ULANZI_MQTT_PREFIXES / ULANZI_HTTP_HOSTS in .env).

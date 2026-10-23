@@ -298,8 +298,10 @@ class of bug (a never-expiring "busy" marker left the music playing forever afte
 switch — fixed by clearing it on re-enable).
 
 ### Platform & privacy budget
-TTS is MLX (Apple Silicon); the LLM is `llama.cpp` (cross-platform); the mixer is
-PyAV+sounddevice (cross-platform); displays are network endpoints. Everything inference runs
+TTS is MLX (Apple Silicon) or an audio.cpp/Breeze server (Linux/CUDA); the LLM is `llama.cpp`
+(cross-platform); the mixer is PyAV+sounddevice (cross-platform, with a selectable output device);
+displays are network endpoints. With several agents running, who may speak is decided by
+[the orchestration policy](orchestration.md). Everything inference runs
 **on-device** — the cloned-voice references never leave the machine. Install/uninstall are
 **user-context only (no `sudo`)**: user-domain LaunchAgents, files under `$HOME`, fully
 reversible.

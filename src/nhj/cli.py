@@ -34,13 +34,122 @@ def test(
     app.print(f"[green]✓[/green] Queued [bold]{intent}[/bold]" + (f": {message}" if message else ""))
 
 
-# NHJ's four Claude Code hooks. Stop = the [vibes:] voice/feedback; StopFailure =
+def _stdin_json() -> dict:
+    """The JSON payload an agent CLI's hook pipes to stdin ({} when run by hand, from cron, or on
+    a platform where select() cannot poll stdin). Never blocks: a quiet stdin returns at once."""
+    import select
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return {}
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], 0.3)
+            if not ready:
+                return {}
+        except (ValueError, OSError, TypeError):      # stdin cannot be polled (Windows, in-memory streams)
+            pass                                       # -> a plain read; hooks always pipe data or close stdin
+        data = json.loads(sys.stdin.read() or "{}")
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _hook_identity(source: str, payload: dict) -> tuple[str, str]:
+    """(source label, session id) for a hook-driven command: explicit --source wins, then the
+    payload's cwd, then the process cwd; the session id comes from the payload or the label."""
+    from nhj.hook import source_label
+    label = source or source_label(str(payload.get("cwd") or payload.get("workspaceRoot") or Path.cwd()))
+    sid = str(payload.get("session_id") or payload.get("sessionId") or payload.get("conversation_id") or label or "cli")
+    return label, sid
+
+
+@cli.command()
+def vibe(
+    intent: str = typer.Argument("ok", help="Intent: ok|err|warn|attn|celebrate|step"),
+    message: str = typer.Option("", "--message", "-m"),
+    source: str = typer.Option("", "--source", "-s",
+                               help="who is speaking (default: the project folder, from the hook's cwd)"),
+    character: str = typer.Option("", "--character", "-c", help="explicit character (jan|bazza|karren)"),
+):
+    """Fire a vibe from any agent or script (agent CLI hooks, plugins, cron, a shell one-liner).
+
+    Reads the hook's JSON payload from stdin when there is one (for the project folder), prints
+    nothing, and always exits 0 on success so it is safe inside CLIs that parse hook output.
+    """
+    from nhj import event
+    from nhj.queue_manager import QueueManager
+    source, _ = _hook_identity(source, _stdin_json())
+    try:
+        ev = event.validate(intent, message=message, character=character, source=source)
+    except event.VibeValidationError as e:
+        app.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+    qm = QueueManager()
+    qm.add(**ev.to_kwargs())
+    qm.start_worker_if_needed()
+
+
+@cli.command()
+def busy(
+    session: str = typer.Option("", "--session", help="session id (default: from the hook payload, else the project)"),
+    source: str = typer.Option("", "--source", "-s", help="project label (default: from the payload cwd)"),
+):
+    """Mark an agent session as working: starts the hold music (and joins the multi-agent policy).
+
+    For CLIs whose hooks cannot run NHJ's Python modules: call it from their prompt-submitted /
+    agent-start hook, and `nhj idle` from their stop hook. Respects `nhj voice off`.
+    """
+    from nhj import gate, inference_muzak
+    from nhj.state import get_flag
+    label, sid = _hook_identity(source, _stdin_json())
+    if get_flag("muzak", True) and gate.voice_allowed(label):
+        inference_muzak.mark_busy(session or sid)
+
+
+@cli.command()
+def idle(
+    session: str = typer.Option("", "--session", help="session id (default: from the hook payload, else the project)"),
+    source: str = typer.Option("", "--source", "-s", help="project label (default: from the payload cwd)"),
+):
+    """Mark an agent session as finished (pairs with `nhj busy`); the music pauses when all are idle."""
+    from nhj import inference_muzak
+    _, sid = _hook_identity(source, _stdin_json())
+    inference_muzak.mark_idle(session or sid)
+
+
+@cli.command()
+def finish(
+    intent: str = typer.Argument("ok", help="Intent: ok|err|warn|attn|celebrate|step"),
+    message: str = typer.Option("", "--message", "-m"),
+    source: str = typer.Option("", "--source", "-s", help="project label (default: from the payload cwd)"),
+):
+    """End a session's turn and announce it: `nhj idle` then `nhj vibe`, in that order, in ONE process.
+
+    Use this from a stop / error hook instead of `nhj idle; nhj vibe ...`: the hook's JSON payload is
+    on stdin only once, so a second command would lose the project and session. Doing the idle first
+    also guarantees a lone session's result is spoken, not chimed.
+    """
+    from nhj import event, inference_muzak
+    from nhj.queue_manager import QueueManager
+    label, sid = _hook_identity(source, _stdin_json())
+    inference_muzak.mark_idle(sid)
+    try:
+        ev = event.validate(intent, message=message, source=label)
+    except event.VibeValidationError as e:
+        app.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+    qm = QueueManager()
+    qm.add(**ev.to_kwargs())
+    qm.start_worker_if_needed()
+
+
+# NHJ's five Claude Code hooks (Notification catches a session blocked on you). Stop = the [vibes:] voice/feedback; StopFailure =
 # immediate idle mark on API errors; UserPromptSubmit + SessionEnd = the inference-muzak
 # busy-set (ref-counted across sessions) + secret guard.
 # Module names — run via `python -m`, so hooks work from a checkout OR a wheel
 # install (no src/nhj/*.py path baked into settings.json).
 _HOOK_WIRING = {
     "Stop":             "nhj.hook",
+    "Notification":     "nhj.notify_hook",
     "StopFailure":      "nhj.prompt_hook",
     "UserPromptSubmit": "nhj.prompt_hook",
     "SessionEnd":       "nhj.prompt_hook",
@@ -52,6 +161,8 @@ _HOOK_WIRING = {
 _HOOK_META = {
     "Stop":             {"description": "NHJ: speak [vibes:] markers and pause inference muzak",
                          "timeout": 30},
+    "Notification":     {"description": "NHJ: permission prompts, questions and idle reminders",
+                         "timeout": 10},
     "StopFailure":      {"description": "NHJ: mark session idle after Claude Code API errors",
                          "timeout": 10},
     "UserPromptSubmit": {"description": "NHJ: start inference muzak and scan for leaked secrets",
@@ -259,6 +370,12 @@ def _stop_nhj_services() -> list[str]:
             if p.exists():
                 p.unlink(missing_ok=True)
                 removed.append(p.name)
+    unit = Path.home() / ".config" / "systemd" / "user" / _MCP_UNIT
+    if _sh.which("systemctl") and unit.exists():              # Linux: stop + remove the user unit
+        subprocess.run(["systemctl", "--user", "disable", "--now", _MCP_UNIT], capture_output=True)
+        unit.unlink(missing_ok=True)
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+        removed.append(unit.name)
     if _sh.which("pkill"):                                    # kill stray on-demand procs
         for pat in ("nhj.tts_server", "nhj.mcp_server", "nhj.worker",
                     "nhj.inference_muzak", "ocker-bogan-nano"):
@@ -617,6 +734,54 @@ def mute():
     set_flag("mute", True); app.print("[yellow]🔇 muted[/yellow] — run `nhj unmute` to restore")
 
 
+@cli.command("audio-devices")
+def audio_devices():
+    """List audio OUTPUT devices and which one the mixer will use (NHJ_OUTPUT_DEVICE)."""
+    import sounddevice as sd
+    from dotenv import load_dotenv
+    from nhj import duck_player
+    load_dotenv(resources.env_file())      # the mixer daemon reads .env too; show what it will use
+    devs = sd.query_devices()
+    chosen = duck_player.output_device(devs)
+    default = sd.default.device[1]
+    for i, d in enumerate(devs):
+        if d["max_output_channels"] > 0:
+            tag = "→ USED" if i == (chosen if chosen is not None else default) else ""
+            app.print(f"{i:3d}  {d['name']}  [dim]{'(system default)' if i == default else ''}[/dim] [green]{tag}[/green]")
+    app.print("[dim]choose with NHJ_OUTPUT_DEVICE=<index or name part> in .env, "
+              "or playback.output_device in config.yaml[/dim]")
+
+
+@cli.command()
+def voice(
+    action: str = typer.Argument("status", help="on | off | clear | status"),
+    project: str = typer.Option("", "--project", "-p", help="project name (or host:project)"),
+    here: bool = typer.Option(False, "--here", help="the current directory's project (default)"),
+    global_: bool = typer.Option(False, "--global", "-g", help="the global rule instead of a project"),
+):
+    """Opt a project in or out of the voice channel (TTS + hold music).
+
+    Silent channels (Vestaboard, displays, haptics) are unaffected. Precedence: project rule
+    > global rule > config `voice.default`. `nhj voice` shows the current rules.
+    """
+    from nhj import gate
+    action = action.lower()
+    if action == "status":
+        d = gate.describe()
+        app.print(f"default: [bold]{d['default']}[/bold]   global: [bold]{d['global'] or '-'}[/bold]")
+        for k, v in sorted(d["projects"].items()):
+            app.print(f"  {k}: {v}")
+        here_name = Path.cwd().name
+        app.print(f"here ({here_name}): voice is [bold]{'ON' if gate.voice_allowed(here_name) else 'off'}[/bold]")
+        return
+    if action not in ("on", "off", "clear"):
+        app.print("[red]action must be on | off | clear | status[/red]")
+        raise typer.Exit(2)
+    target = None if global_ else (project or Path.cwd().name)
+    gate.set_rule(None if action == "clear" else action, target)
+    app.print(f"[green]✓[/green] voice {action} for {'ALL (global)' if global_ else target}")
+
+
 @cli.command()
 def unmute():
     """Restore feedback after a mute."""
@@ -889,6 +1054,9 @@ def install_model(
     port: int = typer.Option(9991, "--port"),
     service: bool = typer.Option(True, "--service/--no-service",
                                  help="install a LaunchAgent so the server is always up (macOS)"),
+    external: bool = typer.Option(False, "--external-server",
+                                  help="you serve the GGUF yourself (Docker, another host): skip the "
+                                       "llama-server check and the service install"),
 ):
     """Install ocker-bogan-nano — NHJ's bundled fine-tuned voice brain for dynamic mode.
 
@@ -898,7 +1066,7 @@ def install_model(
     Cross-platform — needs `llama-server` (brew install llama.cpp, or build llama.cpp).
     """
     import shutil
-    if not shutil.which("llama-server"):
+    if not external and not shutil.which("llama-server"):
         app.print("[yellow]llama-server (llama.cpp) not found.[/yellow] Install it with "
                   "[bold]brew install llama.cpp[/bold] (macOS) or build from "
                   "https://github.com/ggml-org/llama.cpp — then re-run.")
@@ -923,7 +1091,10 @@ def install_model(
     app.print(f"[green]✓[/green] model ready  ·  [green]✓[/green] .env → dynamic mode on (:{port})")
 
     import platform
-    if service and platform.system() == "Darwin":
+    if external:
+        app.print(f"[dim]external server: serve {model_path} as 'ocker-bogan-nano' on :{port} "
+                  f"(see docs/linux.md)[/dim]")
+    elif service and platform.system() == "Darwin":
         dest = _install_llm_launchagent(model_path, port)
         app.print(f"[green]✓[/green] LaunchAgent loaded ({dest.name}) — starts on login + now")
     else:
@@ -1119,6 +1290,47 @@ def _install_mcp_launchagent(listen: str, port: int) -> Path:
     return dest
 
 
+_MCP_UNIT = "nhj-mcp.service"
+
+
+def _mcp_unit_text(python: str, listen: str, port: int, workdir: str, log: str) -> str:
+    """systemd --user unit for the persistent streamable-HTTP MCP ingest daemon (Linux)."""
+    return f"""[Unit]
+Description=Not-Happy-Jan MCP ingest (streamable-http on {listen}:{port})
+After=network.target
+
+[Service]
+ExecStart={python} -m nhj.mcp_server
+WorkingDirectory={workdir}
+Environment=NHJ_TRANSPORT=streamable-http
+Environment=NHJ_HOST={listen}
+Environment=NHJ_PORT={port}
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:{log}
+StandardError=append:{log}
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def _systemctl(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
+
+
+def _install_mcp_systemd(listen: str, port: int) -> Path:
+    unit = Path.home() / ".config" / "systemd" / "user" / _MCP_UNIT
+    unit.parent.mkdir(parents=True, exist_ok=True)
+    unit.write_text(_mcp_unit_text(str(_PYTHON), listen, port, str(resources.data_dir()),
+                                   str(resources.log_dir() / "mcp.log")))
+    for step in (("daemon-reload",), ("enable", "--now", _MCP_UNIT)):
+        r = _systemctl(*step)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or f"systemctl {step[0]} failed").strip())
+    return unit
+
+
 @cli.command("install-mcp-service")
 def install_mcp_service(
     listen: str = typer.Option(
@@ -1128,19 +1340,24 @@ def install_mcp_service(
     ),
     port: int = typer.Option(8765, "--port"),
 ):
-    """Install a persistent streamable-HTTP MCP LaunchAgent on macOS."""
+    """Install a persistent streamable-HTTP MCP service (LaunchAgent on macOS, systemd --user on Linux)."""
     import platform
+    import shutil as _sh
 
-    if platform.system() != "Darwin":
-        app.print("[yellow]The persistent MCP LaunchAgent is macOS-only.[/yellow]")
+    if platform.system() == "Darwin":
+        install, kind = _install_mcp_launchagent, "LaunchAgent"
+    elif _sh.which("systemctl"):
+        install, kind = _install_mcp_systemd, "systemd user service"
+    else:
+        app.print("[yellow]No supported service manager (launchd or systemd) found.[/yellow]")
         raise typer.Exit(1)
     try:
-        dest = _install_mcp_launchagent(listen, port)
+        dest = install(listen, port)
     except (OSError, RuntimeError) as exc:
-        app.print(f"[red]MCP LaunchAgent installation failed:[/red] {exc}")
+        app.print(f"[red]MCP {kind} installation failed:[/red] {exc}")
         raise typer.Exit(1)
     app.print(
-        f"[green]✓[/green] MCP LaunchAgent loaded ({dest.name}) — "
+        f"[green]✓[/green] MCP {kind} loaded ({dest.name}) — "
         f"streamable-http on {listen}:{port}"
     )
     if listen not in ("127.0.0.1", "::1", "localhost"):

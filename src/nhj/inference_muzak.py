@@ -119,14 +119,39 @@ def tracks() -> list[Path]:
 
 
 # ---- busy-set / play decision ----------------------------------------------
+def _owner_pid() -> int | None:
+    """The agent process that fired this hook (our parent), when it looks like a long-lived
+    agent rather than a throwaway shell. Linux only (/proc); elsewhere None, so a crashed
+    session is then only evicted by the TTL."""
+    ppid = os.getppid()
+    try:
+        comm = Path(f"/proc/{ppid}/comm").read_text().strip()
+    except OSError:
+        return None
+    return None if comm in ("sh", "bash", "dash", "zsh", "fish") else ppid
+
+
+def _real_busy() -> bool:
+    """True if a real agent session is mid-turn, ignoring the synthetic never-expiring entry that
+    `nhj mode rave` / `nhj muzak start` adds to keep the music playing."""
+    _any_busy()                                  # evict stale / dead entries first
+    return any(s != _MANUAL for s in (_read().get("busy") or {}))
+
+
 def _any_busy() -> bool:
-    """True if any session is mid-turn. Evicts stale (crashed) entries as a side effect."""
+    """True if any session is mid-turn. Evicts stale entries as a side effect: ones older than
+    the TTL, and ones whose owning agent process has died (a killed/crashed session never runs
+    its Stop hook, and would otherwise keep the hold music playing for the whole TTL)."""
     d = _read()
     busy = d.get("busy") or {}
+    pids = d.get("pids") or {}
     cutoff = time.time() - _BUSY_TTL
-    fresh = {s: ts for s, ts in busy.items() if ts >= cutoff}
+    fresh = {s: ts for s, ts in busy.items()
+             if ts >= cutoff and not (pids.get(s) and not _alive(pids[s]))}
     if len(fresh) != len(busy):
-        d["busy"] = fresh; _write(d)
+        d["busy"] = fresh
+        d["pids"] = {s: p for s, p in pids.items() if s in fresh}
+        _write(d)
     return bool(fresh)
 
 
@@ -160,8 +185,13 @@ def start_controller() -> bool:
 
 def mark_busy(session_id: str = "") -> bool:
     """A session started burning tokens (UserPromptSubmit). Ensures the muzak is playing."""
+    pid = _owner_pid()
+
     def _m(d):
-        d.setdefault("busy", {})[session_id or "default"] = time.time()
+        sid = session_id or "default"
+        d.setdefault("busy", {})[sid] = time.time()
+        if pid:
+            d.setdefault("pids", {})[sid] = pid
         d.pop("stop", None)
     _update(_m)
     return start_controller()
@@ -172,6 +202,7 @@ def mark_idle(session_id: str = "") -> None:
     def _m(d):
         if d.get("busy"):
             d["busy"].pop(session_id or "default", None)
+        (d.get("pids") or {}).pop(session_id or "default", None)
     _update(_m)
 
 

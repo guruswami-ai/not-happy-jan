@@ -36,7 +36,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from nhj import resources
 
-_B64_FIELDS = ("intent", "message", "pretext")
+_B64_FIELDS = ("intent", "message", "pretext", "source")
 _MAX_RETRIES = 3          # re-queue a crashed-worker item this many times, then quarantine
 # Short lease: a crashed worker is recovered immediately via PID-liveness; this is only
 # the fallback for a hung-but-alive worker / PID reuse, so keep the stale window to
@@ -98,7 +98,7 @@ class QueueManager:
     def add(self, intent: str, message: str = "", vibe_level: int = 5,
             pretext: str = "", verbosity: str = "medium", emotion: str = "neutral",
             speed: float = 1.0, voice_variant: str = "", nfe_step: int = 0,
-            character: str = "") -> str:
+            character: str = "", source: str = "") -> str:
         ts = int(time.time() * 1000)
         name = f"{ts:013d}-{os.getpid()}-{next(_seq):06d}-{uuid.uuid4().hex[:8]}.vibe"
         data = {
@@ -112,6 +112,7 @@ class QueueManager:
             "voice_variant": voice_variant,
             "nfe_step":      str(nfe_step),
             "character":     character,
+            "source":        base64.b64encode(source.encode("utf-8")).decode("ascii"),
         }
         body = "\n".join(f"{k}={v}" for k, v in data.items())
         self._atomic_write(self.queue_dir / name, body)

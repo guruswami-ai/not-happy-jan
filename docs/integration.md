@@ -1,5 +1,7 @@
 # Integration — Claude Code, other agents & devices
 
+> **Other agent CLIs** (opencode, Qwen Code, Grok Build, Codex, Gemini, Kimi, Pi, …) and running several agents at once: see [Other agent CLIs](other-clis.md) and [Multi-agent orchestration](orchestration.md).
+
 *← [Not-Happy-Jan docs](index.md)*
 
 ## Claude Code integration

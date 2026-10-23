@@ -1,0 +1,9 @@
+{
+  "_comment": "Hooks for agent CLIs that use Claude-style JSON hooks (Qwen Code ~/.qwen/settings.json, Grok Build ~/.grok/hooks/nhj.json, Codex ~/.codex/hooks.json). Each command reads the hook's JSON from stdin, prints nothing and exits 0. Omit the _comment key if the CLI rejects unknown keys. See docs/other-clis.md for per-CLI differences (event names, timeouts, trust).",
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "nhj busy", "timeout": 10 }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "nhj finish ok -m 'Done'", "timeout": 10 }] }],
+    "Notification":     [{ "hooks": [{ "type": "command", "command": "nhj vibe attn -m 'Needs you'", "timeout": 10 }] }],
+    "StopFailure":      [{ "hooks": [{ "type": "command", "command": "nhj finish err -m 'Error'", "timeout": 10 }] }]
+  }
+}

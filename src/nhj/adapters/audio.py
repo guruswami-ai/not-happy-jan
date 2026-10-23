@@ -12,8 +12,10 @@ Dispatch order (3 tiers):
   Tier 3  Live synth — local Qwen3-TTS (localhost:9992); result cached
 
 TTS_ENGINE in .env:
-  qwen  → local NHJ Qwen3-TTS server (default)
-  none  → suppress TTS
+  qwen     → local NHJ Qwen3-TTS server (default, Apple Silicon)
+  audiocpp → an audio.cpp server (Breeze-TTS zero-shot cloning, CUDA/Linux) — see
+             synth_audiocpp and the ``audiocpp:`` config block
+  none     → suppress TTS
 """
 from __future__ import annotations
 
@@ -186,6 +188,50 @@ def synth_qwen(text: str, base_url: str, voice: str = "jan",
         return None
 
 
+def _audiocpp_cfg() -> dict:
+    from nhj import config
+    return config.section("audiocpp")
+
+
+def audiocpp_voice(character_voice: str, cfg: Optional[dict] = None) -> str:
+    """NHJ character voice id -> enrolled audio.cpp voice name (``audiocpp.voices`` map)."""
+    cfg = _audiocpp_cfg() if cfg is None else cfg
+    return (cfg.get("voices") or {}).get(character_voice, character_voice)
+
+
+def synth_audiocpp(text: str, base_url: str, voice: str, voices_dir: str,
+                   timeout: float = 60.0) -> Optional[bytes]:
+    """Zero-shot synthesis on an audio.cpp server (Breeze-TTS), return WAV bytes or None.
+
+    The voice is a reference clip enrolled in the server's ``--voice-dir``; its transcript
+    (``<voice>.txt`` beside the clip) is sent per request as ``reference_text`` because the
+    server-wide default is a single global value. Do NOT send ``instruction``: it fights the
+    clone. A streaming OOM comes back as HTTP 200 with an EMPTY body, so a body that is not
+    a real WAV is treated as a failure (the caller falls back to the bundled clip bank).
+    """
+    ref_txt = Path(voices_dir).expanduser() / f"{voice}.txt"
+    try:
+        reference_text = ref_txt.read_text().strip()
+    except OSError:
+        print(f"[nhj] audiocpp: no transcript {ref_txt} for voice {voice!r}", file=sys.stderr)
+        return None
+    body = {"model": "breeze", "input": text, "voice": voice, "response_format": "wav",
+            "options": {"guidance_scale": "1.0", "stream_frames_per_event": "2",
+                        "stream_lookahead_margin": "0", "reference_text": reference_text}}
+    try:
+        r = requests.post(f"{base_url.rstrip('/')}/v1/audio/speech", json=body, timeout=timeout)
+        r.raise_for_status()
+        wav = r.content
+        if len(wav) < 1024 or wav[:4] != b"RIFF":
+            print(f"[nhj] audiocpp: empty/invalid audio ({len(wav)} B) — server out of VRAM?",
+                  file=sys.stderr)
+            return None
+        return wav
+    except Exception as e:
+        print(f"[nhj] audiocpp TTS error: {e}", file=sys.stderr)
+        return None
+
+
 def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> None:
     cache = _cache_path(voice, text, variant)
     cache.parent.mkdir(parents=True, exist_ok=True)
@@ -205,6 +251,8 @@ def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> Non
 # Adapter
 # ---------------------------------------------------------------------------
 class AudioAdapter(NotificationAdapter):
+    channel = "voice"   # gated per project (nhj.gate); silent adapters are not
+
     def available(self) -> bool:
         # The bundled bare-marker bank means the adapter can speak even on a minimal
         # install. TTS_ENGINE=none only disables LIVE synthesis, not the bank.
@@ -214,13 +262,21 @@ class AudioAdapter(NotificationAdapter):
              vibe_level: int = 5, **kwargs) -> bool:
         tts_enabled = os.getenv("TTS_ENGINE", "qwen").lower() != "none"
 
+        # Another session is still working (see nhj.orchestration): a routine completion
+        # is only a soft chime so the music bed and the session you are waiting on are not
+        # talked over. The silent channels already fired.
+        if kwargs.get("voice_mode") == "chime":
+            from nhj import orchestration
+            return orchestration.play_chime()
+
         # Coming off hold: the mixer already beeped the instant the music froze. Jan
         # reconnects ("you still there?") before the result. Both go on the mixer's voice
         # bus, which plays them in order and auto-ducks the music — so the return clip and
         # the result never collide and the music drops under both.
         try:
+            from nhj import inference_muzak
             from nhj.state import get_flag
-            if get_flag("muzak"):
+            if get_flag("muzak", True) and not inference_muzak._any_busy():   # only if the music really paused
                 ret = pick_return_clip()
                 if ret:
                     _emit_voice(ret, gain=0.9)
@@ -230,6 +286,15 @@ class AudioAdapter(NotificationAdapter):
 
         d = character.delivery(intent, message)
         voice, tts_text, variant = d.voice, d.text, d.band
+        # Mention completions that were only chimed while other sessions were busy. Only when a
+        # message will actually be spoken (a bare marker plays a bundled clip with no digest in
+        # it); the count is cleared below only once it has really been delivered.
+        digest_n, digest_delivered = 0, False
+        if message and tts_text and tts_enabled and intent in ("ok", "celebrate", "step"):
+            from nhj import orchestration
+            digest_n = orchestration.peek_digest()
+            if digest_n:
+                tts_text = f"{tts_text} {orchestration.digest_sentence(digest_n)}"
 
         # Mode can override the voice globally (e.g. special-forces -> a whisper
         # voice/sample). Empty/unset = use the character's own voice.
@@ -245,6 +310,7 @@ class AudioAdapter(NotificationAdapter):
         path = pick_bank_clip(voice, intent) if not message else None
         if path is None and tts_text:
             path = cache_hit(voice, tts_text, variant)
+            digest_delivered = bool(digest_n and path)        # a cached clip of the same sentence
 
         # Speed is applied ONCE, at playback (below) — never at synthesis. The deployed
         # Qwen backend ignores a synth-speed kwarg, and applying it at both synth and
@@ -258,22 +324,31 @@ class AudioAdapter(NotificationAdapter):
 
         ephemeral = False
         if path is None and tts_enabled:                      # Tier 3: live synth (unsped)
-            base_url   = os.getenv("NHJ_TTS_URL", "http://localhost:9992")
-            model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
-            try:                                              # on-demand: warm the TTS server up first
-                from nhj import servers
-                servers.ensure("tts")
-            except Exception:
-                pass
-            wav = synth_qwen(tts_text or intent, base_url, voice=voice,
-                             model_tier=model_tier, instruct=d.instruct,
-                             temperature=d.temperature)
+            if os.getenv("TTS_ENGINE", "qwen").lower() == "audiocpp":
+                acfg = _audiocpp_cfg()
+                wav = synth_audiocpp(
+                    tts_text or intent,
+                    os.getenv("NHJ_AUDIOCPP_URL") or acfg.get("url", "http://127.0.0.1:8092"),
+                    audiocpp_voice(voice, acfg),
+                    os.getenv("NHJ_AUDIOCPP_VOICES") or acfg.get("voices_dir", "~/s2s/voices"))
+            else:
+                base_url   = os.getenv("NHJ_TTS_URL", "http://localhost:9992")
+                model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
+                try:                                          # on-demand: warm the TTS server up first
+                    from nhj import servers
+                    servers.ensure("tts")
+                except Exception:
+                    pass
+                wav = synth_qwen(tts_text or intent, base_url, voice=voice,
+                                 model_tier=model_tier, instruct=d.instruct,
+                                 temperature=d.temperature)
             if wav:
                 wav = _normalize_voice_wav(wav)           # level live TTS to match the banks
                 if tts_text:
                     _save_and_cache(voice, tts_text, wav, variant)
                 path = _write_temp_wav(wav)
                 ephemeral = True
+                digest_delivered = bool(digest_n)
 
         if path is None:
             # No bank/cache hit and no live voice (TTS_ENGINE=none, or synth failed/
@@ -283,6 +358,10 @@ class AudioAdapter(NotificationAdapter):
             path = pick_bank_clip(voice, intent)
             if path is None:
                 return False
+
+        if digest_n and digest_delivered:
+            from nhj import orchestration
+            orchestration.clear_digest(digest_n)
 
         # The single point speed is applied — by resampling at playback. Resampling shifts
         # pitch (faster = higher); a pitch-preserving time-stretch would need a DSP dep we

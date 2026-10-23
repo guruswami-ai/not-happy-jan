@@ -46,6 +46,16 @@ _DEFAULTS   = {"ok": "Done.", "err": "Something failed.", "warn": "Heads up.",
                "attn": "Your attention is needed.", "celebrate": "Milestone reached.", "step": ""}
 
 
+def source_label(cwd: str, remote: bool = False) -> str:
+    """Who is speaking: the project dir name, prefixed by this host when dispatching to a
+    remote NHJ daemon (so a fleet's displays can tell sessions on different machines apart)."""
+    proj = os.path.basename((cwd or "").rstrip("/")) or ""
+    if remote:
+        import socket
+        return f"{socket.gethostname().split('.')[0]}:{proj}".strip(":")
+    return proj
+
+
 def _log(msg: str) -> None:
     try:
         import datetime
@@ -172,7 +182,7 @@ def main() -> int:
     # sessions. This is immediate and independent of the marker scan below.
     try:
         from nhj.state import get_flag
-        if get_flag("muzak"):
+        if get_flag("muzak", True):
             from nhj import inference_muzak
             inference_muzak.mark_idle(sid)
     except Exception:
@@ -244,6 +254,7 @@ def main() -> int:
             continue
         if unknown:
             _log(f"[{who}:{intent}] ignoring unknown options {unknown}")
+        ev.source = source_label(payload.get("cwd", ""), remote=bool(remote_url))
 
         sent = _fire_remote(remote_url, ev) if remote_url else _fire_local(ev)
         if sent:

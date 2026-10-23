@@ -27,14 +27,17 @@ your mouse or a flash on a pixel display to match — all **100% on your own mac
 > [Open an issue](https://github.com/guruswami-ai/not-happy-jan/issues/new/choose) or
 > [start a discussion](https://github.com/guruswami-ai/not-happy-jan/discussions). The
 > **minimal install speaks instantly** with the bundled voice bank (no downloads); the
-> full live experience wants an Apple-Silicon Mac and a one-off ~5 GB of local models.
+> full live experience wants a one-off ~5 GB of local models: Apple Silicon (MLX) or a
+> Linux/NVIDIA box ([Linux guide](docs/linux.md)).
 
 ## What you'll experience
 
 - 🎷 **Hold music** plays while the agent is busy and pauses the instant it's done — a zero-attention "still working / finished" signal.
 - 👩 **Jan** handles routine "all done". 🧑‍💼 **Bazza** escalates warnings. 📣 **Karren** takes over when it breaks — she is *NOT. HAPPY. JAN.*
 - 🎚️ **Tune each character** — boganism, competence, chaos — just by asking Claude in plain language.
-- 📟 **Fan out across devices** you already have — a haptic mouse, $60 pixel clocks, a LaMetric, a physical bell — or nothing but your speakers.
+- 📟 **Fan out across devices** you already have — a haptic mouse, $60 pixel clocks, a LaMetric, a Vestaboard, a physical bell — or nothing but your speakers.
+- 🧭 **Many agents at once.** Alerts say *which* session spoke, workers' completions chime while the orchestrator you are waiting on keeps the music, and voice can be switched on per project → **[Multi-agent orchestration](docs/orchestration.md)**.
+- 🔌 **Not just Claude Code** — opencode, Qwen Code, Grok Build, Codex, Gemini, Kimi and others → **[Other agent CLIs](docs/other-clis.md)**.
 
 → Meet the cast and the one-word modes: **[Characters & dials](docs/characters.md)** · **[Modes](docs/modes.md)**
 
@@ -72,8 +75,10 @@ The MCP server always binds to `127.0.0.1`; LAN access is an explicit opt-in
 nhj uninstall          # stops services, removes runtime/config/models/hooks; --yes to skip the prompt
 ```
 
-**Requirements:** macOS Apple Silicon (M1+), Python 3.10+, ~8 GB RAM (16 recommended),
-~5 GB disk. The alpha is Apple-Silicon-only; `TTS_ENGINE=none` runs text-only.
+**Requirements:** Python 3.10+, ~8 GB RAM (16 recommended), ~5 GB disk. **macOS (Apple Silicon)** runs the
+local Qwen3-TTS voice on MLX; **Linux** runs live zero-shot voices through an
+[audio.cpp](https://github.com/0xshug0/audio.cpp) server (CUDA) with `systemd --user` services: see the
+**[Linux guide](docs/linux.md)**. Every platform also works with the bundled voice bank or `TTS_ENGINE=none`.
 
 → **[Requirements & tiers](docs/minimum-specs.md)** · **[Install profiles](docs/install-profiles.md)** · **[Dynamic voices](docs/dynamic-voices.md)**
 
@@ -95,6 +100,7 @@ nhj mode rave                     # one-word vibe switch; nhj status to see curr
 - **New here** → [What is NHJ?](docs/what-is-nhj.md) — the full story in plain language
 - **Trying it / choosing a profile** → [Requirements & tiers](docs/minimum-specs.md) · [Install profiles](docs/install-profiles.md) · [Quick start](docs/quickstart.md)
 - **Living in it** → [Characters & dials](docs/characters.md) · [Modes](docs/modes.md) · [Audio & hold music](docs/AUDIO-STANDARD.md)
+- **Linux / non-Mac hosts** → [Linux guide](docs/linux.md) · **Other CLIs** → [Other agent CLIs](docs/other-clis.md) · **Several agents** → [Orchestration](docs/orchestration.md)
 - **Wiring up devices & agents** → [Integration](docs/integration.md) · [AWTRIX display](docs/awtrix-display-setup.md) · [Haptic mouse](docs/haptic-mouse-setup.md) · [Devices](docs/devices/README.md)
 - **Customizing** → [Dynamic voices](docs/dynamic-voices.md) · [Configuration](docs/configuration.md)
 - **Building on it** → [Architecture](docs/ARCHITECTURE.md) · [Developer guide](docs/DEVELOPER-GUIDE.md) · [Contributing](CONTRIBUTING.md)

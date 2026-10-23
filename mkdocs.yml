@@ -74,6 +74,7 @@ nav:
   - Getting started:
       - Requirements & tiers: minimum-specs.md
       - Install profiles: install-profiles.md
+      - Linux & other hosts: linux.md
       - Quick start: quickstart.md
   - The experience:
       - Characters & dials: characters.md
@@ -81,6 +82,8 @@ nav:
       - Audio & hold music: AUDIO-STANDARD.md
   - Integrate:
       - Agents, hooks & devices: integration.md
+      - Other agent CLIs: other-clis.md
+      - Multi-agent orchestration: orchestration.md
       - AWTRIX pixel display: awtrix-display-setup.md
       - Haptic mouse: haptic-mouse-setup.md
       - Devices overview: devices/README.md
