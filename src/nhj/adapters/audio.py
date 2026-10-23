@@ -268,7 +268,7 @@ class AudioAdapter(NotificationAdapter):
         # the result never collide and the music drops under both.
         try:
             from nhj.state import get_flag
-            if get_flag("muzak"):
+            if get_flag("muzak", True):
                 ret = pick_return_clip()
                 if ret:
                     _emit_voice(ret, gain=0.9)

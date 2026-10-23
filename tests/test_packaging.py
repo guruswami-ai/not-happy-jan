@@ -176,7 +176,8 @@ def test_install_hook_descriptions_and_timeouts(tmp_path, monkeypatch):
     cli.install_hook(settings)
 
     hooks = json.loads(settings.read_text())["hooks"]
-    assert set(hooks) == {"Stop", "StopFailure", "UserPromptSubmit", "SessionEnd"}
+    assert set(hooks) == {"Stop", "Notification", "StopFailure", "UserPromptSubmit", "SessionEnd"}
+    assert hooks["Notification"][0]["hooks"][0]["args"] == ["-m", "nhj.notify_hook"]
     for event, entries in hooks.items():
         h = entries[0]["hooks"][0]
         assert "description" in h, f"{event}: missing description"

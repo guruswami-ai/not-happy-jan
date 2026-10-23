@@ -182,7 +182,7 @@ def main() -> int:
     # sessions. This is immediate and independent of the marker scan below.
     try:
         from nhj.state import get_flag
-        if get_flag("muzak"):
+        if get_flag("muzak", True):
             from nhj import inference_muzak
             inference_muzak.mark_idle(sid)
     except Exception:

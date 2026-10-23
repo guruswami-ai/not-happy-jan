@@ -34,13 +34,34 @@ def test(
     app.print(f"[green]✓[/green] Queued [bold]{intent}[/bold]" + (f": {message}" if message else ""))
 
 
-# NHJ's four Claude Code hooks. Stop = the [vibes:] voice/feedback; StopFailure =
+@cli.command()
+def vibe(
+    intent: str = typer.Argument("ok", help="Intent: ok|err|warn|attn|celebrate|step"),
+    message: str = typer.Option("", "--message", "-m"),
+    source: str = typer.Option("", "--source", "-s", help="who is speaking, e.g. 'reachy' or 'hog11:reachy'"),
+    character: str = typer.Option("", "--character", "-c", help="explicit character (jan|bazza|karren)"),
+):
+    """Fire a vibe from any agent or script (opencode plugin, cron, a shell one-liner)."""
+    from nhj import event
+    from nhj.queue_manager import QueueManager
+    try:
+        ev = event.validate(intent, message=message, character=character, source=source)
+    except event.VibeValidationError as e:
+        app.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+    qm = QueueManager()
+    qm.add(**ev.to_kwargs())
+    qm.start_worker_if_needed()
+
+
+# NHJ's five Claude Code hooks (Notification catches a session blocked on you). Stop = the [vibes:] voice/feedback; StopFailure =
 # immediate idle mark on API errors; UserPromptSubmit + SessionEnd = the inference-muzak
 # busy-set (ref-counted across sessions) + secret guard.
 # Module names — run via `python -m`, so hooks work from a checkout OR a wheel
 # install (no src/nhj/*.py path baked into settings.json).
 _HOOK_WIRING = {
     "Stop":             "nhj.hook",
+    "Notification":     "nhj.notify_hook",
     "StopFailure":      "nhj.prompt_hook",
     "UserPromptSubmit": "nhj.prompt_hook",
     "SessionEnd":       "nhj.prompt_hook",
@@ -52,6 +73,8 @@ _HOOK_WIRING = {
 _HOOK_META = {
     "Stop":             {"description": "NHJ: speak [vibes:] markers and pause inference muzak",
                          "timeout": 30},
+    "Notification":     {"description": "NHJ: permission prompts, questions and idle reminders",
+                         "timeout": 10},
     "StopFailure":      {"description": "NHJ: mark session idle after Claude Code API errors",
                          "timeout": 10},
     "UserPromptSubmit": {"description": "NHJ: start inference muzak and scan for leaked secrets",

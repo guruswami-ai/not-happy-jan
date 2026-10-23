@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -78,8 +79,18 @@ def _lock():
 
 
 def _env_token(cfg: dict) -> str:
+    """The bearer token: the process env first, then ``~/.env`` (where this host keeps its
+    shared service keys), so hook-spawned workers need no secret copied into NHJ's own .env."""
     name = cfg.get("token_env") or "BIFROST_KV_KEY"
-    return os.environ.get(name, "")
+    if os.environ.get(name):
+        return os.environ[name]
+    try:
+        for line in (Path.home() / ".env").read_text().splitlines():
+            if line.startswith(f"{name}="):
+                return line.split("=", 1)[1].strip().strip("\"'")
+    except OSError:
+        pass
+    return ""
 
 
 def _send_bifrost(cfg: dict, text: str) -> None:

@@ -104,3 +104,19 @@ def test_notification_hook_maps_events(monkeypatch, kind, intent):
         {"notification_type": kind, "cwd": "/home/paul/reachy", "message": "ignored"})))
     assert notify_hook.main() == 0
     assert fired[0].intent == intent and fired[0].source == "reachy"
+
+
+def test_stop_hook_unwinds_hold_music_on_a_fresh_install(tmp_path, monkeypatch):
+    """Regression: prompt_hook defaults `muzak` to ON, so the Stop hook must too — otherwise a
+    session with no saved flag starts the hold music and is never marked idle."""
+    from nhj import inference_muzak
+    monkeypatch.setenv("NHJ_STATE_FILE", str(tmp_path / "state.json"))      # no saved flags
+    idle = []
+    monkeypatch.setattr(inference_muzak, "mark_idle", lambda sid="": idle.append(sid))
+    monkeypatch.setattr(hook, "_log", lambda m: None)
+    monkeypatch.setattr(hook, "_fire_local", lambda ev: True)
+    monkeypatch.setenv("NHJ_HOOK_WAIT", "0.05")
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(
+        {"session_id": "s1", "cwd": "/x/proj", "transcript_path": str(tmp_path / "none.jsonl")})))
+    hook.main()
+    assert idle == ["s1"]
