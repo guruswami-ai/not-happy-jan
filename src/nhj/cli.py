@@ -627,7 +627,9 @@ def mute():
 def audio_devices():
     """List audio OUTPUT devices and which one the mixer will use (NHJ_OUTPUT_DEVICE)."""
     import sounddevice as sd
+    from dotenv import load_dotenv
     from nhj import duck_player
+    load_dotenv(resources.env_file())      # the mixer daemon reads .env too; show what it will use
     devs = sd.query_devices()
     chosen = duck_player.output_device(devs)
     default = sd.default.device[1]
