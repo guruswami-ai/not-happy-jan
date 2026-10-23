@@ -259,6 +259,12 @@ def _stop_nhj_services() -> list[str]:
             if p.exists():
                 p.unlink(missing_ok=True)
                 removed.append(p.name)
+    unit = Path.home() / ".config" / "systemd" / "user" / _MCP_UNIT
+    if _sh.which("systemctl") and unit.exists():              # Linux: stop + remove the user unit
+        subprocess.run(["systemctl", "--user", "disable", "--now", _MCP_UNIT], capture_output=True)
+        unit.unlink(missing_ok=True)
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+        removed.append(unit.name)
     if _sh.which("pkill"):                                    # kill stray on-demand procs
         for pat in ("nhj.tts_server", "nhj.mcp_server", "nhj.worker",
                     "nhj.inference_muzak", "ocker-bogan-nano"):
@@ -615,6 +621,36 @@ def mute():
     """Silence all feedback until `nhj unmute`."""
     from nhj.state import set_flag
     set_flag("mute", True); app.print("[yellow]🔇 muted[/yellow] — run `nhj unmute` to restore")
+
+
+@cli.command()
+def voice(
+    action: str = typer.Argument("status", help="on | off | clear | status"),
+    project: str = typer.Option("", "--project", "-p", help="project name (or host:project)"),
+    here: bool = typer.Option(False, "--here", help="the current directory's project (default)"),
+    global_: bool = typer.Option(False, "--global", "-g", help="the global rule instead of a project"),
+):
+    """Opt a project in or out of the voice channel (TTS + hold music).
+
+    Silent channels (Vestaboard, displays, haptics) are unaffected. Precedence: project rule
+    > global rule > config `voice.default`. `nhj voice` shows the current rules.
+    """
+    from nhj import gate
+    action = action.lower()
+    if action == "status":
+        d = gate.describe()
+        app.print(f"default: [bold]{d['default']}[/bold]   global: [bold]{d['global'] or '-'}[/bold]")
+        for k, v in sorted(d["projects"].items()):
+            app.print(f"  {k}: {v}")
+        here_name = Path.cwd().name
+        app.print(f"here ({here_name}): voice is [bold]{'ON' if gate.voice_allowed(here_name) else 'off'}[/bold]")
+        return
+    if action not in ("on", "off", "clear"):
+        app.print("[red]action must be on | off | clear | status[/red]")
+        raise typer.Exit(2)
+    target = None if global_ else (project or Path.cwd().name)
+    gate.set_rule(None if action == "clear" else action, target)
+    app.print(f"[green]✓[/green] voice {action} for {'ALL (global)' if global_ else target}")
 
 
 @cli.command()
@@ -1119,6 +1155,47 @@ def _install_mcp_launchagent(listen: str, port: int) -> Path:
     return dest
 
 
+_MCP_UNIT = "nhj-mcp.service"
+
+
+def _mcp_unit_text(python: str, listen: str, port: int, workdir: str, log: str) -> str:
+    """systemd --user unit for the persistent streamable-HTTP MCP ingest daemon (Linux)."""
+    return f"""[Unit]
+Description=Not-Happy-Jan MCP ingest (streamable-http on {listen}:{port})
+After=network.target
+
+[Service]
+ExecStart={python} -m nhj.mcp_server
+WorkingDirectory={workdir}
+Environment=NHJ_TRANSPORT=streamable-http
+Environment=NHJ_HOST={listen}
+Environment=NHJ_PORT={port}
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:{log}
+StandardError=append:{log}
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def _systemctl(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
+
+
+def _install_mcp_systemd(listen: str, port: int) -> Path:
+    unit = Path.home() / ".config" / "systemd" / "user" / _MCP_UNIT
+    unit.parent.mkdir(parents=True, exist_ok=True)
+    unit.write_text(_mcp_unit_text(str(_PYTHON), listen, port, str(resources.data_dir()),
+                                   str(resources.log_dir() / "mcp.log")))
+    for step in (("daemon-reload",), ("enable", "--now", _MCP_UNIT)):
+        r = _systemctl(*step)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or f"systemctl {step[0]} failed").strip())
+    return unit
+
+
 @cli.command("install-mcp-service")
 def install_mcp_service(
     listen: str = typer.Option(
@@ -1128,19 +1205,24 @@ def install_mcp_service(
     ),
     port: int = typer.Option(8765, "--port"),
 ):
-    """Install a persistent streamable-HTTP MCP LaunchAgent on macOS."""
+    """Install a persistent streamable-HTTP MCP service (LaunchAgent on macOS, systemd --user on Linux)."""
     import platform
+    import shutil as _sh
 
-    if platform.system() != "Darwin":
-        app.print("[yellow]The persistent MCP LaunchAgent is macOS-only.[/yellow]")
+    if platform.system() == "Darwin":
+        install, kind = _install_mcp_launchagent, "LaunchAgent"
+    elif _sh.which("systemctl"):
+        install, kind = _install_mcp_systemd, "systemd user service"
+    else:
+        app.print("[yellow]No supported service manager (launchd or systemd) found.[/yellow]")
         raise typer.Exit(1)
     try:
-        dest = _install_mcp_launchagent(listen, port)
+        dest = install(listen, port)
     except (OSError, RuntimeError) as exc:
-        app.print(f"[red]MCP LaunchAgent installation failed:[/red] {exc}")
+        app.print(f"[red]MCP {kind} installation failed:[/red] {exc}")
         raise typer.Exit(1)
     app.print(
-        f"[green]✓[/green] MCP LaunchAgent loaded ({dest.name}) — "
+        f"[green]✓[/green] MCP {kind} loaded ({dest.name}) — "
         f"streamable-http on {listen}:{port}"
     )
     if listen not in ("127.0.0.1", "::1", "localhost"):

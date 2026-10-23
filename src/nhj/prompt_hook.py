@@ -72,7 +72,9 @@ def main() -> int:
                 _seen_set(sid, hashlib.sha1(prev.encode()).hexdigest() if prev else "")
             except Exception:
                 pass
-            if get_flag("muzak", True):             # on by default — the ambient "still thinking" cue
+            from nhj import gate
+            from nhj.hook import source_label
+            if get_flag("muzak", True) and gate.voice_allowed(source_label(payload.get("cwd", ""))):
                 inference_muzak.mark_busy(sid)      # this session is burning tokens → play
             if get_flag("secret_guard", False):    # opt-in; enable with: nhj set secret_guard on
                 _scold_for_secret(payload.get("prompt", ""))

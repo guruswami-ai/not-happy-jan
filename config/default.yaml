@@ -98,6 +98,13 @@ adapters:
   - divoom      # Divoom Times Gate / Times Frame — enabled if DIVOOM_DEVICE_IP set
   - audio       # TTS synthesis + afplay — always last
 
+# Voice opt-in. Silent adapters (board, displays, haptics) always fire; the voice channel
+# (TTS + hold music) is gated per project so parallel sessions do not all talk at once.
+# `nhj voice on|off [--here|--project NAME|--global]` sets rules; precedence is
+# project rule > global rule > this default ("on" keeps upstream behaviour).
+voice:
+  default: on
+
 # audio.cpp zero-shot TTS (Breeze-TTS on CUDA) — used when TTS_ENGINE=audiocpp.
 # `voices` maps an NHJ character voice to a voice enrolled in the server's --voice-dir
 # (a <name>.wav reference clip plus a <name>.txt transcript beside it). Tune by listening.

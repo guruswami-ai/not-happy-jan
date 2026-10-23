@@ -55,7 +55,12 @@ def _dispatch(task, adapters) -> None:
     # [Jan:ok]/[Bazza:err] explicitly name the character; [vibes:ok] auto-routes by intent.
     character = character_by_name(who, intent) if who else resolve_character(intent)
 
+    from nhj import gate
+    voice_ok = gate.voice_allowed(source)
+
     for adapter in adapters:
+        if getattr(adapter, "channel", "") == "voice" and not voice_ok:
+            continue   # this project has not opted in to voice (nhj voice on)
         try:
             adapter.fire(
                 intent=intent,

@@ -251,6 +251,8 @@ def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> Non
 # Adapter
 # ---------------------------------------------------------------------------
 class AudioAdapter(NotificationAdapter):
+    channel = "voice"   # gated per project (nhj.gate); silent adapters are not
+
     def available(self) -> bool:
         # The bundled bare-marker bank means the adapter can speak even on a minimal
         # install. TTS_ENGINE=none only disables LIVE synthesis, not the bank.
