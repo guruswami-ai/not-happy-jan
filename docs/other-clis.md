@@ -28,7 +28,7 @@ snippet as a starting point and run the smoke test before relying on it.
 | CLI | Finished | Needs you | Error | Hold music | Status |
 |---|---|---|---|---|---|
 | **Claude Code** | `Stop` | `Notification` | `StopFailure` | yes (`UserPromptSubmit` + `Stop`) | **Verified** |
-| **opencode** | `session.idle` | `permission.asked`, `question.asked` | `session.error` | yes (`session.status`) | Error path **verified** live (1.17.13); the rest **simulated** |
+| **opencode** | `session.idle` | `permission.asked`, `question.asked` | `session.error` | yes (`session.status`) | **Verified** live on 1.19.4: finished (+ music), permission, and (on 1.17.13) error. `question.asked` only simulated |
 | Qwen Code | `Stop` | `Notification` | `StopFailure` | yes | Documented |
 | Grok Build (xAI) | `Stop` | `Notification` (semantics undocumented) | `StopFailure` | yes | Documented |
 | Codex CLI | `notify` / `Stop` | `PermissionRequest` hook | none | `Stop` only | Documented |
@@ -131,6 +131,12 @@ or set `NHJ_BIN`). It maps `session.status` busy → `nhj busy`, `session.idle` 
 published event list but is delivered in practice; older builds called the permission event
 `permission.updated`, which the plugin also accepts. `NHJ_OPENCODE_DEBUG=1` logs every event type.
 
+Verified live against opencode 1.19.4 with a free-tier model (the free tier needs opencode 1.18 or newer): a plain
+turn produced `session.created` → `session.status` (busy, then idle) → `session.idle`, which started and stopped the
+hold music and announced "opencode is done"; a prompt that made the model call the `bash` tool produced
+`permission.asked` → `permission.replied` → `session.idle`, and the board read "NEEDS YOU … OPENCODE NEEDS YOUR PERMISSION".
+The event names were unchanged between 1.17.13 and 1.19.4.
+
 ## Goose, Cursor, Vibe, Aider (minimal)
 
 - **Goose**: a hooks plugin at `~/.agents/plugins/nhj/hooks/hooks.json` (plus `plugin.json`) with `Stop` → `nhj idle; nhj vibe ok`
@@ -151,6 +157,7 @@ tool (the model fires it) or wrapping the command (`my-agent ...; nhj vibe ok`) 
 
 1. `nhj audio-devices` and `nhj test ok` confirm the speaker and board work before blaming the CLI.
 2. Run the CLI non-interactively where it has such a mode (`codex exec`, `gemini -p`, `qwen -p`, `opencode run`, `pi -p`),
-   and watch for the event: `tail -f` the NHJ `hook.log` / `worker.log` (`nhj` logs live under the platform log dir).
+   with **stdin closed (`</dev/null`)**: several of these read piped stdin to the end, so under a script or tool runner whose
+   stdin is an open pipe they appear to hang before doing anything (`opencode run` did exactly this). Then watch for the event: `tail -f` the NHJ `hook.log` / `worker.log` (`nhj` logs live under the platform log dir).
 3. Check `nhj` sees the session: `python -c "from nhj import inference_muzak as m; print(m._read())"` shows the busy set.
 4. Headless modes do not always fire every hook (see each section): test the interactive path too.
