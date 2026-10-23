@@ -10,7 +10,9 @@ export TTS_ENGINE=audiocpp            # in the NHJ .env
 
 `config/default.yaml` → `audiocpp:` sets the server URL, the directory holding each voice's
 `<name>.wav` + `<name>.txt` transcript, and the character → voice map
-(`jan → ozlady`, `bazza → ozbogan2`, `karren → karen` by default; tune by listening).
+(characters use their own name; `jan-whispering → jan_whispering`). Enrol the real NHJ voices by
+copying `voices/<name>/ref.wav` and `ref.txt` (from `nhj setup-media`) into the server's voice dir as
+`<name>.wav` / `<name>.txt`; no server restart is needed.
 Each request sends that voice's own transcript as `reference_text`. An out-of-VRAM request
 returns HTTP 200 with an empty body; NHJ treats that as a failure and falls back to the
 bundled clip bank.
@@ -53,3 +55,15 @@ nhj uninstall                      # removes the unit too
 Agents on other machines (or without hooks) post events to `http://HOST:8765/mcp`
 (`nhj_vibe`). Binding beyond loopback is an explicit `--listen` choice: put it behind a
 firewall or an authenticated proxy first.
+
+## Dynamic lines: ocker-bogan-nano (llama.cpp in Docker)
+
+```bash
+nhj install-model --external-server      # downloads the 986 MB GGUF, writes NHJ_DYNAMIC_* to .env
+docker compose -f deploy/linux/nhj-llm.compose.yml up -d     # 127.0.0.1:9991, CPU
+nhj dynamic-test
+```
+
+Measured on a Threadripper 2990WX: warm 0.3-0.4 s for a short line, up to ~3 s for a long one
+(first call after start ~2 s). The GPU variant is 0-0.3 s for about 1.6 GB of VRAM (see the comments
+in the compose file). The CPU default keeps the 3090 free for Breeze and the S2S stack.

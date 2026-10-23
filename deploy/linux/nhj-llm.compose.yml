@@ -1,0 +1,14 @@
+# ocker-bogan-nano (1.5B, Q4_K_M) served by llama.cpp for NHJ dynamic mode.
+#   nhj install-model --external-server        # downloads the GGUF + writes .env
+#   docker compose -f deploy/linux/nhj-llm.compose.yml up -d
+# CPU by default (keeps the GPU free for TTS / S2S). For the GPU: use the :server-cuda image,
+# add `gpus: all` and `-ngl 99` to the command (costs ~1.2 GB VRAM).
+services:
+  nhj-llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: nhj-llm
+    restart: unless-stopped
+    ports: ["127.0.0.1:9991:8080"]
+    volumes: ["${HOME}/.cache/not-happy-jan/ocker-bogan-nano:/models:ro"]
+    command: ["-m", "/models/ocker-bogan-nano-Q4_K_M.gguf", "--alias", "ocker-bogan-nano",
+              "--host", "0.0.0.0", "--port", "8080", "-c", "2048", "-t", "8", "--no-webui"]

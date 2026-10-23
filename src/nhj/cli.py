@@ -925,6 +925,9 @@ def install_model(
     port: int = typer.Option(9991, "--port"),
     service: bool = typer.Option(True, "--service/--no-service",
                                  help="install a LaunchAgent so the server is always up (macOS)"),
+    external: bool = typer.Option(False, "--external-server",
+                                  help="you serve the GGUF yourself (Docker, another host): skip the "
+                                       "llama-server check and the service install"),
 ):
     """Install ocker-bogan-nano — NHJ's bundled fine-tuned voice brain for dynamic mode.
 
@@ -934,7 +937,7 @@ def install_model(
     Cross-platform — needs `llama-server` (brew install llama.cpp, or build llama.cpp).
     """
     import shutil
-    if not shutil.which("llama-server"):
+    if not external and not shutil.which("llama-server"):
         app.print("[yellow]llama-server (llama.cpp) not found.[/yellow] Install it with "
                   "[bold]brew install llama.cpp[/bold] (macOS) or build from "
                   "https://github.com/ggml-org/llama.cpp — then re-run.")
@@ -959,7 +962,10 @@ def install_model(
     app.print(f"[green]✓[/green] model ready  ·  [green]✓[/green] .env → dynamic mode on (:{port})")
 
     import platform
-    if service and platform.system() == "Darwin":
+    if external:
+        app.print(f"[dim]external server: serve {model_path} as 'ocker-bogan-nano' on :{port} "
+                  f"(see docs/linux-nvidia.md)[/dim]")
+    elif service and platform.system() == "Darwin":
         dest = _install_llm_launchagent(model_path, port)
         app.print(f"[green]✓[/green] LaunchAgent loaded ({dest.name}) — starts on login + now")
     else:

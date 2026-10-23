@@ -107,11 +107,13 @@ voice:
 
 # audio.cpp zero-shot TTS (Breeze-TTS on CUDA) — used when TTS_ENGINE=audiocpp.
 # `voices` maps an NHJ character voice to a voice enrolled in the server's --voice-dir
-# (a <name>.wav reference clip plus a <name>.txt transcript beside it). Tune by listening.
+# (a <name>.wav reference clip plus a <name>.txt transcript beside it). The real NHJ
+# characters are enrolled by copying voices/<name>/ref.wav + ref.txt in as <name>.wav/.txt
+# (24 kHz mono, author transcripts); anything not listed here uses its own name.
 audiocpp:
   url: http://127.0.0.1:8092         # (env: NHJ_AUDIOCPP_URL)
   voices_dir: ~/s2s/voices           # transcripts are read from here (env: NHJ_AUDIOCPP_VOICES)
-  voices: { jan: ozlady, bazza: ozbogan2, karren: karen }
+  voices: { jan-whispering: jan_whispering }   # others use the same name; audio.cpp ids avoid "-"
 
 # Vestaboard (the `claky` adapter). Disabled unless a transport target is set.
 # bifrost transport posts to the gateway's claky-send_message MCP tool (token read from
