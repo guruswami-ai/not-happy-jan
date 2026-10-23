@@ -41,6 +41,7 @@ def nhj_vibe(
     speed: float = 1.0,
     voice_variant: str = "",
     character: str = "",
+    source: str = "",
 ) -> str:
     """Trigger a multi-sensory feedback event (haptic + visual + TTS).
 
@@ -54,12 +55,13 @@ def nhj_vibe(
         speed:         TTS speed multiplier (0.5–2.0). Backend-dependent.
         voice_variant: Override character voice variant if supported.
         character:     Explicit character override (e.g. "jan"); "" routes by intent.
+        source:        Which session is speaking, e.g. "hog11:reachy" (shown on displays).
     """
     from nhj import event
     try:
         ev = event.validate(intent, message=message, vibe_level=vibe_level, pretext=pretext,
                             verbosity=verbosity, emotion=emotion, speed=speed,
-                            voice_variant=voice_variant, character=character)
+                            voice_variant=voice_variant, character=character, source=source)
     except event.VibeValidationError as e:
         return f"[nhj:error] {e}"
     qm = QueueManager()

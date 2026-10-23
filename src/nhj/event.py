@@ -14,6 +14,8 @@ Fields (all optional except ``intent``):
   speed          TTS speed multiplier, 0.5–2.0   (applied by the audio layer — see #4)
   voice_variant  optional per-character voice override
   character      explicit character ("" → route by intent)
+  source         who is speaking: "project" or "host:project" ("" → unknown); set by the hook /
+                 remote agent so displays and voices can say WHICH session the event came from
 """
 from __future__ import annotations
 
@@ -42,6 +44,7 @@ class VibeEvent:
     speed: float = 1.0
     voice_variant: str = ""
     character: str = ""
+    source: str = ""
 
     def to_kwargs(self) -> dict:
         """Field dict — the exact keyword args for QueueManager.add and the MCP tool."""
@@ -79,7 +82,7 @@ def _as_enum(name: str, v, allowed: tuple[str, ...]) -> str:
 
 
 def validate(intent, *, message="", vibe_level=5, pretext="", verbosity="medium",
-             emotion="neutral", speed=1.0, voice_variant="", character="") -> VibeEvent:
+             emotion="neutral", speed=1.0, voice_variant="", character="", source="") -> VibeEvent:
     """Build a validated VibeEvent. Raises :class:`VibeValidationError` on a bad value.
 
     Coerces strings (inline marker options arrive as strings) and clamps enums to
@@ -95,6 +98,7 @@ def validate(intent, *, message="", vibe_level=5, pretext="", verbosity="medium"
         speed=_as_float("speed", speed, 0.5, 2.0),
         voice_variant=str(voice_variant or ""),
         character=str(character or "").strip().lower(),
+        source=str(source or "").strip()[:60],
     )
 
 

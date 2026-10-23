@@ -94,8 +94,21 @@ adapters:
   - lametric    # LaMetric Time — enabled if LAMETRIC_DEVICE_IP set
   - ulanzi      # ULANZI TC001 — enabled if ULANZI_DEVICE_IP set
   - esp32       # ESP32 bell — enabled if ESP32_BELL_URL set
+  - claky       # Vestaboard — enabled if claky.url (+ token env) or claky.host is set
   - divoom      # Divoom Times Gate / Times Frame — enabled if DIVOOM_DEVICE_IP set
   - audio       # TTS synthesis + afplay — always last
+
+# Vestaboard (the `claky` adapter). Disabled unless a transport target is set.
+# bifrost transport posts to the gateway's claky-send_message MCP tool (token read from
+# the env var named by token_env at send time); local transport uses the board's Local API.
+claky:
+  transport: bifrost       # bifrost | local                       (env: CLAKY_TRANSPORT)
+  url: ""                  # bifrost MCP URL, e.g. http://bifrost.example:8000/mcp  (env: CLAKY_URL)
+  token_env: BIFROST_KV_KEY
+  host: ""                 # board host for transport: local        (env: CLAKY_HOST)
+  key_env: VESTABOARD_LOCAL_KEY
+  intents: [ok, celebrate, warn, err, attn]   # `step` is left off: the board updates ~1 per 15 s
+  min_interval_s: 15
 
 # AWTRIX 3 / Ulanzi TC001 LED-matrix displays (the `ulanzi` adapter above).
 # Disabled unless `displays` is set (or ULANZI_MQTT_PREFIXES / ULANZI_HTTP_HOSTS in .env).

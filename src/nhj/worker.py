@@ -44,6 +44,7 @@ def _dispatch(task, adapters) -> None:
     emotion       = task.get("emotion", "neutral") or "neutral"
     voice_variant = task.get("voice_variant", "") or ""
     who           = task.get("character", "") or ""
+    source        = task.get("source", "") or ""
     speed = _parse_speed(task.get("speed", 1.0))
 
     # Full message = pretext + inline message
@@ -64,6 +65,7 @@ def _dispatch(task, adapters) -> None:
                 emotion=emotion,
                 voice_variant=voice_variant,
                 speed=speed,
+                source=source,
             )
         except Exception as e:
             print(f"[nhj] adapter {adapter.__class__.__name__} error: {e}",

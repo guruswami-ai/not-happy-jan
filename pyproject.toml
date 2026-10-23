@@ -66,6 +66,7 @@ haptic   = "nhj.adapters.haptic:HapticAdapter"
 lametric = "nhj.adapters.lametric:LaMetricAdapter"
 ulanzi   = "nhj.adapters.ulanzi:UlanziAdapter"
 esp32    = "nhj.adapters.esp32_bell:ESP32BellAdapter"
+claky    = "nhj.adapters.claky:ClakyAdapter"
 divoom   = "nhj.adapters.divoom:DivoomAdapter"
 
 [project.urls]
