@@ -21,6 +21,7 @@ import collections
 import json
 import os
 import random
+import sys
 import threading
 import time
 from pathlib import Path
@@ -158,6 +159,37 @@ class _Clip:
         self.data = data
         self.pos = 0
         self.gain = gain
+
+
+def output_device(devices=None):
+    """PortAudio output device for the mixer, or ``None`` for the system default.
+
+    ``NHJ_OUTPUT_DEVICE`` (else config ``playback.output_device``) is a device index or a
+    case-insensitive name substring ("reachy", "hdmi", "analog"...), so a Linux host with
+    several outputs (PipeWire sinks, USB speakers) is not stuck with whatever PortAudio
+    picked as default. Only output-capable devices match; the first match wins. An unknown
+    name falls back to the default with a warning rather than silencing the mixer.
+    """
+    want = os.getenv("NHJ_OUTPUT_DEVICE", "").strip()
+    if not want:
+        try:
+            from nhj import config
+            want = str(config.section("playback").get("output_device", "") or "").strip()
+        except Exception:
+            want = ""
+    if not want:
+        return None
+    if devices is None:
+        import sounddevice as sd
+        devices = sd.query_devices()
+    outs = [(i, d["name"]) for i, d in enumerate(devices) if d.get("max_output_channels", 0) > 0]
+    if want.isdigit() and int(want) in dict(outs):
+        return int(want)
+    for i, name in outs:
+        if want.lower() in name.lower():
+            return i
+    print(f"[nhj] output device {want!r} not found; using the system default", file=sys.stderr)
+    return None
 
 
 def _default_output_device() -> str:
@@ -310,7 +342,8 @@ class Mixer:
         import sounddevice as sd
         self._decoder.start()
         self._stream = sd.OutputStream(samplerate=SR, channels=CH, dtype="float32",
-                                       blocksize=BLOCK, callback=self._callback)
+                                       blocksize=BLOCK, callback=self._callback,
+                                       device=output_device())
         self._stream.start()
 
     def reopen(self) -> None:
@@ -328,7 +361,8 @@ class Mixer:
         except Exception:
             pass
         self._stream = sd.OutputStream(samplerate=SR, channels=CH, dtype="float32",
-                                       blocksize=BLOCK, callback=self._callback)
+                                       blocksize=BLOCK, callback=self._callback,
+                                       device=output_device())
         self._stream.start()
 
     def pause(self) -> None:

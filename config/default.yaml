@@ -98,6 +98,11 @@ adapters:
   - divoom      # Divoom Times Gate / Times Frame — enabled if DIVOOM_DEVICE_IP set
   - audio       # TTS synthesis + afplay — always last
 
+# Where the mixer plays. Empty = the system default output. Otherwise a device index or a
+# case-insensitive name part ("reachy", "hdmi", "analog"); see `nhj audio-devices`. (env: NHJ_OUTPUT_DEVICE)
+playback:
+  output_device: ""
+
 # Voice opt-in. Silent adapters (board, displays, haptics) always fire; the voice channel
 # (TTS + hold music) is gated per project so parallel sessions do not all talk at once.
 # `nhj voice on|off [--here|--project NAME|--global]` sets rules; precedence is

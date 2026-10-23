@@ -67,3 +67,18 @@ nhj dynamic-test
 Measured on a Threadripper 2990WX: warm 0.3-0.4 s for a short line, up to ~3 s for a long one
 (first call after start ~2 s). The GPU variant is 0-0.3 s for about 1.6 GB of VRAM (see the comments
 in the compose file). The CPU default keeps the 3090 free for Breeze and the S2S stack.
+
+## Choosing the output device
+
+The mixer opens one PortAudio stream. By default that is the system default, which on a
+multi-output PipeWire box may not be where your speakers are. List and choose:
+
+```bash
+nhj audio-devices                                   # marks the one in use
+echo 'NHJ_OUTPUT_DEVICE=hdmi' >> .env               # index or name part; or playback.output_device in config.yaml
+```
+
+To check objectively that sound reaches a sink (no ears needed), record its monitor:
+`pw-record -P stream.capture.sink=true --target <sink-name> out.wav` while playing a clip.
+NB: the mixer controller is started with its output sent to /dev/null; run
+`python -m nhj.inference_muzak` in a terminal to see its errors.

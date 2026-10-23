@@ -623,6 +623,22 @@ def mute():
     set_flag("mute", True); app.print("[yellow]🔇 muted[/yellow] — run `nhj unmute` to restore")
 
 
+@cli.command("audio-devices")
+def audio_devices():
+    """List audio OUTPUT devices and which one the mixer will use (NHJ_OUTPUT_DEVICE)."""
+    import sounddevice as sd
+    from nhj import duck_player
+    devs = sd.query_devices()
+    chosen = duck_player.output_device(devs)
+    default = sd.default.device[1]
+    for i, d in enumerate(devs):
+        if d["max_output_channels"] > 0:
+            tag = "→ USED" if i == (chosen if chosen is not None else default) else ""
+            app.print(f"{i:3d}  {d['name']}  [dim]{'(system default)' if i == default else ''}[/dim] [green]{tag}[/green]")
+    app.print("[dim]choose with NHJ_OUTPUT_DEVICE=<index or name part> in .env, "
+              "or playback.output_device in config.yaml[/dim]")
+
+
 @cli.command()
 def voice(
     action: str = typer.Argument("status", help="on | off | clear | status"),

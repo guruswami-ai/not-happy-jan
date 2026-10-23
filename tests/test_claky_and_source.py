@@ -98,6 +98,7 @@ def test_sender_waits_for_rate_limit_and_sends_only_newest(monkeypatch, board):
 def test_notification_hook_maps_events(monkeypatch, kind, intent):
     fired = []
     monkeypatch.setattr(hook, "_fire_local", lambda ev: fired.append(ev) or True)
+    monkeypatch.setattr(hook, "_log", lambda msg: None)   # do not write the real hook.log
     monkeypatch.delenv("NHJ_REMOTE_URL", raising=False)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(
         {"notification_type": kind, "cwd": "/home/paul/reachy", "message": "ignored"})))

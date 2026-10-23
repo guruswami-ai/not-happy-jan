@@ -88,3 +88,31 @@ def test_mcp_unit_text_is_a_valid_user_unit():
     assert "ExecStart=/venv/bin/python -m nhj.mcp_server" in t
     assert "NHJ_HOST=127.0.0.1" in t and "NHJ_PORT=8765" in t
     assert "WantedBy=default.target" in t and "Restart=on-failure" in t
+
+
+# ---- mixer output device selection -----------------------------------------
+from nhj import duck_player  # noqa: E402
+
+_DEVS = [
+    {"name": "HDA Intel: ALC1220 Analog (hw:0,0)", "max_output_channels": 6},
+    {"name": "microphone only", "max_output_channels": 0},
+    {"name": "HDMI 2 (hw:1,8)", "max_output_channels": 8},
+    {"name": "reachy", "max_output_channels": 128},
+]
+
+
+def test_output_device_default_when_unset(monkeypatch):
+    monkeypatch.delenv("NHJ_OUTPUT_DEVICE", raising=False)
+    assert duck_player.output_device(_DEVS) is None
+
+
+@pytest.mark.parametrize("want,idx", [("hdmi", 2), ("REACHY", 3), ("analog", 0), ("3", 3), ("2", 2)])
+def test_output_device_by_name_or_index(monkeypatch, want, idx):
+    monkeypatch.setenv("NHJ_OUTPUT_DEVICE", want)
+    assert duck_player.output_device(_DEVS) == idx
+
+
+def test_output_device_ignores_input_only_and_unknown_falls_back(monkeypatch, capsys):
+    monkeypatch.setenv("NHJ_OUTPUT_DEVICE", "microphone")        # exists, but has no outputs
+    assert duck_player.output_device(_DEVS) is None
+    assert "not found" in capsys.readouterr().err
