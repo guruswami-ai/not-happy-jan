@@ -98,6 +98,14 @@ adapters:
   - divoom      # Divoom Times Gate / Times Frame — enabled if DIVOOM_DEVICE_IP set
   - audio       # TTS synthesis + afplay — always last
 
+# audio.cpp zero-shot TTS (Breeze-TTS on CUDA) — used when TTS_ENGINE=audiocpp.
+# `voices` maps an NHJ character voice to a voice enrolled in the server's --voice-dir
+# (a <name>.wav reference clip plus a <name>.txt transcript beside it). Tune by listening.
+audiocpp:
+  url: http://127.0.0.1:8092         # (env: NHJ_AUDIOCPP_URL)
+  voices_dir: ~/s2s/voices           # transcripts are read from here (env: NHJ_AUDIOCPP_VOICES)
+  voices: { jan: ozlady, bazza: ozbogan2, karren: karen }
+
 # Vestaboard (the `claky` adapter). Disabled unless a transport target is set.
 # bifrost transport posts to the gateway's claky-send_message MCP tool (token read from
 # the env var named by token_env at send time); local transport uses the board's Local API.
