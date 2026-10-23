@@ -116,6 +116,32 @@ def idle(
     inference_muzak.mark_idle(session or sid)
 
 
+@cli.command()
+def finish(
+    intent: str = typer.Argument("ok", help="Intent: ok|err|warn|attn|celebrate|step"),
+    message: str = typer.Option("", "--message", "-m"),
+    source: str = typer.Option("", "--source", "-s", help="project label (default: from the payload cwd)"),
+):
+    """End a session's turn and announce it: `nhj idle` then `nhj vibe`, in that order, in ONE process.
+
+    Use this from a stop / error hook instead of `nhj idle; nhj vibe ...`: the hook's JSON payload is
+    on stdin only once, so a second command would lose the project and session. Doing the idle first
+    also guarantees a lone session's result is spoken, not chimed.
+    """
+    from nhj import event, inference_muzak
+    from nhj.queue_manager import QueueManager
+    label, sid = _hook_identity(source, _stdin_json())
+    inference_muzak.mark_idle(sid)
+    try:
+        ev = event.validate(intent, message=message, source=label)
+    except event.VibeValidationError as e:
+        app.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+    qm = QueueManager()
+    qm.add(**ev.to_kwargs())
+    qm.start_worker_if_needed()
+
+
 # NHJ's five Claude Code hooks (Notification catches a session blocked on you). Stop = the [vibes:] voice/feedback; StopFailure =
 # immediate idle mark on API errors; UserPromptSubmit + SessionEnd = the inference-muzak
 # busy-set (ref-counted across sessions) + secret guard.

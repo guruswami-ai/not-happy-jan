@@ -131,6 +131,13 @@ def _owner_pid() -> int | None:
     return None if comm in ("sh", "bash", "dash", "zsh", "fish") else ppid
 
 
+def _real_busy() -> bool:
+    """True if a real agent session is mid-turn, ignoring the synthetic never-expiring entry that
+    `nhj mode rave` / `nhj muzak start` adds to keep the music playing."""
+    _any_busy()                                  # evict stale / dead entries first
+    return any(s != _MANUAL for s in (_read().get("busy") or {}))
+
+
 def _any_busy() -> bool:
     """True if any session is mid-turn. Evicts stale entries as a side effect: ones older than
     the TTL, and ones whose owning agent process has died (a killed/crashed session never runs

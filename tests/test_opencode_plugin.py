@@ -33,7 +33,7 @@ def _run(tmp_path, events, min_seconds="0"):
     """))
     env = {**os.environ, "NHJ_BIN": str(fake), "NHJ_OPENCODE_MIN_SECONDS": min_seconds}
     subprocess.run([shutil.which("node"), str(script)], env=env, check=True, timeout=30)
-    return [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
+    return [json.loads(ln) for ln in log.read_text().splitlines()] if log.exists() else []
 
 
 def _cmds(calls):

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import time
 
 import pytest
 
@@ -240,3 +239,58 @@ def test_env_only_local_transport_is_effective_everywhere(monkeypatch):
     monkeypatch.setenv("CLAKY_TRANSPORT", "local"); monkeypatch.setenv("CLAKY_HOST", "10.0.0.9")
     assert claky._cfg()["transport"] == "local" and claky._cfg()["host"] == "10.0.0.9"
     assert claky.ClakyAdapter().available() is True
+
+
+# ---- second round of review findings ----------------------------------------
+import time as _time  # noqa: E402
+
+
+def test_manual_music_session_is_not_a_working_agent():
+    """`nhj mode rave` / `nhj muzak start` add a never-expiring __manual__ busy entry: it must keep the
+    music on but must not turn every real completion into a chime."""
+    mz._update(lambda d: d.setdefault("busy", {}).update({"__manual__": _time.time() + 10 * 365 * 86400}))
+    assert mz._any_busy() is True and mz._real_busy() is False
+    assert orchestration.voice_mode("ok") == "speak"
+    _busy("worker")
+    assert mz._real_busy() is True and orchestration.voice_mode("ok") == "chime"
+
+
+def test_claky_sender_does_not_lose_a_message_published_while_it_sends(tmp_path, monkeypatch):
+    from nhj.adapters import claky
+    monkeypatch.setattr(claky, "_pending", lambda: tmp_path / "pending")
+    monkeypatch.setattr(claky, "_last", lambda: tmp_path / "last")
+    monkeypatch.setattr(claky, "_lock", lambda: tmp_path / "lock")
+    monkeypatch.setattr(claky.config, "section", lambda n: {"transport": "local", "host": "h", "min_interval_s": 0})
+    sent = []
+
+    def send(cfg, text):
+        sent.append(text)
+        if text == "A":
+            claky._publish("B")          # a newer vibe arrives mid-send
+    monkeypatch.setattr(claky, "_send_local", send)
+    claky._publish("A")
+    assert claky.sender_main() == 0
+    assert sent == ["A", "B"] and not (tmp_path / "pending").exists()
+
+
+def test_playback_output_device_zero_from_config_is_honoured(monkeypatch):
+    from nhj import duck_player
+    monkeypatch.delenv("NHJ_OUTPUT_DEVICE", raising=False)
+    import nhj.config as cfgmod
+    monkeypatch.setattr(cfgmod, "section", lambda n: {"output_device": 0})
+    devs = [{"name": "first", "max_output_channels": 2}, {"name": "second", "max_output_channels": 2}]
+    assert duck_player.output_device(devs) == 0
+    monkeypatch.setattr(cfgmod, "section", lambda n: {"output_device": ""})
+    assert duck_player.output_device(devs) is None
+
+
+def test_finish_marks_idle_before_it_announces_and_uses_the_payload_once(monkeypatch):
+    order = []
+    from nhj import queue_manager
+    monkeypatch.setattr(mz, "mark_idle", lambda sid="": order.append(("idle", sid)))
+    monkeypatch.setattr(queue_manager.QueueManager, "add", lambda self, **kw: order.append(("vibe", kw["source"], kw["intent"])))
+    monkeypatch.setattr(queue_manager.QueueManager, "start_worker_if_needed", lambda self: None)
+    r = _run(["finish", "ok", "-m", "done"], {"session_id": "s9", "cwd": "/work/elsewhere"})
+    assert r.exit_code == 0 and r.output == ""
+    assert order == [("idle", "s9"), ("vibe", "elsewhere", "ok")]
+    assert _run(["finish", "bogus"], {"session_id": "s9"}).exit_code == 2

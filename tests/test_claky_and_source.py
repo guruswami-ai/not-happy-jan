@@ -37,7 +37,7 @@ def test_source_label_local_and_remote(monkeypatch):
 def test_wrap_fits_board_and_never_splits_words():
     text = claky.compose("attn", "needs your permission to run a very long command name", "reachy")
     lines = text.split("\n")
-    assert len(lines) <= claky.ROWS and all(len(l) <= claky.COLS for l in lines)
+    assert len(lines) <= claky.ROWS and all(len(ln) <= claky.COLS for ln in lines)
     assert lines[0].startswith("NEEDS YOU")
 
 

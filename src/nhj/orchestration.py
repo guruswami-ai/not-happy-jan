@@ -39,7 +39,7 @@ def voice_mode(intent: str) -> str:
     if mode() == "always-speak" or intent not in COMPLETION:
         return "speak"
     from nhj import inference_muzak
-    return "chime" if inference_muzak._any_busy() else "speak"
+    return "chime" if inference_muzak._real_busy() else "speak"
 
 
 def note_chime(source: str = "") -> None:

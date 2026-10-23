@@ -9,6 +9,7 @@ right moments can drive it. This page lists what each CLI offers, with copy-past
 |---|---|---|
 | `nhj vibe <intent> -m "text" [-s label]` | fire an event (voice, board, displays, haptics) | "finished", "needs you", "error" hooks |
 | `nhj busy` / `nhj idle` | start / stop the hold music for this session; joins the [multi-agent policy](orchestration.md) | "prompt submitted" and "stop" hooks |
+| `nhj finish <intent> -m "text"` | `idle` **then** `vibe` in one process (the payload is only on stdin once, and idle must land first so a lone session's result is spoken, not chimed) | the "stop" / "error" hook |
 | `nhj_vibe` MCP tool (`nhj serve-mcp`, or `http://host:8765/mcp`) | the model fires events itself | agents with MCP but no hooks |
 
 All three read the hook's JSON from stdin when there is one (for the project folder and session id),
@@ -51,9 +52,9 @@ These share the Claude Code hook shape (JSON on stdin with `session_id`, `cwd`, 
 ```json
 {"hooks": {
   "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "nhj busy", "timeout": 10}]}],
-  "Stop":             [{"hooks": [{"type": "command", "command": "nhj idle; nhj vibe ok -m 'Qwen done'", "timeout": 10}]}],
+  "Stop":             [{"hooks": [{"type": "command", "command": "nhj finish ok -m 'Qwen done'", "timeout": 10}]}],
   "Notification":     [{"hooks": [{"type": "command", "command": "nhj vibe attn -m 'Qwen needs you'", "timeout": 10}]}],
-  "StopFailure":      [{"hooks": [{"type": "command", "command": "nhj idle; nhj vibe err -m 'Qwen error'", "timeout": 10}]}]
+  "StopFailure":      [{"hooks": [{"type": "command", "command": "nhj finish err -m 'Qwen error'", "timeout": 10}]}]
 }}
 ```
 
@@ -71,13 +72,13 @@ event = "UserPromptSubmit"
 command = "nhj busy"
 [[hooks]]
 event = "Stop"
-command = "nhj idle; nhj vibe ok -m 'Kimi done'"
+command = "nhj finish ok -m 'Kimi done'"
 [[hooks]]
 event = "PermissionRequest"
 command = "nhj vibe attn -m 'Kimi needs approval'"
 [[hooks]]
 event = "StopFailure"
-command = "nhj idle; nhj vibe err -m 'Kimi error'"
+command = "nhj finish err -m 'Kimi error'"
 ```
 
 **Codex CLI** passes its `notify` payload as a single JSON **argument**, not on stdin, so use the wrapper:
@@ -98,7 +99,7 @@ redirect NHJ's output. `Notification` currently only reports tool-permission req
 ```json
 {"hooks": {
   "BeforeAgent": [{"matcher": "*", "hooks": [{"name": "nhj-busy", "type": "command", "command": "nhj busy >/dev/null", "timeout": 10000}]}],
-  "AfterAgent":  [{"matcher": "*", "hooks": [{"name": "nhj-ok", "type": "command", "command": "nhj idle >/dev/null; nhj vibe ok -m 'Gemini done' >/dev/null", "timeout": 10000}]}],
+  "AfterAgent":  [{"matcher": "*", "hooks": [{"name": "nhj-ok", "type": "command", "command": "nhj finish ok -m 'Gemini done' >/dev/null", "timeout": 10000}]}],
   "Notification":[{"matcher": "*", "hooks": [{"name": "nhj-attn", "type": "command", "command": "nhj vibe attn -m 'Gemini needs approval' >/dev/null", "timeout": 10000}]}]
 }}
 ```
@@ -139,7 +140,7 @@ The event names were unchanged between 1.17.13 and 1.19.4.
 
 ## Goose, Cursor, Vibe, Aider (minimal)
 
-- **Goose**: a hooks plugin at `~/.agents/plugins/nhj/hooks/hooks.json` (plus `plugin.json`) with `Stop` → `nhj idle; nhj vibe ok`
+- **Goose**: a hooks plugin at `~/.agents/plugins/nhj/hooks/hooks.json` (plus `plugin.json`) with `Stop` → `nhj finish ok`
   and `UserPromptSubmit` → `nhj busy`. `Stop` can force the agent to continue on exit code 2: keep NHJ's exit 0.
 - **Cursor CLI**: `~/.cursor/hooks.json` `{"version":1,"hooks":{"stop":[{"command":"./hooks/nhj-stop.sh"}]}}`; the script reads
   `status` (`completed|aborted|error`) from stdin and calls `nhj vibe ok|warn|err`. Reports say `stop` is not emitted in `-p` mode.

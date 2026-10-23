@@ -148,9 +148,13 @@ def sender_main() -> int:
             wait = 0
         if wait > 0:
             time.sleep(wait)
+        # Claim atomically (rename) BEFORE reading: a newer message that fire() publishes after
+        # this point lands in a fresh `pending` and is sent by the next iteration, not deleted.
+        claimed = pend.with_name(pend.name + ".claimed")
         try:
-            text = pend.read_text()
-            pend.unlink()
+            os.replace(pend, claimed)
+            text = claimed.read_text()
+            claimed.unlink()
         except OSError:
             break
         try:
@@ -159,6 +163,15 @@ def sender_main() -> int:
             print(f"[nhj] claky: send failed: {e!r}", file=sys.stderr)
         last.write_text(str(time.time()))
     return 0
+
+
+def _publish(text: str) -> None:
+    """Replace the pending message atomically (temp file + rename) so a sender never sees a
+    half-written one."""
+    pend = _pending()
+    tmp = pend.with_name(f"{pend.name}.tmp-{os.getpid()}")
+    tmp.write_text(text)
+    os.replace(tmp, pend)
 
 
 class ClakyAdapter(NotificationAdapter):
@@ -175,7 +188,7 @@ class ClakyAdapter(NotificationAdapter):
         allowed = _cfg().get("intents") or [i for i in HEADLINES if i != "step"]
         if intent not in allowed:
             return True   # configured to skip this intent — not a failure
-        _pending().write_text(compose(intent, message, source))
+        _publish(compose(intent, message, source))
         subprocess.Popen([sys.executable, "-m", "nhj.adapters.claky"], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return True

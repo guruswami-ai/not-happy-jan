@@ -174,7 +174,8 @@ def output_device(devices=None):
     if not want:
         try:
             from nhj import config
-            want = str(config.section("playback").get("output_device", "") or "").strip()
+            raw = config.section("playback").get("output_device")
+            want = "" if raw is None else str(raw).strip()      # 0 is a valid device index
         except Exception:
             want = ""
     if not want:
