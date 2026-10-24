@@ -145,9 +145,28 @@ def bank_clip_count(voice: str) -> int:
     return len(names)
 
 
+def _cache_backend_id() -> str:
+    """What will synthesize a cache miss right now — part of the cache identity,
+    so switching engine (or Piper model / OS voice / server URL) does not keep
+    serving the previous backend's audio until LRU eviction."""
+    engine = os.getenv("TTS_ENGINE", "qwen").lower()
+    if engine == "audiocpp":
+        return f"audiocpp:{_audiocpp_cfg().get('url', '')}"
+    if engine == "os":
+        return f"os:{sys.platform}:{(os.getenv('NHJ_OS_TTS_VOICE') or '').strip()}"
+    if engine == "piper":
+        return (f"piper:{os.getenv('NHJ_PIPER_MODEL', '')}:"
+                f"{(os.getenv('NHJ_PIPER_SPEAKER') or '').strip()}")
+    if engine == "none":
+        return "none"
+    return f"qwen:{os.getenv('NHJ_TTS_URL', '')}"   # model tier rides in `variant`
+
+
 def _cache_path(voice: str, text: str, variant: str = "") -> Path:
-    # variant (intensity band) keeps the same novel line cached separately per dial level
-    digest = hashlib.sha256(f"{voice}::{variant}::{text}".encode()).hexdigest()[:32]
+    # variant (intensity band) + backend identity keep the same novel line cached
+    # separately per dial level and per synthesis backend/settings.
+    digest = hashlib.sha256(
+        f"{voice}::{variant}::{_cache_backend_id()}::{text}".encode()).hexdigest()[:32]
     return _CLIPS_ROOT / "cache" / f"{digest}.wav"
 
 

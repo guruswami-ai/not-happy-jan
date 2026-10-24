@@ -83,6 +83,24 @@ def test_synth_piper_stub_and_missing_model(tmp_path, monkeypatch):
     assert audio.synth_piper("gday", str(tmp_path / "nope.onnx")) is None
 
 
+def test_cache_identity_includes_backend_and_settings(tmp_path, monkeypatch):
+    """Switching engine/model/voice must not serve the previous backend's cache
+    (Codex P2 on the CPU-tier PR)."""
+    monkeypatch.setattr(audio, "_CLIPS_ROOT", tmp_path)
+    monkeypatch.setenv("TTS_ENGINE", "qwen")
+    qwen = audio._cache_path("jan", "same line", "default")
+    monkeypatch.setenv("TTS_ENGINE", "os")
+    os_default = audio._cache_path("jan", "same line", "default")
+    monkeypatch.setenv("NHJ_OS_TTS_VOICE", "en-au")
+    os_voiced = audio._cache_path("jan", "same line", "default")
+    monkeypatch.setenv("TTS_ENGINE", "piper")
+    monkeypatch.setenv("NHJ_PIPER_MODEL", "/v/a.onnx")
+    piper_a = audio._cache_path("jan", "same line", "default")
+    monkeypatch.setenv("NHJ_PIPER_MODEL", "/v/b.onnx")
+    piper_b = audio._cache_path("jan", "same line", "default")
+    assert len({qwen, os_default, os_voiced, piper_a, piper_b}) == 5
+
+
 def test_fire_speaks_custom_text_via_os_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(audio.sys, "platform", "linux")
     log = tmp_path / "argv.log"
