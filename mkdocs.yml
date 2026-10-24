@@ -101,6 +101,7 @@ nav:
 # Reachable via in-page links, not top-level nav (suppresses the "not in nav" warning
 # under --strict): transcript pages live under their video, the assets note is for editors.
 not_in_nav: |
+  /audit/AUDIT-2026-10-24.md
   /assets/README.md
   /assets/diagrams/README.md
   /transcripts/overview.md

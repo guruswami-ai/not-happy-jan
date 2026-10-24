@@ -1,7 +1,7 @@
 # Not-Happy-Jan — Specification (DRAFT v0)
 
 **Status:** DRAFT derived from current behaviour during the
-[AUDIT-2026-10-24](AUDIT-2026-10-24.md). Items marked `OPEN:` are decisions for the
+[AUDIT-2026-10-24](docs/audit/AUDIT-2026-10-24.md). Items marked `OPEN:` are decisions for the
 maintainer; everything else describes what the code does today and becomes normative
 once this file is accepted. From acceptance on: behaviour changes land as a SPEC
 edit + tests first, then code.
