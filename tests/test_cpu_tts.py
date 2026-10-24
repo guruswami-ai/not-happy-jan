@@ -41,6 +41,7 @@ def _on_path(monkeypatch, bindir, log):
 
 
 def test_synth_os_espeak(tmp_path, monkeypatch):
+    monkeypatch.setattr(audio.sys, "platform", "linux")   # espeak branch, not macOS say
     log = tmp_path / "argv.log"
     _on_path(monkeypatch, _stub(tmp_path, "espeak-ng", _ESPEAK), log)
     monkeypatch.setattr(audio, "_TMP_ROOT", tmp_path / "tmp")
@@ -52,6 +53,7 @@ def test_synth_os_espeak(tmp_path, monkeypatch):
 
 
 def test_synth_os_missing_binary_returns_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(audio.sys, "platform", "linux")
     empty = tmp_path / "emptybin"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
@@ -82,6 +84,7 @@ def test_synth_piper_stub_and_missing_model(tmp_path, monkeypatch):
 
 
 def test_fire_speaks_custom_text_via_os_engine(tmp_path, monkeypatch):
+    monkeypatch.setattr(audio.sys, "platform", "linux")
     log = tmp_path / "argv.log"
     _on_path(monkeypatch, _stub(tmp_path, "espeak-ng", _ESPEAK), log)
     monkeypatch.setenv("TTS_ENGINE", "os")
