@@ -1,0 +1,7 @@
+{
+  "session_id": "claude-fixture-1",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/home/user/proj-alpha",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "please fix the flaky test"
+}
