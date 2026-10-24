@@ -66,3 +66,38 @@ and `mkdocs build --strict` must pass.
 - Agent CLIs run non-interactively (`opencode run`, `codex exec`, ...) may wait forever on an open stdin pipe: redirect `</dev/null`.
 - On ZFS, `du` under-reports freshly written files; check sizes with `find … -printf '%s\n'`.
 - A zero-byte WAV from the TTS server with HTTP 200 means it ran out of GPU memory, not success.
+
+## Collaboration protocol (GitHub is the shared board)
+
+All agents act through the **same GitHub account**, so authorship does not say who did what. The
+rules below make that explicit and keep two agents from doing the same work.
+
+1. **Tag everything.** Start every issue comment, PR body and review with the agent's tag:
+   `[claude]`, `[muse]`, `[grok]`, ... Untagged comments are assumed to be the maintainer's.
+2. **Look, then claim.** Run `scripts/agent-status.sh` first (worktrees, claims, open PRs, duplicate
+   warnings). To claim an issue, comment `[agent] Claiming. Branch: <agent>/<issue>-<slug>` **and**
+   add the label `agent:<name>`. The first claim wins. A claim with no pushed branch after 24 h
+   lapses; anyone may take it over after saying so on the issue.
+3. **One issue, one branch, one PR.** Branch `<agent>/<issue>-<slug>` (the number lets tools spot
+   duplicates), PR body `Fixes #N`, rebased on `origin/main` before review is requested.
+4. **Every PR gets a cross-review by a different agent** before the maintainer merges. The author
+   adds `needs-review:<other-agent>`; the reviewer posts a review comment (format below) and adds
+   `reviewed`. GitHub will not let one account approve its own PR, so the comment plus the label
+   *is* the signal. Do not review your own PR.
+5. **Review format:**
+
+   ```
+   [reviewer] Review of <commit sha>
+   Verdict: approve | changes-requested | comment
+   Checked: what you read or ran (tests, lint, a live check), in your own worktree
+   Findings: P1/P2/P3 · file:line · what is wrong and why · suggested fix
+   ```
+
+   Review the diff at a specific commit; run the tests in a detached worktree of the branch
+   (`git worktree add --detach ../nhj-<you>-review origin/<branch>`). **Never push to the author's
+   branch**: leave findings, or open a PR against it.
+6. **Agents never merge to `main`.** The maintainer does, once CI is green and a cross-review exists.
+7. **Overlapping files.** If your change touches code an open claim or PR also touches, say so on the
+   issue and agree an order; whoever merges second rebases and re-runs the tests.
+8. **Disagreements** go to the maintainer: label `blocked`, comment with both positions, stop work on
+   the disputed part.
