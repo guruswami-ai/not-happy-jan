@@ -40,12 +40,15 @@ from nhj import resources
 
 _B64_FIELDS = ("intent", "message", "pretext", "source")
 _MAX_RETRIES = 3          # re-queue a crashed-worker item this many times, then quarantine
-# A dead worker is recovered at once via PID liveness. This lease is only the
-# fallback for a hung worker or a recycled PID, so it stays short. A live
-# dispatch can outlast it (server start, the LLM, TTS); holding_claim refreshes
-# the claim mtime for that stretch so the item is not spoken twice.
+# A dead worker is recovered at once via PID liveness. A recycled PID looks
+# alive, so this lease stays short and reclaims that claim once its mtime goes
+# stale. A live dispatch can outlast the lease (server start, the LLM, TTS);
+# holding_claim refreshes the claim mtime for that stretch, and only up to
+# _DISPATCH_BUDGET_SECONDS, so a normal line is not spoken twice. Past the
+# budget the beat stops and the lease can reclaim a hung dispatch.
 _CLAIM_LEASE_SECONDS = 30
 _HEARTBEAT_SECONDS = 10   # well under the lease, so one late beat still counts
+_DISPATCH_BUDGET_SECONDS = 180  # past a cold start, the LLM, and one TTS call
 _CLAIM_ERROR_BACKOFF_SECONDS = 5
 _LOG = resources.log_file("worker.log")
 
@@ -95,11 +98,17 @@ def _touch_claim(token: Path) -> bool:
 
 
 @contextlib.contextmanager
-def _holding_claim(token: Path, interval: float) -> Iterator[None]:
+def _holding_claim(token: Path, interval: float, budget: float) -> Iterator[None]:
     stop = threading.Event()
+    started = time.monotonic()
 
     def _beat() -> None:
-        while not stop.wait(interval):
+        while True:
+            remaining = budget - (time.monotonic() - started)
+            if remaining <= 0 or stop.wait(min(interval, remaining)):
+                return
+            if time.monotonic() - started >= budget:
+                return
             if not _touch_claim(token):
                 return
 
@@ -198,15 +207,15 @@ class QueueManager:
         return None
 
     def holding_claim(self, token: Path) -> Iterator[None]:
-        """Refresh *token*'s lease until the caller finishes dispatching it.
+        """Refresh *token*'s lease until dispatch finishes, or the budget runs out.
 
-        Touch the claim mtime immediately, then every ``_HEARTBEAT_SECONDS``
-        until the context exits. A dispatch that blocks inside one adapter
-        (TTS can take longer than the lease) stays owned by this worker.
-        When the context exits the beat stops, so a later stall is still
-        reclaimed once the lease lapses.
+        Touch the claim mtime immediately, then every ``_HEARTBEAT_SECONDS``,
+        until the context exits or ``_DISPATCH_BUDGET_SECONDS`` elapses. A
+        dispatch that blocks inside one adapter (TTS can take longer than the
+        lease) stays owned by this worker for that budget. After the budget
+        the beat stops, so a hung adapter is reclaimed once the lease lapses.
         """
-        return _holding_claim(token, _HEARTBEAT_SECONDS)
+        return _holding_claim(token, _HEARTBEAT_SECONDS, _DISPATCH_BUDGET_SECONDS)
 
     def ack(self, token: Path) -> None:
         """Acknowledge a claimed item — delete it now that processing is done."""
