@@ -23,25 +23,32 @@ Durability model
 from __future__ import annotations
 
 import base64
+import contextlib
 import datetime
 import fcntl
 import itertools
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 from nhj import resources
 
 _B64_FIELDS = ("intent", "message", "pretext", "source")
 _MAX_RETRIES = 3          # re-queue a crashed-worker item this many times, then quarantine
-# Short lease: a crashed worker is recovered immediately via PID-liveness; this is only
-# the fallback for a hung-but-alive worker / PID reuse, so keep the stale window to
-# seconds (any single dispatch is a few seconds at most) rather than minutes.
+# A dead worker is recovered at once via PID liveness. A recycled PID looks
+# alive, so this lease stays short and reclaims that claim once its mtime goes
+# stale. A live dispatch can outlast the lease (server start, the LLM, TTS);
+# holding_claim refreshes the claim mtime for that stretch, and only up to
+# _DISPATCH_BUDGET_SECONDS, so a normal line is not spoken twice. Past the
+# budget the beat stops and the lease can reclaim a hung dispatch.
 _CLAIM_LEASE_SECONDS = 30
+_HEARTBEAT_SECONDS = 10   # well under the lease, so one late beat still counts
+_DISPATCH_BUDGET_SECONDS = 180  # past a cold start, the LLM, and one TTS call
 _CLAIM_ERROR_BACKOFF_SECONDS = 5
 _LOG = resources.log_file("worker.log")
 
@@ -79,6 +86,40 @@ def _log(msg: str) -> None:
             lf.write(f"[{datetime.datetime.now().isoformat()}] {msg}\n")
     except OSError:
         pass
+
+
+def _touch_claim(token: Path) -> bool:
+    """Refresh a claim's mtime. False when the file has already gone."""
+    try:
+        os.utime(token, None)
+    except OSError:
+        return False
+    return True
+
+
+@contextlib.contextmanager
+def _holding_claim(token: Path, interval: float, budget: float) -> Iterator[None]:
+    stop = threading.Event()
+    started = time.monotonic()
+
+    def _beat() -> None:
+        while True:
+            remaining = budget - (time.monotonic() - started)
+            if remaining <= 0 or stop.wait(min(interval, remaining)):
+                return
+            if time.monotonic() - started >= budget:
+                return
+            if not _touch_claim(token):
+                return
+
+    _touch_claim(token)
+    thread = threading.Thread(target=_beat, name="nhj-claim-heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=max(interval, 0.1) + 1.0)
 
 
 class QueueManager:
@@ -165,6 +206,17 @@ class QueueManager:
             return token, data
         return None
 
+    def holding_claim(self, token: Path) -> Iterator[None]:
+        """Refresh *token*'s lease until dispatch finishes, or the budget runs out.
+
+        Touch the claim mtime immediately, then every ``_HEARTBEAT_SECONDS``,
+        until the context exits or ``_DISPATCH_BUDGET_SECONDS`` elapses. A
+        dispatch that blocks inside one adapter (TTS can take longer than the
+        lease) stays owned by this worker for that budget. After the budget
+        the beat stops, so a hung adapter is reclaimed once the lease lapses.
+        """
+        return _holding_claim(token, _HEARTBEAT_SECONDS, _DISPATCH_BUDGET_SECONDS)
+
     def ack(self, token: Path) -> None:
         """Acknowledge a claimed item — delete it now that processing is done."""
         try:
@@ -197,7 +249,12 @@ class QueueManager:
             return None
 
     def _recover_stale(self) -> None:
-        """Re-queue items whose claiming worker has died; quarantine past MAX_RETRIES."""
+        """Re-queue a claim whose worker has died, or whose lease has lapsed.
+
+        A dead PID is reclaimed immediately. A live PID with a fresh lease is
+        left alone. A recycled PID looks alive and is kept only until the
+        lease expires, which is why that window stays short.
+        """
         for proc in self.queue_dir.glob("*.proc.*"):
             try:
                 worker_pid = int(proc.name.rsplit(".proc.", 1)[1])

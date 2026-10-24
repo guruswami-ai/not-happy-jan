@@ -99,8 +99,12 @@ def main() -> None:
             token, task = claimed
             try:
                 # Live mute toggle (nhj mute) — drop the vibe silently.
+                # holding_claim keeps the lease fresh for this dispatch, up to
+                # the budget, including a TTS call that outlasts the lease.
+                # A hang past the budget stops being refreshed and can be reclaimed.
                 if not get_flag("mute"):
-                    _dispatch(task, adapters)
+                    with qm.holding_claim(token):
+                        _dispatch(task, adapters)
             except Exception as e:
                 print(f"[nhj] dispatch error: {e}", file=sys.stderr)
                 qm.nack(token, str(e))

@@ -21,12 +21,14 @@ $NHJ_MUZAK_DIR (colon-separated) + the bundled `audio/music/` dir.
 from __future__ import annotations
 
 import fcntl
+import itertools
 import json
 import os
 import signal
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -45,6 +47,7 @@ _IDLE_STOP_S = 600    # controller self-exits after this long with nothing burni
 _MANUAL = "__manual__"
 _DUCK_GAIN = 0.22     # music level while ducking under speech (streaming player only)
 _DUCK_MAX = 12.0      # safety: a duck never sticks longer than this many seconds
+_spool_seq = itertools.count()  # per-process spool filename sequence (see submit_audio)
 
 
 def _state_path() -> Path:
@@ -328,7 +331,11 @@ def submit_audio(path: str, bus: str = "voice", gain: float = 1.0,
         d.mkdir(parents=True, exist_ok=True)
         ev = {"path": str(path), "bus": bus, "gain": gain, "rate": rate,
               "effect": effect, "ephemeral": ephemeral}
-        (d / f"{int(time.time()*1000)}-{os.getpid()}.json").write_text(json.dumps(ev))
+        # ts+pid+seq+random (as queue_manager.add): two clips submitted in the same
+        # millisecond by one process (return clip, then result) must not collide.
+        name = (f"{int(time.time()*1000):013d}-{os.getpid()}-{next(_spool_seq):06d}"
+                f"-{uuid.uuid4().hex[:8]}.json")
+        (d / name).write_text(json.dumps(ev))
         # prune stray temp wavs so the spool dir can't grow unbounded
         tmp = resources.audio_tmp_dir()
         if tmp.is_dir():
