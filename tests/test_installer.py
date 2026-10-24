@@ -87,7 +87,7 @@ def test_install_mcp_sse_localhost(tmp_path):
     assert "0.0.0.0" not in entry["url"]
 
 
-def test_install_mcp_network_exposure_requires_explicit_listen(tmp_path):
+def test_install_mcp_network_exposure_requires_explicit_listen(tmp_path, capsys):
     """Using a non-localhost listen address must be explicitly provided; the default is localhost."""
     settings = tmp_path / "settings.json"
 
@@ -98,14 +98,16 @@ def test_install_mcp_network_exposure_requires_explicit_listen(tmp_path):
     mcp = _settings_with_mcp(settings)
     entry = mcp["not-happy-jan"]
     assert "0.0.0.0" in entry["url"]
+    assert "NHJ_SHARED_SECRET" in capsys.readouterr().out
 
-    # Contrast: the default does NOT expose to the network
+    # Contrast: the default does NOT expose to the network, and does not warn
     settings2 = tmp_path / "settings2.json"
     cli.install_mcp(settings=settings2, transport="streamable-http",
                     listen="127.0.0.1", port=8765)
     mcp2 = _settings_with_mcp(settings2)
     assert "127.0.0.1" in mcp2["not-happy-jan"]["url"]
     assert "0.0.0.0" not in mcp2["not-happy-jan"]["url"]
+    assert "NHJ_SHARED_SECRET" not in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +187,18 @@ def test_install_mcp_service_passes_explicit_loopback_or_network_bind(monkeypatc
     cli.install_mcp_service(listen="127.0.0.1", port=8765)
 
     assert captured == {"listen": "127.0.0.1", "port": 8765}
+
+
+def test_install_mcp_service_warns_when_listen_is_not_loopback(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr(
+        cli, "_install_mcp_launchagent", lambda listen, port: tmp_path / "nhj-mcp.plist")
+
+    cli.install_mcp_service(listen="0.0.0.0", port=8765)
+    assert "NHJ_SHARED_SECRET" in capsys.readouterr().out
+
+    cli.install_mcp_service(listen="127.0.0.1", port=8765)
+    assert "NHJ_SHARED_SECRET" not in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------

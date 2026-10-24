@@ -81,9 +81,7 @@ def _pid_alive(pid: int) -> bool:
 
 def _log(msg: str) -> None:
     try:
-        Path(_LOG).parent.mkdir(parents=True, exist_ok=True)
-        with open(_LOG, "a") as lf:
-            lf.write(f"[{datetime.datetime.now().isoformat()}] {msg}\n")
+        resources.append_log(_LOG, f"[{datetime.datetime.now().isoformat()}] {msg}")
     except OSError:
         pass
 

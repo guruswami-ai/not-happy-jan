@@ -24,6 +24,8 @@ Override roots with ``NHJ_DATA_DIR`` / ``NHJ_CONFIG_DIR`` / ``NHJ_STATE_DIR`` /
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import os
 import platform
 from pathlib import Path
@@ -170,6 +172,97 @@ def legacy_state_file(name: str) -> Path:
 
 def log_file(name: str) -> str:
     return str(log_dir(create=False) / name)
+
+
+# hook.log, worker.log and the model-server logs. Three older files, then drop.
+_LOG_MAX_BYTES = 1_000_000
+_LOG_BACKUPS = 3
+
+
+def rotate_log(path: Path, max_bytes: int | None = None, backups: int | None = None) -> None:
+    """If *path* is at least max_bytes, shift it to path.1 .. path.{backups}.
+
+    path.{backups} is removed. A missing file, or any OSError, is ignored so
+    logging can never break the caller. The caller should hold the log lock
+    when another process might be writing the same file.
+    """
+    if max_bytes is None:
+        max_bytes = _LOG_MAX_BYTES
+    if backups is None:
+        backups = _LOG_BACKUPS
+    try:
+        if backups < 1 or not path.is_file() or path.stat().st_size < max_bytes:
+            return
+        path.with_name(f"{path.name}.{backups}").unlink(missing_ok=True)
+        for i in range(backups - 1, 0, -1):
+            src = path.with_name(f"{path.name}.{i}")
+            if src.exists():
+                os.replace(src, path.with_name(f"{path.name}.{i + 1}"))
+        os.replace(path, path.with_name(f"{path.name}.1"))
+    except OSError:
+        return
+
+
+@contextlib.contextmanager
+def _log_lock(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_name(f"{path.name}.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def append_log(path: str | Path, line: str) -> None:
+    """Append one line, rotating first when the file is already at the cap."""
+    path = Path(path)
+    text = line if line.endswith("\n") else line + "\n"
+    try:
+        with _log_lock(path):
+            rotate_log(path)
+            with open(path, "a") as handle:
+                handle.write(text)
+    except OSError:
+        pass
+
+
+def rotate_attached_log(name: str) -> None:
+    """Rotate ``{name}-server.log`` when stderr is that file and it is over the cap.
+
+    The supervisor hands the server process the open log as stdout and stderr.
+    Renaming the path leaves that fd on the old inode, so this reopens both
+    streams onto a fresh file. A tty, or any other stderr, is left alone.
+    An external binary (llama.cpp) keeps the fd it was started with; its log
+    rotates the next time the supervisor opens it.
+    """
+    path = Path(log_file(f"{name}-server.log"))
+    try:
+        err = os.fstat(2)
+        st = path.stat()
+    except OSError:
+        return
+    if (err.st_dev, err.st_ino) != (st.st_dev, st.st_ino) or err.st_size < _LOG_MAX_BYTES:
+        return
+    try:
+        with _log_lock(path):
+            # Recheck inside the lock. Another writer may have rotated already.
+            try:
+                err = os.fstat(2)
+                st = path.stat()
+            except OSError:
+                return
+            if (err.st_dev, err.st_ino) != (st.st_dev, st.st_ino) or err.st_size < _LOG_MAX_BYTES:
+                return
+            rotate_log(path)
+            fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o644)
+            try:
+                os.dup2(fd, 1)
+                os.dup2(fd, 2)
+            finally:
+                os.close(fd)
+    except OSError:
+        return
 
 
 def debug(msg: str) -> None:

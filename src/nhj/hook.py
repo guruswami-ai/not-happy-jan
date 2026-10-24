@@ -60,11 +60,18 @@ def source_label(cwd: str, remote: bool = False) -> str:
 def _log(msg: str) -> None:
     try:
         import datetime
-        Path(_LOG).parent.mkdir(parents=True, exist_ok=True)
-        with open(_LOG, "a") as f:
-            f.write(f"[{datetime.datetime.now().isoformat(timespec='milliseconds')}] {msg}\n")
+        resources.append_log(
+            _LOG, f"[{datetime.datetime.now().isoformat(timespec='milliseconds')}] {msg}")
     except OSError:
         pass
+
+
+def _log_fire(prefix: str, who: str, intent: str, message: str) -> None:
+    """Intent and length by default. The message text is kept only under NHJ_DEBUG."""
+    if os.environ.get("NHJ_DEBUG"):
+        _log(f"{prefix} who={who} intent={intent} msg={message!r}")
+    else:
+        _log(f"{prefix} who={who} intent={intent} chars={len(message)}")
 
 
 _SEEN_TTL = 86400.0   # drop ledger entries from sessions older than a day
@@ -326,7 +333,10 @@ def main() -> int:
 
     waited = time.monotonic() - started
     changed = bool(sig) and sig != baseline
-    _log(f"scan waited={waited:.2f}s changed={changed} len={len(text)} tail={text[-50:]!r}")
+    if os.environ.get("NHJ_DEBUG"):
+        _log(f"scan waited={waited:.2f}s changed={changed} len={len(text)} tail={text[-50:]!r}")
+    else:
+        _log(f"scan waited={waited:.2f}s changed={changed} len={len(text)}")
     if not changed:
         _log("hook complete fired=0 (final message not flushed in time)")
         return 0
@@ -367,10 +377,10 @@ def main() -> int:
         sent = _fire_remote(remote_url, ev) if remote_url else _fire_local(ev)
         if sent:
             fired += 1
-            _log(f"fired who={who} intent={intent} msg={message[:60]!r}")
+            _log_fire("fired", who, intent, message)
         else:
             target = "remote" if remote_url else "local"
-            _log(f"failed target={target} who={who} intent={intent} msg={message[:60]!r}")
+            _log_fire(f"failed target={target}", who, intent, message)
 
     _log(f"hook complete fired={fired}")
     return 0

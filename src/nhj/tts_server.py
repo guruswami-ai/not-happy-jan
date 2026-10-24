@@ -107,11 +107,14 @@ def _migrate_legacy_models() -> int:
 
 # Module-level so FastAPI recognises it as the request BODY (a closure-local
 # BaseModel gets mis-read as a query param). pydantic is always available.
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# One request must not be able to hold the single GPU executor for minutes.
+_TTS_MAX_CHARS = 500
 
 
 class GenReq(BaseModel):
-    text: str
+    text: str = Field(max_length=_TTS_MAX_CHARS)
     voice: str = "jan"
     model_tier: str = "fast"
     instruct: str = ""
@@ -120,6 +123,8 @@ class GenReq(BaseModel):
 
 
 def _log(msg: str) -> None:
+    from nhj import resources
+    resources.rotate_attached_log("tts")
     print(f"[nhj-tts] {msg}", file=sys.stderr, flush=True)
 
 
@@ -223,6 +228,17 @@ def build_app():
     from fastapi.responses import JSONResponse
 
     app = FastAPI(title="nhj-tts", version="1.0")
+
+    @app.middleware("http")
+    async def _lan_secret(request, call_next):
+        from nhj import resources
+        from nhj.lan_auth import allows, secret
+
+        resources.rotate_attached_log("tts")
+        # /health stays open so a readiness probe does not need the secret.
+        if request.url.path != "/health" and secret() and not allows(request.headers):
+            return JSONResponse({"status": "error", "reason": "unauthorised"}, status_code=401)
+        return await call_next(request)
 
     @app.get("/health")
     def health():

@@ -70,6 +70,12 @@ ULANZI_HTTP_HOSTS=awtrix_96895c.local       # mDNS name; one display or many
 > for many displays, Home Assistant, or cross-network reach.
 > Full guide: **[awtrix-display-setup.md](awtrix-display-setup.md)**.
 
+## Network listeners and logs
+
+`NHJ_HOST` defaults to loopback. `nhj install-mcp` and `nhj install-mcp-service` warn when `--listen` is anything else: that listener can queue speech and display updates for anyone who can reach it. Set `NHJ_SHARED_SECRET` and send it as the `X-NHJ-Token` header (or `Authorization: Bearer`) on the TTS server and on the network MCP transport. The stdio MCP transport is local and does not use the header. TTS text is limited to 500 characters so one request cannot hold the speech server.
+
+`hook.log`, `worker.log` and `*-server.log` rotate at 1 MB, keeping three older files. The hook log records intent and message length. The message text, and the tail of the assistant turn, are written only when `NHJ_DEBUG` is set. A long-lived llama.cpp process keeps the log file it was started with, so `llm-server.log` rotates the next time its supervisor starts.
+
 ## Inference muzak
 
 Muzak for while the agent's *thinking* — Jan's idea of putting you "on hold." Off by default. Turn it on and it plays while the agent works, pausing the *instant* a character speaks, then resuming when you reply:

@@ -1362,8 +1362,9 @@ def install_mcp_service(
     )
     if listen not in ("127.0.0.1", "::1", "localhost"):
         app.print(
-            f"[yellow]Warning:[/yellow] MCP is network-accessible on {listen}; "
-            "configure authentication/firewall controls before use."
+            f"[yellow]Warning:[/yellow] MCP is open on the network at {listen}. "
+            "Anyone who can reach it can queue speech and display updates. "
+            "Set NHJ_SHARED_SECRET and send it as the X-NHJ-Token header."
         )
 
 
@@ -1507,8 +1508,11 @@ def install_mcp(
         app.print(f"[green]✓[/green] MCP server registered ({t}, {listen}:{port}):")
         app.print(f"  [dim]url:[/dim] {url_path}")
         if listen not in ("127.0.0.1", "::1", "localhost"):
-            app.print(f"  [yellow]⚠[/yellow]  MCP server is accessible on the network ({listen}). "
-                      f"Ensure your firewall is configured appropriately.")
+            app.print(
+                f"  [yellow]Warning:[/yellow] MCP is open on the network at {listen}. "
+                "Anyone who can reach it can queue speech and display updates. "
+                "Set NHJ_SHARED_SECRET and send it as the X-NHJ-Token header."
+            )
 
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(cfg, indent=2))
