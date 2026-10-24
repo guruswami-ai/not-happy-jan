@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from io import StringIO
 
 import pytest
@@ -88,6 +89,28 @@ def test_remote_dispatch_sends_same_full_event(monkeypatch):
     assert hook._fire_remote("http://x", ev) is True
     assert captured["name"] == "nhj_vibe"
     assert captured["args"] == ev.to_kwargs()  # identical to the local payload, incl. character
+
+
+def test_remote_dispatch_times_out_instead_of_hanging_the_hook(monkeypatch, capsys):
+    """#48 B4: a hung LAN daemon must not hang the Stop hook to its 30s timeout."""
+    pytest.importorskip("fastmcp")
+    import asyncio
+
+    from nhj import hook
+
+    class HangClient:
+        def __init__(self, url): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def call_tool(self, name, args): await asyncio.sleep(5)
+
+    monkeypatch.setattr("fastmcp.Client", HangClient)
+    monkeypatch.setenv("NHJ_REMOTE_TIMEOUT", "0.05")
+    ev = event.validate("ok", message="hi")
+    started = time.monotonic()
+    assert hook._fire_remote("http://x", ev) is False
+    assert time.monotonic() - started < 2
+    assert "remote dispatch failed" in capsys.readouterr().err
 
 
 def test_remote_dispatch_failure_is_not_reported_as_fired(monkeypatch):
