@@ -15,6 +15,8 @@ TTS_ENGINE in .env:
   qwen     → local NHJ Qwen3-TTS server (default, Apple Silicon)
   audiocpp → an audio.cpp server (Breeze-TTS zero-shot cloning, CUDA/Linux) — see
              synth_audiocpp and the ``audiocpp:`` config block
+  os       → CPU system voice, no model: espeak-ng/espeak (Linux) or say (macOS)
+  piper    → CPU Piper CLI with a local .onnx voice (NHJ_PIPER_MODEL)
   none     → suppress TTS
 """
 from __future__ import annotations
@@ -23,6 +25,8 @@ import base64
 import hashlib
 import os
 import random
+import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -234,6 +238,97 @@ def synth_audiocpp(text: str, base_url: str, voice: str, voices_dir: str,
         return None
 
 
+# ---------------------------------------------------------------------------
+# Tier 3 (CPU) — system voice / Piper CLI: speaks arbitrary text with no model
+# server and no GPU, so a minimal install is not limited to banked lines (#49).
+# Delivery shaping these engines cannot express (instruct, temperature) is
+# dropped; speed still applies once at playback, like every other tier.
+# ---------------------------------------------------------------------------
+_ESPEAK_PITCH = {"jan": 50, "bazza": 35, "karren": 65, "jan-whispering": 50}
+
+
+def _os_command(text: str, voice: str, platform: Optional[str] = None) -> tuple[Optional[list], str]:
+    """Argv + output suffix for the OS voice, or (None, suffix) if no binary exists.
+
+    The output path is the literal ``{out}`` placeholder; the caller substitutes it.
+    NHJ_OS_TTS_VOICE overrides the voice for both engines; on espeak the cast is
+    otherwise told apart by pitch (espeak -p is 0-99, 50 = neutral)."""
+    platform = sys.platform if platform is None else platform
+    wanted = (os.getenv("NHJ_OS_TTS_VOICE") or "").strip()
+    if platform == "darwin":
+        exe = shutil.which("say")
+        if not exe:
+            return None, ".aiff"
+        cmd = [exe, "-o", "{out}"]
+        if wanted:
+            cmd += ["-v", wanted]
+        return cmd + [text], ".aiff"
+    exe = shutil.which("espeak-ng") or shutil.which("espeak")
+    if not exe:
+        return None, ".wav"
+    cmd = [exe, "-w", "{out}", "-p", str(_ESPEAK_PITCH.get(voice, 50))]
+    if wanted:
+        cmd += ["-v", wanted]
+    return cmd + [text], ".wav"
+
+
+def _run_synth_cli(cmd: list, out: Path, stdin_text: str = "", timeout: float = 30.0,
+                   label: str = "cpu-tts") -> Optional[bytes]:
+    try:
+        subprocess.run(cmd, input=stdin_text.encode() if stdin_text else None,
+                       capture_output=True, timeout=timeout, check=True)
+        data = out.read_bytes()
+    except Exception as e:
+        print(f"[nhj] {label} error: {e}", file=sys.stderr)
+        return None
+    finally:
+        out.unlink(missing_ok=True)
+    if len(data) < 44 or data[:4] not in (b"RIFF", b"FORM"):   # WAV or AIFF (say)
+        print(f"[nhj] {label}: empty/invalid audio ({len(data)} B)", file=sys.stderr)
+        return None
+    return data
+
+
+def _synth_out_path(suffix: str) -> Path:
+    _TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    return _TMP_ROOT / f"synth-{os.getpid()}-{uuid.uuid4().hex[:8]}{suffix}"
+
+
+def synth_os(text: str, voice: str = "jan", timeout: float = 30.0) -> Optional[bytes]:
+    """System-voice synthesis (espeak-ng/espeak on Linux, say on macOS)."""
+    if not text.strip():
+        return None
+    cmd, suffix = _os_command(text, voice)
+    if cmd is None:
+        print("[nhj] os TTS: no espeak-ng/espeak/say binary found", file=sys.stderr)
+        return None
+    out = _synth_out_path(suffix)
+    return _run_synth_cli([str(out) if a == "{out}" else a for a in cmd], out,
+                          timeout=timeout, label="os TTS")
+
+
+def synth_piper(text: str, model: str, timeout: float = 60.0) -> Optional[bytes]:
+    """Piper CLI synthesis: piper --model <voice.onnx> --output_file <wav>, text on stdin."""
+    if not text.strip() or not model:
+        if not model:
+            print("[nhj] piper: NHJ_PIPER_MODEL is not set", file=sys.stderr)
+        return None
+    model_path = Path(model).expanduser()
+    if not model_path.is_file():
+        print(f"[nhj] piper: no model at {model_path}", file=sys.stderr)
+        return None
+    exe = shutil.which("piper")
+    if not exe:
+        print("[nhj] piper: piper binary not found on PATH", file=sys.stderr)
+        return None
+    out = _synth_out_path(".wav")
+    cmd = [exe, "--model", str(model_path), "--output_file", str(out)]
+    speaker = (os.getenv("NHJ_PIPER_SPEAKER") or "").strip()
+    if speaker:
+        cmd += ["--speaker", speaker]
+    return _run_synth_cli(cmd, out, stdin_text=text, timeout=timeout, label="piper")
+
+
 def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> None:
     """Write the cache WAV via a temp file and replace.
 
@@ -338,7 +433,12 @@ class AudioAdapter(NotificationAdapter):
 
         ephemeral = False
         if path is None and tts_enabled:                      # Tier 3: live synth (unsped)
-            if os.getenv("TTS_ENGINE", "qwen").lower() == "audiocpp":
+            engine = os.getenv("TTS_ENGINE", "qwen").lower()
+            if engine == "os":
+                wav = synth_os(tts_text or intent, voice=voice)
+            elif engine == "piper":
+                wav = synth_piper(tts_text or intent, os.getenv("NHJ_PIPER_MODEL", ""))
+            elif engine == "audiocpp":
                 acfg = _audiocpp_cfg()
                 wav = synth_audiocpp(
                     tts_text or intent,
