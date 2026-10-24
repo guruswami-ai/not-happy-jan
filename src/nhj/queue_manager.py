@@ -85,7 +85,8 @@ def _log(msg: str) -> None:
     try:
         resources.append_log(_LOG, f"[{datetime.datetime.now().isoformat()}] {msg}")
     except OSError:
-        pass
+        # A log that cannot be written must not break the queue.
+        return
 
 
 def _touch_claim(token: Path) -> bool:

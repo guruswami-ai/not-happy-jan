@@ -101,6 +101,7 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_SCENES_PROB` | float | `0.08` | — | live | Probability a scene vignette plays per event |
 | `NHJ_SERVERS` | enum | — | — | startup | TTS/LLM supervision: on-demand (spawn+reap) vs always-on service |
 | `NHJ_SERVER_IDLE` | int | `600` | — | startup | Idle seconds before the on-demand supervisor reaps a server |
+| `NHJ_SHARED_SECRET` | str | — | — | live | Shared secret for the TTS server and the network MCP. Blank means no check |
 | `NHJ_STATE_FILE` | path | — | — | import | Override the live state.json location |
 | `NHJ_TRANSPORT` | enum | `stdio` | — | startup | MCP server transport: stdio/streamable-http |
 | `NHJ_TTS_HOST` | str | `127.0.0.1` | — | startup | TTS server bind address |
