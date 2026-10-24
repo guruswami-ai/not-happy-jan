@@ -90,8 +90,11 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_MUZAK_VOLUME` | float | `0.5` | — | live | Music bed level (0-1) |
 | `NHJ_OPENMIC_PROB` | float | `0.05` | — | live | Probability of the open-mic scene |
 | `NHJ_ORCHESTRATION` | enum | — | `orchestration.mode` | live | Multi-session policy: quiet-while-busy/always-speak |
+| `NHJ_OS_TTS_VOICE` | str | — | — | live | CPU tier: espeak voice / say -v name (TTS_ENGINE=os) |
 | `NHJ_OUTPUT_DEVICE` | str | — | `playback.output_device` | live | Pinned audio output device (name or index) |
 | `NHJ_PHONE_FX` | bool | — | — | live | Telephone bandpass/compression colour on voice clips |
+| `NHJ_PIPER_MODEL` | path | — | — | live | CPU tier: Piper .onnx voice file (TTS_ENGINE=piper) |
+| `NHJ_PIPER_SPEAKER` | int | — | — | live | CPU tier: speaker id for multi-speaker Piper models |
 | `NHJ_PORT` | int | `8765` | — | startup | MCP HTTP port |
 | `NHJ_PUTDOWN` | bool | `1` | — | live | Handset putdown clunk on/off |
 | `NHJ_RAVE_DISPLAY_INTERVAL` | float | `8` | — | live | Seconds between rave display party-tile cycles |
