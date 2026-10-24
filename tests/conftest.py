@@ -67,6 +67,30 @@ _HOST_ENV = (
 )
 
 
+# NHJ modules call ``load_dotenv(resources.env_file())`` themselves, at import time (worker, mixer, MCP server)
+# and inside CLI commands. In a checkout that file is ``<repo>/.env`` -- the developer's real one -- and
+# python-dotenv would put its values straight back after the clean-up above (an import-time variable such as
+# NHJ_CONFIG_FILE is read right after, when ``nhj.config`` is imported). So wrap it for the test session: it
+# still loads the file, but the host-specific variables the FILE introduced are removed again. Variables that
+# were already set (by a test, with monkeypatch) are left alone, as dotenv itself would not override them.
+import dotenv  # noqa: E402
+
+_HOST_VARS = frozenset(_HOST_ENV) | {"NHJ_CONFIG_FILE", "NHJ_VOICE_TARGET_DBFS"}
+_real_load_dotenv = dotenv.load_dotenv
+
+
+def _scrubbing_load_dotenv(*args, **kwargs):
+    already_set = {var for var in _HOST_VARS if var in os.environ}
+    try:
+        return _real_load_dotenv(*args, **kwargs)
+    finally:
+        for var in _HOST_VARS - already_set:
+            os.environ.pop(var, None)
+
+
+dotenv.load_dotenv = _scrubbing_load_dotenv
+
+
 def _empty(directory: Path) -> None:
     for child in directory.iterdir():
         if child.is_dir() and not child.is_symlink():

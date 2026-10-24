@@ -78,3 +78,41 @@ def test_import_time_env_is_cleared_before_nhj_is_imported(tmp_path):
                          text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     assert "host-config-leaked" not in out.stdout
+
+
+def test_dotenv_cannot_reintroduce_host_variables(tmp_path, monkeypatch):
+    import dotenv
+    env = tmp_path / ".env"
+    env.write_text("NHJ_CONFIG_FILE=/host/config.yaml\nTTS_ENGINE=audiocpp\nHARMLESS_TEST_VAR=1\n")
+    monkeypatch.setenv("NHJ_OUTPUT_DEVICE", "set-by-the-test")        # set BEFORE the load: must survive
+    env2 = tmp_path / ".env2"
+    env2.write_text("NHJ_OUTPUT_DEVICE=from-the-file\n")
+    dotenv.load_dotenv(env)
+    dotenv.load_dotenv(env2)
+    try:
+        assert "NHJ_CONFIG_FILE" not in os.environ and "TTS_ENGINE" not in os.environ
+        assert os.environ["NHJ_OUTPUT_DEVICE"] == "set-by-the-test"
+        assert os.environ.get("HARMLESS_TEST_VAR") == "1"              # ordinary dotenv behaviour kept
+    finally:
+        os.environ.pop("HARMLESS_TEST_VAR", None)
+
+
+def test_worker_import_with_a_host_dotenv_does_not_leak_config(tmp_path):
+    """The exact reported path: nhj.worker loads the checkout .env BEFORE nhj.config is imported."""
+    import subprocess
+    import sys
+
+    evil = tmp_path / "evil.yaml"
+    evil.write_text("claky:\n  url: http://host-config-leaked.invalid\n")
+    dot = tmp_path / ".env"
+    dot.write_text(f"NHJ_CONFIG_FILE={evil}\n")
+    conftest = Path(__file__).with_name("conftest.py")
+    code = (
+        "import runpy, sys; from pathlib import Path; runpy.run_path(sys.argv[1]); "
+        "from nhj import resources; resources.env_file = lambda: Path(sys.argv[2]); "
+        "import nhj.worker; from nhj import config; print(config.section('claky').get('url') or '')"
+    )
+    out = subprocess.run([sys.executable, "-c", code, str(conftest), str(dot)], capture_output=True,
+                         text=True, timeout=60, env=dict(os.environ))
+    assert out.returncode == 0, out.stderr
+    assert "host-config-leaked" not in out.stdout
