@@ -91,6 +91,24 @@ def test_appended_and_partial_lines_are_picked_up(tmp_path, monkeypatch):
     assert hook._read_last_assistant_text(t) == "flushed in two parts"
 
 
+def test_truncate_to_zero_then_rewrite_larger_does_not_serve_stale(tmp_path, monkeypatch):
+    """#60: a size-0 poll must drop the scan cache. Otherwise a later rewrite of
+    the same inode is misread as append-only growth from the old offset."""
+    monkeypatch.setattr(hook, "_TAIL_BYTES", 4096)
+    filler = _line("user", "x" * 200)
+    t = _write(tmp_path / "t.jsonl", [_line("assistant", "before truncate")] + [filler] * 100)
+    inode = t.stat().st_ino
+    assert hook._read_last_assistant_text(t) == "before truncate"
+
+    t.write_text("")                                   # same inode, size 0
+    assert t.stat().st_ino == inode
+    assert hook._read_last_assistant_text(t) == ""
+
+    _write(t, [_line("assistant", "after rewrite")] + [filler] * 150)
+    assert t.stat().st_ino == inode
+    assert hook._read_last_assistant_text(t) == "after rewrite"
+
+
 def test_truncated_file_rescans(tmp_path, monkeypatch):
     monkeypatch.setattr(hook, "_TAIL_BYTES", 4096)
     filler = _line("user", "x" * 200)
