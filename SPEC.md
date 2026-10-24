@@ -136,9 +136,11 @@ this today — audit B1/B2; Phase 0 fixes them.)
 ### 6.1 Queue protocol (implemented by `queue_manager.py`)
 
 - Enqueue: atomic create `<ts>-<pid>-<seq>-<rand>.vibe`, 0600, dir 0700.
-  Text fields base64-encoded.
+  Text fields base64-encoded. `QueueManager.add` runs `event.validate` first
+  and raises `VibeValidationError` instead of writing a bad file.
 - Claim: atomic rename `.vibe` → `.proc.<worker-pid>` (oldest first). Unparseable
-  → `.poison` (never blocks the queue). At most one live worker via flock
+  files, and files `event.validate` rejects, go straight to `.poison` (never
+  retried, never block the queue). At most one live worker via flock
   election; PID recorded before the lock is released.
 - Ack only after dispatch completes. Crash before ack → reclaimable: worker dead
   (PID liveness) or lease expired → requeue, max 3 retries → `.poison`.
