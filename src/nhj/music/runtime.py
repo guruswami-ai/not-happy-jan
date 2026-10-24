@@ -13,8 +13,6 @@ from nhj import resources
 from nhj.music.director import MANUAL_BUSY, Director
 from nhj.music.pack import PackError, load_pack
 
-_ACCENT_KEYS = ("music_accent", "music_accent_ts")
-
 
 def settings() -> dict:
     from nhj import config

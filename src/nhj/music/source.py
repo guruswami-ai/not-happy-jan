@@ -32,8 +32,11 @@ class Section:
 
 
 class SectionProvider(Protocol):
-    def observe(self, plan: Plan, bar: int) -> None: ...
-    def take(self, plan: Plan, bar: int) -> Section | None: ...
+    def observe(self, plan: Plan, bar: int) -> None:
+        raise NotImplementedError
+
+    def take(self, plan: Plan, bar: int) -> Section | None:
+        raise NotImplementedError
 
 
 class StemSource(_Decoder):
