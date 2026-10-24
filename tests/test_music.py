@@ -515,3 +515,14 @@ def test_controller_starts_its_accent_cursor_at_zero():
     from nhj import duck_player
     src = inspect.getsource(duck_player.run_duck_controller)
     assert "last_accent = 0.0" in src and "last_accent = time.time()" not in src
+
+
+def test_music_cli_explains_a_missing_audio_extra(monkeypatch):
+    from typer.testing import CliRunner
+
+    from nhj import cli
+    monkeypatch.setitem(sys.modules, "numpy", None)               # `import numpy` now raises ImportError
+    for args in (["music", "status"], ["music", "build-pack"], ["music", "accent", "err"], ["music", "demo"]):
+        r = CliRunner().invoke(cli.cli, args)
+        assert r.exit_code == 1, args
+        assert "audio extra" in r.output and "Traceback" not in r.output, args

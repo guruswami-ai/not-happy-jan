@@ -1557,9 +1557,20 @@ music_cli = typer.Typer(help="Generative hold music (opt-in: music.mode: generat
 cli.add_typer(music_cli, name="music")
 
 
+def _need_audio_extra() -> None:
+    """The music package needs numpy/scipy ([audio] extra); say so instead of a traceback."""
+    try:
+        import numpy  # noqa: F401
+        import scipy  # noqa: F401
+    except ImportError:
+        app.print("[red]generative music needs the audio extra:[/red] pip install 'not-happy-jan[audio]'")
+        raise typer.Exit(1)
+
+
 @music_cli.command("build-pack")
 def music_build_pack(dest: str = typer.Option("", "--dest", help="default: the data dir's music_packs/default")):
     """Render the bundled synth's stem pack (a few seconds of CPU)."""
+    _need_audio_extra()
     from nhj.music import runtime, synth
     path = Path(dest).expanduser() if dest else runtime.default_pack_dir()
     synth.build_default_pack(path)
@@ -1569,6 +1580,7 @@ def music_build_pack(dest: str = typer.Option("", "--dest", help="default: the d
 @music_cli.command("status")
 def music_status():
     """Mode, pack and continuation settings as the controller will see them."""
+    _need_audio_extra()
     from nhj.music import runtime
     from nhj.music.pack import PackError, load_pack
     cfg = runtime.settings()
@@ -1586,6 +1598,7 @@ def music_status():
 @music_cli.command("accent")
 def music_accent(intent: str = typer.Argument("err", help="err (4-bar breakdown) | ok (1-bar release)")):
     """Ask the running controller for a musical accent."""
+    _need_audio_extra()
     from nhj import inference_muzak
     from nhj.music import runtime
     runtime.note_accent(inference_muzak, intent)
@@ -1598,6 +1611,7 @@ def music_demo(
     continuation: bool = typer.Option(False, "--continuation", help="prime continuation sections (needs music.continuation configured)"),
 ):
     """Render a scripted timeline offline: 1, 2, 3, 4 sessions busy, a long turn, an error, recovery."""
+    _need_audio_extra()
     import wave
     import numpy as np
     from nhj.music import runtime, synth
