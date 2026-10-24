@@ -33,6 +33,7 @@ from nhj import resources
 SR = 48000          # output samplerate
 CH = 2              # stereo
 BLOCK = 1024        # ~21ms per callback
+_STATE_TICK_S = 0.25   # music.json cadence. The play-event spool stays on the 50 ms wake.
 _BUF_MAX = 48       # bounded music decode buffer (~1s) → frozen position when full/paused
 _EVENTS = resources.audio_events_dir(create=False)   # play-event spool (cross-process)
 
@@ -191,6 +192,40 @@ def output_device(devices=None):
             return i
     print(f"[nhj] output device {want!r} not found; using the system default", file=sys.stderr)
     return None
+
+
+def follow_output_device() -> bool:
+    """Whether to poll the macOS default output with SwitchAudioSource or system_profiler.
+
+    Those binaries are macOS-only, so the watcher never starts elsewhere. A pinned
+    ``NHJ_OUTPUT_DEVICE`` (or ``playback.output_device``) is the device the stream
+    opens, so the watcher stays off unless ``NHJ_FOLLOW_DEVICE`` is set explicitly.
+    """
+    if sys.platform != "darwin":
+        return False
+    explicit = os.getenv("NHJ_FOLLOW_DEVICE")
+    if explicit is not None and explicit.strip() != "":
+        return explicit.strip().lower() not in ("0", "off", "false", "no")
+    if os.getenv("NHJ_OUTPUT_DEVICE", "").strip():
+        return False
+    try:
+        from nhj import config
+        raw = config.section("playback").get("output_device")
+        if raw is not None and str(raw).strip():
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def refresh_mixer_state(M, now: float, last: float) -> tuple[float, dict | None]:
+    """Read music.json on a 250 ms tick. ``None`` means keep the previous snapshot.
+
+    The spool scan is separate and still runs on every wake.
+    """
+    if now - last < _STATE_TICK_S:
+        return last, None
+    return now, M._read()
 
 
 def _default_output_device() -> str:
@@ -703,9 +738,10 @@ def run_duck_controller() -> int:
 
     # follow the system default OUTPUT device — reopen the stream when the user switches
     # output (PortAudio binds the stream at open; it won't migrate on its own).
-    _devbox = [_default_output_device()]
+    follow = follow_output_device()
+    _devbox = [_default_output_device() if follow else ""]
     _dev_changed = threading.Event()
-    if _on("NHJ_FOLLOW_DEVICE", "1"):
+    if follow:
         def _watch_device():
             while True:
                 time.sleep(_f("NHJ_FOLLOW_DEVICE_POLL", "4"))
@@ -715,6 +751,8 @@ def run_duck_controller() -> int:
                     _dev_changed.set()
         threading.Thread(target=_watch_device, daemon=True).start()
     keeper = StreamKeeper(mixer)
+    last_state_at = 0.0
+    st: dict = {}
     try:
         while True:
             now = time.monotonic()
@@ -731,10 +769,14 @@ def run_duck_controller() -> int:
             # device-reopen, retried until it succeeds even if the device name doesn't change
             # again. Never kills the controller; queued voice keeps buffering meanwhile.
             keeper.ensure(now)
-            mixer.pump_events()                              # ingest voice from other processes
-            if music_dir is not None:
-                last_accent = music.feed(M, music_dir, active_since, now, last_accent)
-            mixer.duck_external = M.duck_gain() < 1.0
+            mixer.pump_events()                              # spool stays on this wake (50 ms while busy)
+            last_state_at, fresh = refresh_mixer_state(M, now, last_state_at)
+            if fresh is not None:
+                st = fresh
+                if music_dir is not None:
+                    last_accent = music.feed(
+                        M, music_dir, active_since, now, last_accent, state=st)
+                mixer.duck_external = M.duck_gain_from(st) < 1.0
 
             # rave: actively cycle the display party tile (this loop is the heartbeat)
             if _rave() and now - last_party >= _f("NHJ_RAVE_DISPLAY_INTERVAL", "8"):
@@ -761,11 +803,10 @@ def run_duck_controller() -> int:
             if not music_on and not mixer.paused:            # switched to agent-vibes mid-music
                 mixer.pause()
 
-            st = M._read()
             if st.get("stop") or st.get("controller_pid") != os.getpid():
                 break
 
-            if not M._should_play():                         # all sessions idle
+            if not M._should_play(st):                       # all sessions idle
                 if on_hold:                                  # → just came OFF hold
                     on_hold = False
                     resume_pending = False
