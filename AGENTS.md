@@ -22,6 +22,10 @@ git worktree add --detach ../nhj-live origin/main                  # the live ch
 - Name branches `<agent>/<topic>` (`claude/…`, `codex/…`, `muse/…`). Keep them short-lived.
 - `main` is protected: change it only through a pull request with the required checks green.
   Never push to `main`; never force-push a branch somebody else is using.
+- **Stage and commit explicit paths.** A directory has one git *index*, so anything another agent
+  has staged there is committed by your `git commit`. That is how an unreviewed file ended up in a
+  merged PR. In your own worktree: `git add <paths>` (not `git add -A` / `git commit -a`), read
+  `git diff --cached --stat` before every commit, and prefer `git commit <paths>`.
 - Give each worktree its own virtual environment (`uv venv && uv pip install -e ".[server,dev]"`):
   an editable install is tied to the directory it was made from.
 
