@@ -70,7 +70,8 @@ def busy_count(M) -> int:
 
 
 def note_accent(M, intent: str) -> None:
-    """Called by anything that wants a musical accent (cross-process, via the muzak state)."""
+    """Explicit accent request (`nhj music accent`); cross-process via the muzak state, not mode-gated.
+    Hooks use `inference_muzak.note_accent`, which is gated and numpy-free."""
     M._patch(music_accent=intent, music_accent_ts=time.time())
 
 
@@ -81,6 +82,7 @@ def feed(M, director: Director, active_since: float | None, now: float, last_acc
     st = M._read()
     ts = float(st.get("music_accent_ts") or 0.0)
     if ts > last_accent_ts:
-        director.accent(str(st.get("music_accent") or ""))
+        if time.time() - ts <= M.ACCENT_TTL_S:
+            director.accent(str(st.get("music_accent") or ""))
         return ts
     return last_accent_ts

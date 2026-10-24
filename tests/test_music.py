@@ -320,18 +320,27 @@ def test_busy_count_treats_a_manual_session_as_full():
     assert runtime.busy_count(M) == MANUAL_BUSY
 
 
-def test_feed_applies_each_accent_once():
+def test_feed_applies_each_accent_once_and_drops_stale_ones():
+    import time
+
     class M:
         _MANUAL = "__manual__"
-        state = {"music_accent": "err", "music_accent_ts": 100.0}
+        ACCENT_TTL_S = 8.0
+        state = {}
         _read = staticmethod(lambda: M.state)
         _fresh_busy = staticmethod(lambda d: {"a": 1})
 
+    now = time.time()
+    M.state = {"music_accent": "err", "music_accent_ts": now}
     d = Director()
-    seen = runtime.feed(M, d, 0.0, 5.0, last_accent_ts=50.0)
-    assert seen == 100.0 and d.at_bar(0).label == "breakdown"
-    assert runtime.feed(M, d, 0.0, 6.0, last_accent_ts=seen) == 100.0
-    assert d.at_bar(4).label == "busy:1"
+    seen = runtime.feed(M, d, 0.0, 5.0, last_accent_ts=0.0)           # a controller's initial cursor
+    assert seen == now and d.at_bar(0).label == "breakdown"
+    assert runtime.feed(M, d, 0.0, 6.0, last_accent_ts=seen) == now
+    assert d.at_bar(4).label == "busy:1"                          # not applied twice
+    M.state = {"music_accent": "err", "music_accent_ts": now - 60}   # written long ago (e.g. at the last turn end)
+    d2 = Director()
+    assert runtime.feed(M, d2, 0.0, 6.0, last_accent_ts=0.0) == now - 60
+    assert d2.at_bar(0).label == "busy:1"                         # seen, but stale: ignored
 
 
 def test_music_config_schema():
@@ -419,6 +428,96 @@ def test_source_survives_an_exception_and_keeps_producing():
     src._push = push
     src.run()                                                   # returns because we set stop, not because it died
     assert sum(pushed) > 3 * int(pack.spb) and not Flaky.boom
+
+
+# ---- hook-driven accents ----------------------------------------------------------------------
+def test_director_drops_accents_that_waited_too_long():
+    t = [100.0]
+    d = Director(accent_ttl_s=8.0, clock=lambda: t[0])
+    d.update(2, 0)
+    d.accent("err")
+    t[0] += 30                                               # the bed was paused; the verdict is old news
+    assert d.at_bar(0).label == "busy:2"
+    d.accent("err")
+    t[0] += 3
+    assert d.at_bar(1).label == "breakdown"
+
+
+def _state():
+    from nhj import inference_muzak as M
+    return M._read()
+
+
+@pytest.mark.parametrize("intent,accent", [("err", "err"), ("ok", "ok"), ("celebrate", "ok")])
+def test_note_accent_maps_verdicts_when_generative(monkeypatch, intent, accent):
+    from nhj import inference_muzak as M
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    M.note_accent(intent)
+    assert _state()["music_accent"] == accent and _state()["music_accent_ts"] > 0
+
+
+@pytest.mark.parametrize("env,intent", [("generative", "warn"), ("generative", "attn"), ("generative", "step"),
+                                        ("recorded", "err"), ("", "err")])
+def test_note_accent_is_a_noop_for_other_intents_and_recorded_mode(monkeypatch, env, intent):
+    from nhj import inference_muzak as M
+    monkeypatch.setenv("NHJ_MUSIC_MODE", env)
+    M.note_accent(intent)
+    assert "music_accent" not in _state()
+
+
+def test_worker_dispatch_turns_a_verdict_into_an_accent(monkeypatch):
+    """The worker runs on the host that owns the controller, so local hooks, remote hooks and
+    `nhj vibe` all take this one path (Codex review on #75)."""
+    from nhj import worker
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    worker._dispatch({"intent": "err", "message": "build failed", "source": "proj"}, [])
+    assert _state()["music_accent"] == "err"
+    worker._dispatch({"intent": "celebrate", "message": "shipped", "source": "proj"}, [])
+    assert _state()["music_accent"] == "ok"
+
+
+def test_worker_dispatch_respects_the_voice_gate_mode_and_intent(monkeypatch):
+    from nhj import gate, worker
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    worker._dispatch({"intent": "warn", "source": "proj"}, [])                 # warn: no accent
+    assert "music_accent" not in _state()
+    monkeypatch.setattr(gate, "voice_allowed", lambda source: False)           # project has not opted in
+    worker._dispatch({"intent": "err", "source": "proj"}, [])
+    assert "music_accent" not in _state()
+    monkeypatch.undo()
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "recorded")
+    worker._dispatch({"intent": "err", "source": "proj"}, [])
+    assert "music_accent" not in _state()
+
+
+def test_the_stop_hook_itself_no_longer_writes_accents(monkeypatch):
+    """Accents are noted by the worker; a hook that also wrote them would double up and, with
+    NHJ_REMOTE_URL, write to the wrong host."""
+    import inspect
+
+    from nhj import hook
+    assert "note_accent" not in inspect.getsource(hook)
+
+
+def test_stop_failure_is_always_an_err_accent(monkeypatch):
+    from io import StringIO
+
+    from nhj import inference_muzak, prompt_hook
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    monkeypatch.setattr(inference_muzak, "mark_idle", lambda sid: None)
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps({"hook_event_name": "StopFailure", "session_id": "s1"})))
+    assert prompt_hook.main() == 0
+    assert _state()["music_accent"] == "err"
+
+
+def test_controller_starts_its_accent_cursor_at_zero():
+    """Codex review on #75: an accent written while the controller is still starting must not be
+    mistaken for a pre-existing one. The cursor starts at 0.0; feed()'s TTL does the staleness work."""
+    import inspect
+
+    from nhj import duck_player
+    src = inspect.getsource(duck_player.run_duck_controller)
+    assert "last_accent = 0.0" in src and "last_accent = time.time()" not in src
 
 
 def test_music_cli_explains_a_missing_audio_extra(monkeypatch):

@@ -51,6 +51,7 @@ def main() -> int:
             # max-output-token failure). Mark the session idle immediately so hold music
             # unwinds — no marker scan because there is no reliable final assistant message.
             inference_muzak.mark_idle(sid)
+            inference_muzak.note_accent("err")
             if get_flag("stop_failure_vibe", False):
                 try:
                     from nhj.queue_manager import QueueManager
