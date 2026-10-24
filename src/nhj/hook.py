@@ -10,6 +10,7 @@ Multiple markers fire in order. Install by running: nhj install-hook
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -67,6 +68,7 @@ def _log(msg: str) -> None:
 
 
 _SEEN_TTL = 86400.0   # drop ledger entries from sessions older than a day
+_SEEN_CAP = 50
 
 
 def _seen_get(sid: str) -> str:
@@ -79,21 +81,52 @@ def _seen_get(sid: str) -> str:
     return e or ""                            # legacy: bare sig string
 
 
-def _seen_set(sid: str, sig: str) -> None:
-    try:
-        _SEEN.parent.mkdir(parents=True, exist_ok=True)
+def _seen_update(mutate) -> None:
+    """Locked read-modify-write of the fire-once ledger.
+
+    Same shape as ``state.update``: exclusive flock, unique temp file, atomic rename.
+    Two Stop hooks (or a Stop racing the prompt hook) otherwise clobber the file.
+    """
+    _SEEN.parent.mkdir(parents=True, exist_ok=True)
+    lock = _SEEN.with_suffix(".json.lock")
+    lock.touch()
+    with open(lock, "r+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
         try:
-            d = json.loads(_SEEN.read_text())
-        except Exception:
-            d = {}
+            try:
+                loaded = json.loads(_SEEN.read_text())
+            except Exception:
+                loaded = {}
+            if not isinstance(loaded, dict):
+                loaded = {}
+            mutate(loaded)
+            token = f".{os.getpid()}.{os.urandom(4).hex()}.json.tmp"
+            tmp = _SEEN.with_suffix(token)
+            tmp.write_text(json.dumps(loaded))
+            tmp.replace(_SEEN)
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _seen_set(sid: str, sig: str) -> None:
+    """Record this session's baseline. The cap keeps the newest timestamps, not the
+    first-seen keys: updating a long-lived session must not push it out of the file."""
+    def _m(d: dict) -> None:
         now = time.time()
-        # TTL: keep only fresh, timestamped entries (drops stale + legacy bare-sig)
-        d = {k: v for k, v in d.items()
-             if isinstance(v, dict) and now - float(v.get("ts", 0)) < _SEEN_TTL}
-        d[sid] = {"sig": sig, "ts": now}
-        if len(d) > 50:                       # hard cap as a backstop
-            d = dict(list(d.items())[-50:])
-        _SEEN.write_text(json.dumps(d))
+        fresh = {
+            k: v for k, v in d.items()
+            if isinstance(v, dict) and now - float(v.get("ts", 0)) < _SEEN_TTL
+        }
+        fresh.pop(sid, None)
+        fresh[sid] = {"sig": sig, "ts": now}
+        if len(fresh) > _SEEN_CAP:
+            ranked = sorted(fresh.items(), key=lambda kv: float(kv[1].get("ts", 0)))
+            fresh = dict(ranked[-_SEEN_CAP:])
+        d.clear()
+        d.update(fresh)
+
+    try:
+        _seen_update(_m)
     except Exception:
         pass
 
