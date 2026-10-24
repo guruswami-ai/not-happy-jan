@@ -10,8 +10,10 @@ Code's `session_id`:
     SessionEnd        → mark_idle(session_id)   (session gone)
 
 The detached controller plays while the busy set is non-empty (or continuous mode),
-pauses (SIGSTOP — exact-resume) when it empties. Stale entries (a crashed session that
-never fired Stop/SessionEnd) are evicted after _BUSY_TTL, so orphaned music is impossible.
+pauses (SIGSTOP — exact-resume) when it empties. A crashed session that never fired
+Stop/SessionEnd is evicted after _BUSY_TTL, or sooner when its owner pid is dead.
+Eviction is a locked update (`evict_stale`, also run from `mark_busy` / `mark_idle`
+and the controller). `_any_busy` only reads.
 
 Gated by the `muzak` flag (`nhj muzak on`, off by default). Tracks cycle (shuffled) from
 $NHJ_MUZAK_DIR (colon-separated) + the bundled `audio/music/` dir.
@@ -62,16 +64,21 @@ def _read() -> dict:
 
 
 def _write(d: dict) -> None:
+    """Atomic replace. Callers that read-modify-write must hold the `_update` lock;
+    the unique temp name only stops two writers sharing one temp file."""
     p = _state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".json.tmp")
+    token = f".{os.getpid()}.{os.urandom(4).hex()}.json.tmp"
+    tmp = p.with_suffix(token)
     tmp.write_text(json.dumps(d))
     tmp.replace(p)
 
 
 def _update(mutate) -> dict:
     """Locked read-modify-write of the muzak state so concurrent hooks (mark_busy /
-    mark_idle from different sessions) can't clobber each other's busy-set edits."""
+    mark_idle from different sessions) can't clobber each other's busy-set edits.
+    Skips the replace when the mutation changed nothing, so a periodic evict does
+    not rewrite the file."""
     p = _state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".json.lock")
@@ -80,8 +87,10 @@ def _update(mutate) -> dict:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
             d = _read()
+            before = json.dumps(d, sort_keys=True)
             mutate(d)
-            _write(d)
+            if json.dumps(d, sort_keys=True) != before:
+                _write(d)
             return d
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
@@ -131,28 +140,41 @@ def _owner_pid() -> int | None:
     return None if comm in ("sh", "bash", "dash", "zsh", "fish") else ppid
 
 
-def _real_busy() -> bool:
-    """True if a real agent session is mid-turn, ignoring the synthetic never-expiring entry that
-    `nhj mode rave` / `nhj muzak start` adds to keep the music playing."""
-    _any_busy()                                  # evict stale / dead entries first
-    return any(s != _MANUAL for s in (_read().get("busy") or {}))
-
-
-def _any_busy() -> bool:
-    """True if any session is mid-turn. Evicts stale entries as a side effect: ones older than
-    the TTL, and ones whose owning agent process has died (a killed/crashed session never runs
-    its Stop hook, and would otherwise keep the hold music playing for the whole TTL)."""
-    d = _read()
+def _fresh_busy(d: dict) -> dict:
+    """Busy entries that still count: inside the TTL, and not owned by a dead pid."""
     busy = d.get("busy") or {}
     pids = d.get("pids") or {}
     cutoff = time.time() - _BUSY_TTL
-    fresh = {s: ts for s, ts in busy.items()
-             if ts >= cutoff and not (pids.get(s) and not _alive(pids[s]))}
-    if len(fresh) != len(busy):
+    return {s: ts for s, ts in busy.items()
+            if ts >= cutoff and not (pids.get(s) and not _alive(pids[s]))}
+
+
+def _evict_into(d: dict) -> None:
+    """Drop stale and dead-owner sessions. Caller holds the `_update` lock."""
+    fresh = _fresh_busy(d)
+    busy = d.get("busy") or {}
+    if set(fresh) != set(busy):
         d["busy"] = fresh
+        pids = d.get("pids") or {}
         d["pids"] = {s: p for s, p in pids.items() if s in fresh}
-        _write(d)
-    return bool(fresh)
+
+
+def evict_stale() -> None:
+    """Locked eviction. The controller calls this on a timer; hooks call it from
+    `mark_busy` / `mark_idle`. `_any_busy` does not."""
+    _update(_evict_into)
+
+
+def _real_busy() -> bool:
+    """True if a real agent session is mid-turn, ignoring the synthetic never-expiring entry that
+    `nhj mode rave` / `nhj muzak start` adds to keep the music playing."""
+    return any(s != _MANUAL for s in _fresh_busy(_read()))
+
+
+def _any_busy() -> bool:
+    """True if any session is mid-turn. Read-only: a dead owner or an expired TTL does not
+    count, and is removed from the file only by `evict_stale`."""
+    return bool(_fresh_busy(_read()))
 
 
 def _continuous() -> bool:
@@ -188,6 +210,7 @@ def mark_busy(session_id: str = "") -> bool:
     pid = _owner_pid()
 
     def _m(d):
+        _evict_into(d)
         sid = session_id or "default"
         d.setdefault("busy", {})[sid] = time.time()
         if pid:
@@ -200,6 +223,7 @@ def mark_busy(session_id: str = "") -> bool:
 def mark_idle(session_id: str = "") -> None:
     """A session's turn ended (Stop / SessionEnd). The controller pauses once all idle."""
     def _m(d):
+        _evict_into(d)
         if d.get("busy"):
             d["busy"].pop(session_id or "default", None)
         (d.get("pids") or {}).pop(session_id or "default", None)
@@ -208,10 +232,10 @@ def mark_idle(session_id: str = "") -> None:
 
 def start() -> bool:
     """Manual play (CLI/testing) — a synthetic never-expiring session until `stop`."""
-    d = _read()
-    d.setdefault("busy", {})[_MANUAL] = time.time() + 10 * 365 * 86400  # far future
-    d.pop("stop", None)
-    _write(d)
+    def _m(d):
+        d.setdefault("busy", {})[_MANUAL] = time.time() + 10 * 365 * 86400  # far future
+        d.pop("stop", None)
+    _update(_m)
     return start_controller()
 
 
@@ -235,19 +259,25 @@ def enable() -> bool:
 
 def stop() -> None:
     """Clear all sessions + stop the controller (CLI off/stop)."""
-    d = _read()
-    cpid = d.get("child_pid")
-    _write({"busy": {}, "stop": True, "controller_pid": d.get("controller_pid")})
-    if _alive(cpid):
-        try: os.kill(int(cpid), signal.SIGCONT)  # un-pause so it can be reaped
+    held: dict = {}
+
+    def _m(d):
+        held["child_pid"] = d.get("child_pid")
+        controller_pid = d.get("controller_pid")
+        d.clear()
+        d["busy"] = {}
+        d["stop"] = True
+        d["controller_pid"] = controller_pid
+
+    _update(_m)
+    if _alive(held.get("child_pid")):
+        try: os.kill(int(held["child_pid"]), signal.SIGCONT)  # un-pause so it can be reaped
         except OSError: pass
 
 
 def status() -> dict:
     d = _read()
-    busy = d.get("busy") or {}
-    cutoff = time.time() - _BUSY_TTL
-    sessions = [s for s, ts in busy.items() if ts >= cutoff and s != _MANUAL]
+    sessions = [s for s in _fresh_busy(d) if s != _MANUAL]
     running = _alive(d.get("controller_pid"))
     return {
         "running": running,

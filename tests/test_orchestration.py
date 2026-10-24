@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -116,8 +117,21 @@ def test_session_whose_agent_process_died_is_evicted(monkeypatch):
     monkeypatch.setattr(mz, "_owner_pid", lambda: p.pid)          # a pid that no longer exists
     mz.mark_busy("crashed")
     assert mz._read()["pids"]["crashed"] == p.pid
-    assert mz._any_busy() is False
+    assert mz._any_busy() is False                                # pure: a dead owner does not count
+    assert "crashed" in (mz._read().get("busy") or {})            # the getter did not write
+    mz.evict_stale()
     assert "crashed" not in (mz._read().get("busy") or {}) and "crashed" not in (mz._read().get("pids") or {})
+
+
+def test_concurrent_mark_busy_keeps_every_session():
+    n = 40
+    threads = [threading.Thread(target=mz.mark_busy, args=(f"s{i}",)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    busy = mz._read().get("busy") or {}
+    assert set(busy) == {f"s{i}" for i in range(n)}
 
 
 def test_live_owner_keeps_the_session_busy(monkeypatch):
