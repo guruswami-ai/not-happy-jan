@@ -99,9 +99,15 @@ Implemented (config-schema slice of #47):
   named; partial overrides and user-defined character/mode names stay valid.
   `nhj config check` loads and validates the merged config on demand.
 
+Implemented (env-registry slice of #47):
+- Every env var is registered in one module (`nhj.env_registry`): name, type,
+  default, which YAML key it overrides, and read timing (live/startup/import).
+  A test fails when code reads an unregistered literal env var, and the table
+  in `docs/configuration.md` is generated from the registry (sync-tested).
+  Call sites still read `os.getenv` directly; migrating them onto typed
+  registry lookups is incremental follow-up, not a flag day.
+
 Still open (audit Q2):
-- Every env var is registered in one module: name, type, default, which YAML key
-  it overrides, read-live vs read-at-import. Docs generate from the registry.
 - Config is frozen at process start. Long-lived processes (MCP daemon, mixer)
   require restart to pick up edits, except live state (§6) which is read per event.
 
