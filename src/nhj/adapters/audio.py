@@ -233,9 +233,21 @@ def synth_audiocpp(text: str, base_url: str, voice: str, voices_dir: str,
 
 
 def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> None:
+    """Write the cache WAV via a temp file and replace.
+
+    A crash mid-write must not leave a truncated file at the cache path.
+    ``cache_hit`` treats any file of 100 bytes or more as playable, so a partial
+    WAV there would be spoken on the next turn.
+    """
     cache = _cache_path(voice, text, variant)
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_bytes(wav)
+    tmp = cache.with_name(f".{cache.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+    try:
+        tmp.write_bytes(wav)
+        os.replace(tmp, cache)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     try:  # LRU prune
         entries = sorted(cache.parent.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
         for old in entries[_MAX_CACHE:]:
