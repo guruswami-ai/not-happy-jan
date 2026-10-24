@@ -25,6 +25,7 @@ import os
 import random
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -67,7 +68,8 @@ def _effective_speed(user_speed: float, band_speed: float) -> float:
 
 def _write_temp_wav(data: bytes) -> str:
     _TMP_ROOT.mkdir(parents=True, exist_ok=True)
-    p = _TMP_ROOT / f"{int(time.time() * 1000)}.wav"
+    # pid+random too: two synths finishing in the same millisecond must not overwrite
+    p = _TMP_ROOT / f"{int(time.time() * 1000):013d}-{os.getpid()}-{uuid.uuid4().hex[:8]}.wav"
     p.write_bytes(data)
     return str(p)
 
