@@ -142,6 +142,8 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 # Choose TTS backend
 TTS_ENGINE=qwen          # local Qwen3-TTS (Apple Silicon, default)
 # TTS_ENGINE=audiocpp    # audio.cpp / Breeze-TTS zero-shot server (Linux/CUDA); see linux.md
+# TTS_ENGINE=os          # CPU system voice: espeak-ng (Linux) / say (macOS); NHJ_OS_TTS_VOICE picks a voice
+# TTS_ENGINE=piper       # CPU Piper CLI; NHJ_PIPER_MODEL=/path/to/voice.onnx
 # NHJ_AUDIOCPP_URL=http://127.0.0.1:8092
 # NHJ_OUTPUT_DEVICE=analog-stereo   # mixer output (index or name part); `nhj audio-devices`
 # NHJ_ORCHESTRATION=quiet-while-busy  # or always-speak; see orchestration.md
