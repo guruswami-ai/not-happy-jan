@@ -110,6 +110,46 @@ def test_install_mcp_network_exposure_requires_explicit_listen(tmp_path, capsys)
     assert "NHJ_SHARED_SECRET" not in capsys.readouterr().out
 
 
+def test_install_mcp_writes_bearer_when_secret_is_set(tmp_path, monkeypatch, capsys):
+    """Loopback still needs the header: a secret rejects a client that omits it."""
+    monkeypatch.setenv("NHJ_SHARED_SECRET", "s3cret")
+    settings = tmp_path / "settings.json"
+
+    cli.install_mcp(settings=settings, transport="streamable-http",
+                    listen="127.0.0.1", port=8765)
+
+    entry = _settings_with_mcp(settings)["not-happy-jan"]
+    assert entry["headers"]["Authorization"] == "Bearer s3cret"
+    out = capsys.readouterr().out
+    assert "Authorization: Bearer written" in out
+    assert "s3cret" not in out
+
+
+def test_install_mcp_omits_header_when_secret_is_unset(tmp_path, monkeypatch):
+    monkeypatch.delenv("NHJ_SHARED_SECRET", raising=False)
+    settings = tmp_path / "settings.json"
+
+    cli.install_mcp(settings=settings, transport="sse", listen="127.0.0.1", port=8765)
+
+    entry = _settings_with_mcp(settings)["not-happy-jan"]
+    assert "headers" not in entry
+    assert entry["url"].endswith("/sse")
+
+
+def test_install_mcp_network_warning_still_names_the_secret_when_unset(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("NHJ_SHARED_SECRET", raising=False)
+    settings = tmp_path / "settings.json"
+
+    cli.install_mcp(settings=settings, transport="streamable-http",
+                    listen="0.0.0.0", port=8765)
+
+    entry = _settings_with_mcp(settings)["not-happy-jan"]
+    assert "headers" not in entry
+    out = capsys.readouterr().out
+    assert "NHJ_SHARED_SECRET" in out
+    assert "re-run install-mcp" in out
+
+
 # ---------------------------------------------------------------------------
 # install-mcp — idempotency
 # ---------------------------------------------------------------------------

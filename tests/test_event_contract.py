@@ -8,6 +8,7 @@ hook install that preserves unrelated entries.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -111,6 +112,103 @@ def test_remote_dispatch_times_out_instead_of_hanging_the_hook(monkeypatch, caps
     assert hook._fire_remote("http://x", ev) is False
     assert time.monotonic() - started < 2
     assert "remote dispatch failed" in capsys.readouterr().err
+
+
+def test_remote_dispatch_sends_the_shared_secret(monkeypatch):
+    """A set secret is FastMCP Bearer auth. A blank secret must not pass auth=."""
+    pytest.importorskip("fastmcp")
+    from nhj import hook
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, url, auth=None):
+            seen["auth"] = auth
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def call_tool(self, name, args):
+            return "[nhj:ok] queued"
+
+    monkeypatch.setattr("fastmcp.Client", FakeClient)
+    ev = event.validate("ok", message="hi")
+    monkeypatch.delenv("NHJ_SHARED_SECRET", raising=False)
+    assert hook._fire_remote("http://x", ev) is True
+    assert seen["auth"] is None
+    monkeypatch.setenv("NHJ_SHARED_SECRET", "s3cret")
+    assert hook._fire_remote("http://x", ev) is True
+    assert seen["auth"] == "s3cret"
+
+
+def test_remote_error_text_is_not_reported_as_fired(monkeypatch, capsys):
+    """[nhj:error] is ordinary tool text. The hook must not mark that marker fired."""
+    pytest.importorskip("fastmcp")
+    from nhj import hook
+
+    class FakeClient:
+        def __init__(self, url):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def call_tool(self, name, args):
+            return "[nhj:error] unauthorised"
+
+    monkeypatch.setattr("fastmcp.Client", FakeClient)
+    ev = event.validate("ok", message="hi")
+    assert hook._fire_remote("http://x", ev) is False
+    err = capsys.readouterr().err
+    assert "remote dispatch failed" in err
+    assert "[nhj:error] unauthorised" in err
+
+
+def test_remote_error_content_block_is_not_reported_as_fired(monkeypatch, capsys):
+    pytest.importorskip("fastmcp")
+    from nhj import hook
+
+    class Block:
+        text = "[nhj:error] bad options"
+
+    class Result:
+        data = None
+        content = [Block()]
+        is_error = False
+
+    class FakeClient:
+        def __init__(self, url):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def call_tool(self, name, args):
+            return Result()
+
+    monkeypatch.setattr("fastmcp.Client", FakeClient)
+    ev = event.validate("ok", message="hi")
+    assert hook._fire_remote("http://x", ev) is False
+    assert "[nhj:error] bad options" in capsys.readouterr().err
+
+
+def test_hook_loads_the_env_file(tmp_path, monkeypatch):
+    from nhj import hook, resources
+
+    env = tmp_path / ".env"
+    env.write_text("NHJ_HOOK_PROVE=from-file\n")
+    monkeypatch.setattr(resources, "env_file", lambda: env)
+    monkeypatch.delenv("NHJ_HOOK_PROVE", raising=False)
+    hook._load_env()
+    assert os.environ.get("NHJ_HOOK_PROVE") == "from-file"
 
 
 def test_remote_dispatch_failure_is_not_reported_as_fired(monkeypatch):

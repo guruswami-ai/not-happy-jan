@@ -21,6 +21,20 @@ from pathlib import Path
 
 from nhj import resources
 
+
+def _load_env() -> None:
+    """A hook is started by the agent, not a shell, so read ``.env`` here.
+
+    ``NHJ_SHARED_SECRET`` and ``NHJ_REMOTE_URL`` often live only in that file.
+    Loading once at import matches the MCP server and the TTS server.
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv(resources.env_file())
+
+
+_load_env()
+
 _LOG = resources.log_file("hook.log")
 _SEEN = resources.state_file("hook-seen.json")   # per-session fire-once ledger
 VALID       = {"ok", "err", "warn", "attn", "celebrate", "step"}
@@ -262,15 +276,48 @@ def _remote_timeout() -> float:
     return v if v > 0 else _REMOTE_TIMEOUT
 
 
+def _tool_text(result) -> str:
+    """Text of a FastMCP tool result. ``None`` (the test doubles) is empty, not an error."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result
+    data = getattr(result, "data", None)
+    if isinstance(data, str) and data:
+        return data
+    if isinstance(data, dict):
+        inner = data.get("result")
+        if isinstance(inner, str) and inner:
+            return inner
+    parts: list[str] = []
+    for block in getattr(result, "content", None) or []:
+        text = block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+        if isinstance(text, str):
+            parts.append(text)
+    return "".join(parts)
+
+
 def _fire_remote(url: str, ev) -> bool:
     try:
         import asyncio
         from fastmcp import Client
+        from nhj.lan_auth import secret
+
+        token = secret()
+        # Omit auth when the secret is blank. The test doubles only accept ``url``,
+        # and a blank secret means the server is not checking.
+        auth = {"auth": token} if token else {}
 
         async def _call():
-            async with Client(url) as c:
-                # Full option set (incl. character) — identical to the local path.
-                await c.call_tool("nhj_vibe", ev.to_kwargs())
+            async with Client(url, **auth) as c:
+                # Full option set (incl. character), identical to the local path.
+                result = await c.call_tool("nhj_vibe", ev.to_kwargs())
+            text = _tool_text(result)
+            # The server returns a denial as ordinary tool text, not an MCP error.
+            # Counting that as fired hides the alert the secret is meant to protect.
+            if getattr(result, "is_error", False) or text.startswith("[nhj:error]"):
+                raise RuntimeError(text or "remote tool error")
+
         # A hung LAN daemon must not hang the hook to the agent's 30s hook timeout.
         asyncio.run(asyncio.wait_for(_call(), timeout=_remote_timeout()))
         return True
