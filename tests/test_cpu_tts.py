@@ -101,6 +101,31 @@ def test_cache_identity_includes_backend_and_settings(tmp_path, monkeypatch):
     assert len({qwen, os_default, os_voiced, piper_a, piper_b}) == 5
 
 
+def test_cache_identity_matches_the_server_the_synth_calls(tmp_path, monkeypatch):
+    """URL overrides and the model tier are part of the key. The band name is not the tier."""
+    monkeypatch.setattr(audio, "_CLIPS_ROOT", tmp_path)
+    monkeypatch.setenv("TTS_ENGINE", "qwen")
+    monkeypatch.delenv("NHJ_TTS_URL", raising=False)
+    monkeypatch.delenv("NHJ_TTS_MODEL_TIER", raising=False)
+    assert audio._cache_backend_id() == "qwen:http://localhost:9992:"
+    default = audio._cache_path("jan", "same line", "mid")
+    monkeypatch.setenv("NHJ_TTS_URL", "http://other:9992")
+    other = audio._cache_path("jan", "same line", "mid")
+    monkeypatch.setenv("NHJ_TTS_MODEL_TIER", "quality")
+    tier = audio._cache_path("jan", "same line", "mid", "fast")
+    monkeypatch.setenv("TTS_ENGINE", "audiocpp")
+    monkeypatch.delenv("NHJ_AUDIOCPP_URL", raising=False)
+    monkeypatch.delenv("NHJ_AUDIOCPP_VOICES", raising=False)
+    monkeypatch.setattr(audio, "_audiocpp_cfg", lambda: {
+        "url": "http://127.0.0.1:8092", "voices_dir": "~/s2s/voices"})
+    cpp = audio._cache_path("jan", "same line", "mid")
+    monkeypatch.setenv("NHJ_AUDIOCPP_URL", "http://lan:8092")
+    monkeypatch.setenv("NHJ_AUDIOCPP_VOICES", "/voices")
+    cpp_override = audio._cache_path("jan", "same line", "mid")
+    assert len({default, other, tier, cpp, cpp_override}) == 5
+    assert audio._cache_backend_id() == "audiocpp:http://lan:8092:/voices"
+
+
 def test_fire_speaks_custom_text_via_os_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(audio.sys, "platform", "linux")
     log = tmp_path / "argv.log"
