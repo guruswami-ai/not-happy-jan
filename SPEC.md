@@ -99,9 +99,15 @@ Implemented (config-schema slice of #47):
   named; partial overrides and user-defined character/mode names stay valid.
   `nhj config check` loads and validates the merged config on demand.
 
+Implemented (env-registry slice of #47):
+- Every env var is registered in one module (`nhj.env_registry`): name, type,
+  default, which YAML key it overrides, and read timing (live/startup/import).
+  A test fails when code reads an unregistered literal env var, and the table
+  in `docs/configuration.md` is generated from the registry (sync-tested).
+  Call sites still read `os.getenv` directly; migrating them onto typed
+  registry lookups is incremental follow-up, not a flag day.
+
 Still open (audit Q2):
-- Every env var is registered in one module: name, type, default, which YAML key
-  it overrides, read-live vs read-at-import. Docs generate from the registry.
 - Config is frozen at process start. Long-lived processes (MCP daemon, mixer)
   require restart to pick up edits, except live state (§6) which is read per event.
 
@@ -130,9 +136,11 @@ this today — audit B1/B2; Phase 0 fixes them.)
 ### 6.1 Queue protocol (implemented by `queue_manager.py`)
 
 - Enqueue: atomic create `<ts>-<pid>-<seq>-<rand>.vibe`, 0600, dir 0700.
-  Text fields base64-encoded.
+  Text fields base64-encoded. `QueueManager.add` runs `event.validate` first
+  and raises `VibeValidationError` instead of writing a bad file.
 - Claim: atomic rename `.vibe` → `.proc.<worker-pid>` (oldest first). Unparseable
-  → `.poison` (never blocks the queue). At most one live worker via flock
+  files, and files `event.validate` rejects, go straight to `.poison` (never
+  retried, never block the queue). At most one live worker via flock
   election; PID recorded before the lock is released.
 - Ack only after dispatch completes. Crash before ack → reclaimable: worker dead
   (PID liveness) or lease expired → requeue, max 3 retries → `.poison`.
