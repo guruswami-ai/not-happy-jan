@@ -100,7 +100,7 @@ nhj mode rave                     # one-word vibe switch; nhj status to see curr
 - **New here** → [What is NHJ?](docs/what-is-nhj.md) — the full story in plain language
 - **Trying it / choosing a profile** → [Requirements & tiers](docs/minimum-specs.md) · [Install profiles](docs/install-profiles.md) · [Quick start](docs/quickstart.md)
 - **Living in it** → [Characters & dials](docs/characters.md) · [Modes](docs/modes.md) · [Audio & hold music](docs/AUDIO-STANDARD.md)
-- **Linux / non-Mac hosts** → [Linux guide](docs/linux.md) · **Other CLIs** → [Other agent CLIs](docs/other-clis.md) · **Several agents** → [Orchestration](docs/orchestration.md)
+- **Linux / non-Mac hosts** → [Linux guide](docs/linux.md) · **Other CLIs** → [Other agent CLIs](docs/other-clis.md) · **Several agents** → [Orchestration](docs/orchestration.md) · **Hold music that follows your agents (experimental)** → [Generative music](docs/generative-music.md)
 - **Wiring up devices & agents** → [Integration](docs/integration.md) · [AWTRIX display](docs/awtrix-display-setup.md) · [Haptic mouse](docs/haptic-mouse-setup.md) · [Devices](docs/devices/README.md)
 - **Customizing** → [Dynamic voices](docs/dynamic-voices.md) · [Configuration](docs/configuration.md)
 - **Building on it** → [Architecture](docs/ARCHITECTURE.md) · [Developer guide](docs/DEVELOPER-GUIDE.md) · [Contributing](CONTRIBUTING.md)

@@ -112,6 +112,20 @@ orchestration:
   mode: quiet-while-busy
   chime: ""
 
+# Generative hold music (#63, opt-in). `recorded` plays the bundled/NHJ_MUZAK_DIR tracks (default).
+# `generative` plays a bar-synchronised arrangement from a stem pack (built automatically from the
+# bundled synth on first use; `pack:` points at your own) that follows how many agents are busy.
+# `continuation` lets an audio model extend the groove instead of looping it; it needs an external
+# command and a GPU, so it is off until you configure one (docs/generative-music.md).
+# env: NHJ_MUSIC_MODE.
+music:
+  mode: recorded
+  pack: ""
+  long_after_s: 30
+  long_ramp_s: 30
+  continuation:
+    enabled: false
+
 # Voice opt-in. Silent adapters (board, displays, haptics) always fire; the voice channel
 # (TTS + hold music) is gated per project so parallel sessions do not all talk at once.
 # `nhj voice on|off [--here|--project NAME|--global]` sets rules; precedence is

@@ -78,6 +78,7 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_MEDIA_BASE` | url | — | — | live | Base URL media downloads are fetched from |
 | `NHJ_MODE` | str | — | `modes` | live | Active mode name override (otherwise live state) |
 | `NHJ_MODE_AMBIENT_VOLUME` | float | `0.5` | — | live | Mode ambient clip level |
+| `NHJ_MUSIC_MODE` | enum | — | `music.mode` | startup | Hold-music source: recorded (default) or generative (stem pack + director) |
 | `NHJ_MUZAK_DIR` | path | — | — | live | Extra/replacement music directory for the hold bed |
 | `NHJ_MUZAK_DUCK_GAIN` | float | `0.22` | — | live | Music level while ducking under speech (0-1) |
 | `NHJ_MUZAK_INTRO` | bool | `1` | — | live | Play the hold intro sting |
