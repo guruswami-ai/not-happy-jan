@@ -56,7 +56,7 @@ and `mkdocs build --strict` must pass.
 
 | Shared | Why it matters |
 |---|---|
-| Runtime state (queue, music/busy state, logs) in the platform state dir | Tests may write some log lines there; do not mistake them for real alerts |
+| Runtime state (queue, music/busy state, logs) in the platform state dir | The test suite is isolated from it (`tests/conftest.py`), so anything you see there is real activity |
 | The mixer, the Vestaboard (one update per ~15 s) and the speaker | One physical output: do not loop test events |
 | Model/voice servers and their ports | Do not restart or reconfigure a server another agent is using |
 | `~/.claude`, `~/.config/opencode` and other agent config | Edits change every session; back up first |

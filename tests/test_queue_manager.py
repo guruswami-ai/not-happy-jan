@@ -25,10 +25,20 @@ def qm(tmp_path):
 
 @pytest.fixture
 def dead_pid():
-    """A PID that is guaranteed dead (and reaped, so not a zombie)."""
-    p = subprocess.Popen([sys.executable, "-c", ""])
-    p.wait()
-    return p.pid
+    """A PID that is dead (and reaped, so not a zombie).
+
+    "Dead" is not guaranteed by having waited on the child: the OS may hand the number to a new process
+    before the test uses it (the suite spawns many processes, and recovery trusts PID liveness first, so
+    a recycled PID makes ``claim_next`` skip the item and return ``None`` -- a random failure that passes
+    when the test runs alone). Verify the PID is really gone with the same check the code under test uses,
+    retry a few times, and skip with a clear reason if the machine keeps recycling PIDs.
+    """
+    for _ in range(5):
+        p = subprocess.Popen([sys.executable, "-c", ""])
+        p.wait()
+        if not queue_manager._pid_alive(p.pid):
+            return p.pid
+    pytest.skip("could not obtain a dead PID: the OS keeps recycling them")
 
 
 def _vibes(qm):
