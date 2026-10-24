@@ -27,7 +27,7 @@ adapters: [haptic, audio]   # a list → replaces the default adapter order enti
 
 **Precedence vs env vars:** for settings that also read an environment variable — `NHJ_DEFAULT_CHARACTER`, `NHJ_ERROR_CHARACTER`, `NHJ_<NAME>_LEVEL` / `_CHAOS`, and the audio/device `NHJ_*` vars — the **env var wins** over `config.yaml`. Everything else comes from the merged YAML.
 
-A **missing** `config.yaml` is normal. A `config.yaml` that **exists but is malformed** (invalid YAML, or a top level that isn't a mapping) **fails loudly** with the offending path — it is never silently ignored. Fix or remove the file.
+A **missing** `config.yaml` is normal. A `config.yaml` that **exists but is malformed** (invalid YAML, or a top level that isn't a mapping) **fails loudly** with the offending path — it is never silently ignored. Keys and values are also checked against the config schema (`src/nhj/config_schema.py`): an unknown key (a typo like `adapterz:`), a bad type/range/enum is an error naming the source file, while partial overrides and your own character/mode names stay valid. Run **`nhj config check`** to load and validate the merged config without starting anything. Fix or remove the file.
 
 ## `.env` essentials
 

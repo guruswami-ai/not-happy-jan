@@ -93,15 +93,20 @@ Precedence (low → high): bundled `config/default.yaml` → `config.yaml` besid
 `$NHJ_CONFIG_FILE`. Mappings merge key-by-key; lists/scalars replace. Malformed
 files are a loud `ConfigError`, never a silent fallback.
 
-Normative after Phase 1 (audit Q1/Q2):
-- A schema (pydantic, `extra="forbid"`) defines every key, type, range, default.
+Implemented (config-schema slice of #47):
+- A schema (pydantic, `extra="forbid"`, `nhj.config_schema`) defines every key,
+  type, range, and enum in `default.yaml`. Each file is validated with its path
+  named; partial overrides and user-defined character/mode names stay valid.
+  `nhj config check` loads and validates the merged config on demand.
+
+Still open (audit Q2):
 - Every env var is registered in one module: name, type, default, which YAML key
   it overrides, read-live vs read-at-import. Docs generate from the registry.
 - Config is frozen at process start. Long-lived processes (MCP daemon, mixer)
   require restart to pick up edits, except live state (§6) which is read per event.
 
-Key sections and their contracts: `routing` (ladder + `rung_by_intent` must cover
-all 6 intents), `characters.<name>.level` 1–11 (11 = swearing pool, then runtime
+Key sections and their contracts: `routing` (the shipped defaults cover all 6
+intents; overrides may be partial), `characters.<name>.level` 1–11 (11 = swearing pool, then runtime
 censor decides audibility), `chaos` 0–10, `modes.<name>` (mutually exclusive,
 applying one resets the last), `adapters` (ordered list, `audio` last),
 `orchestration.mode` (`quiet-while-busy`|`always-speak`), `voice.default` (on|off),
