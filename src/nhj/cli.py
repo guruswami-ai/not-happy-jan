@@ -1536,6 +1536,22 @@ def remove_mcp(
         app.print(f"[dim]NHJ MCP server not found in {settings.name}[/dim]")
 
 
+config_cli = typer.Typer(help="Inspect configuration")
+cli.add_typer(config_cli, name="config")
+
+
+@config_cli.command("check")
+def config_check():
+    """Load and schema-validate the merged config; exit 1 with the error if invalid."""
+    from nhj import config
+    try:
+        cfg = config.load_config(force_validate=True)
+    except config.ConfigError as e:
+        app.print(f"[red]✗[/red] {e}")
+        raise typer.Exit(1)
+    app.print(f"[green]✓[/green] config valid ({len(cfg)} top-level sections)")
+
+
 def main():
     cli()
 

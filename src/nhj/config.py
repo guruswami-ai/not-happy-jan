@@ -13,13 +13,19 @@ Precedence (lowest → highest):
 Merge semantics: nested **mappings merge key-by-key**; **lists and scalars replace**
 wholesale. A config file that exists but is malformed (invalid YAML or a non-mapping top
 level) raises :class:`ConfigError` — never a silent fallback. A *missing* override file is
-normal.
+normal. Every file is also checked against the schema in ``nhj.config_schema``
+(unknown keys, bad types/ranges/enums are errors naming the source file; partial
+overrides validate as-is). ``nhj config check`` runs the same load on demand.
+Config is frozen at import into :data:`CFG` — long-lived processes need a
+restart to see edits; live state (``state.json``) is read per event instead.
 
 For settings that also read an environment variable (e.g. ``NHJ_DEFAULT_CHARACTER``,
 ``NHJ_<NAME>_LEVEL``), the env var takes precedence over YAML at the point of use.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -80,13 +86,67 @@ def _override_paths() -> list[Path]:
     return paths
 
 
-def load_config() -> dict:
-    """Shipped defaults deep-merged with any user overrides (see module docstring)."""
+def validate_config(cfg: dict, source: str = "config") -> dict:
+    """Check *cfg* against the schema; return it unchanged or raise ConfigError."""
+    from nhj import config_schema
+    errors = config_schema.validation_errors(cfg)
+    if errors:
+        raise ConfigError(f"{source}: invalid config — " + "; ".join(errors)
+                          + ". Fix or remove the file.")
+    return cfg
+
+
+def _fingerprint(paths: list[Path]) -> str | None:
+    """Digest of the exact config file bytes (small files; read anyway below)."""
+    h = hashlib.sha256()
+    for p in paths:
+        try:
+            data = p.read_bytes()
+        except OSError:
+            return None
+        h.update(str(p).encode()); h.update(b"\0"); h.update(data); h.update(b"\0")
+    return h.hexdigest()
+
+
+def _stamp_matches(fingerprint: str) -> bool:
+    try:
+        return json.loads(resources.state_file("config-validated.json").read_text()).get(
+            "fingerprint") == fingerprint
+    except Exception:
+        return False
+
+
+def _write_stamp(fingerprint: str) -> None:
+    try:
+        p = resources.state_file("config-validated.json")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(f".{os.getpid()}.{os.urandom(4).hex()}.json.tmp")
+        tmp.write_text(json.dumps({"fingerprint": fingerprint}))
+        tmp.replace(p)
+    except OSError:
+        pass                                   # stamp is an optimisation, never a failure
+
+
+def load_config(force_validate: bool = False) -> dict:
+    """Shipped defaults deep-merged with any user overrides (see module docstring).
+
+    Schema validation (pydantic) costs ~140 ms of import time, which short-lived
+    hook processes would pay on every turn. So a fingerprint of the exact file
+    bytes is stamped after a successful validation; an unchanged set of files
+    skips validation (and the pydantic import) entirely. Any byte change, a
+    missing stamp, or ``force_validate`` (``nhj config check``) revalidates."""
     default = resources.config_file()
-    cfg = _read_mapping(default) if default.exists() else {}
-    for p in _override_paths():
-        if p.exists():
-            cfg = _deep_merge(cfg, _read_mapping(p))
+    files = ([default] if default.exists() else []) + [p for p in _override_paths() if p.exists()]
+    fingerprint = _fingerprint(files)
+    cached = bool(fingerprint) and not force_validate and _stamp_matches(fingerprint)
+    cfg: dict = {}
+    for p in files:
+        raw = _read_mapping(p)
+        cfg = _deep_merge(cfg, raw if cached else validate_config(raw, str(p)))
+    if not cached:
+        validate_config(cfg, "merged config")
+        if fingerprint:
+            _write_stamp(fingerprint)
     return cfg
 
 
