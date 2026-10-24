@@ -45,6 +45,7 @@ jobs:
       - run: uv run --python ${{ matrix.python }} --extra dev pytest -q
       - name: Shell syntax (installer and helper scripts)
         run: |
+          shopt -s nullglob   # scripts/ may not exist on every branch
           for f in install.sh scripts/*.sh integrations/hooks/*.sh; do bash -n "$f"; done
 
   package:
