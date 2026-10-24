@@ -60,6 +60,12 @@ def _dispatch(task, adapters) -> None:
     voice_mode = orchestration.voice_mode(intent) if voice_ok else "speak"
     if voice_mode == "chime":
         orchestration.note_chime(source)
+    if voice_ok:
+        # Generative hold music (#63): err -> breakdown, ok/celebrate -> release. Done here, where the
+        # event is processed, so it reaches the controller on the host that owns the music bed
+        # whether the verdict came from a local hook, a remote hook or `nhj vibe`. Never raises.
+        from nhj import inference_muzak
+        inference_muzak.note_accent(intent)
 
     for adapter in adapters:
         if getattr(adapter, "channel", "") == "voice" and not voice_ok:

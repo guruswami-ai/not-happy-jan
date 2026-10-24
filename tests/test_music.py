@@ -465,35 +465,38 @@ def test_note_accent_is_a_noop_for_other_intents_and_recorded_mode(monkeypatch, 
     assert "music_accent" not in _state()
 
 
-def _run_stop_hook(monkeypatch, tmp_path, marker):
-    from nhj import hook, inference_muzak
-    transcript = tmp_path / "t.jsonl"
-    transcript.write_text(json.dumps({"message": {"role": "assistant",
-                                                  "content": [{"type": "text", "text": marker}]}}) + "\n")
-    monkeypatch.setenv("NHJ_HOOK_WAIT", "0")
-    monkeypatch.setenv("NHJ_HOOK_MIN", "0")
-    monkeypatch.setattr(hook, "_seen_get", lambda sid: "baseline")
-    monkeypatch.setattr(hook, "_seen_set", lambda sid, sig: None)
-    monkeypatch.setattr(hook, "_fire_local", lambda ev: True)
-    monkeypatch.setattr(inference_muzak, "mark_idle", lambda sid: None)
-    payload = {"session_id": "s1", "transcript_path": str(transcript), "cwd": "/tmp/p", "hook_event_name": "Stop"}
-    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(json.dumps(payload)))
-    assert hook.main() == 0
-
-
-def test_stop_hook_verdict_becomes_an_accent(monkeypatch, tmp_path):
+def test_worker_dispatch_turns_a_verdict_into_an_accent(monkeypatch):
+    """The worker runs on the host that owns the controller, so local hooks, remote hooks and
+    `nhj vibe` all take this one path (Codex review on #75)."""
+    from nhj import worker
     monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
-    _run_stop_hook(monkeypatch, tmp_path, "broken [Karren:err|The build failed]")
+    worker._dispatch({"intent": "err", "message": "build failed", "source": "proj"}, [])
     assert _state()["music_accent"] == "err"
+    worker._dispatch({"intent": "celebrate", "message": "shipped", "source": "proj"}, [])
+    assert _state()["music_accent"] == "ok"
 
 
-def test_stop_hook_without_a_marker_or_in_recorded_mode_writes_nothing(monkeypatch, tmp_path):
+def test_worker_dispatch_respects_the_voice_gate_mode_and_intent(monkeypatch):
+    from nhj import gate, worker
     monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
-    _run_stop_hook(monkeypatch, tmp_path, "no marker here")
+    worker._dispatch({"intent": "warn", "source": "proj"}, [])                 # warn: no accent
     assert "music_accent" not in _state()
+    monkeypatch.setattr(gate, "voice_allowed", lambda source: False)           # project has not opted in
+    worker._dispatch({"intent": "err", "source": "proj"}, [])
+    assert "music_accent" not in _state()
+    monkeypatch.undo()
     monkeypatch.setenv("NHJ_MUSIC_MODE", "recorded")
-    _run_stop_hook(monkeypatch, tmp_path, "done [Jan:ok|All sorted]")
+    worker._dispatch({"intent": "err", "source": "proj"}, [])
     assert "music_accent" not in _state()
+
+
+def test_the_stop_hook_itself_no_longer_writes_accents(monkeypatch):
+    """Accents are noted by the worker; a hook that also wrote them would double up and, with
+    NHJ_REMOTE_URL, write to the wrong host."""
+    import inspect
+
+    from nhj import hook
+    assert "note_accent" not in inspect.getsource(hook)
 
 
 def test_stop_failure_is_always_an_err_accent(monkeypatch):

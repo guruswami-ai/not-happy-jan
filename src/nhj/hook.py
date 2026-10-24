@@ -368,11 +368,6 @@ def main() -> int:
         if sent:
             fired += 1
             _log(f"fired who={who} intent={intent} msg={message[:60]!r}")
-            try:
-                from nhj import inference_muzak
-                inference_muzak.note_accent(intent)       # generative music: err -> breakdown, ok -> release
-            except Exception:
-                pass
         else:
             target = "remote" if remote_url else "local"
             _log(f"failed target={target} who={who} intent={intent} msg={message[:60]!r}")
