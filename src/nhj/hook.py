@@ -155,36 +155,68 @@ def _last_assistant_in(chunk: bytes) -> str:
     return last
 
 
+# Per-path scan cache for the poll loop: path -> (inode, size seen, offset after
+# the last complete line, last assistant text). Transcripts are append-only, so
+# an unchanged size means nothing new to parse, and growth only needs the bytes
+# from the last line boundary (a still-flushing final line is re-read whole).
+_TAIL_CACHE: dict[str, tuple[int, int, int, str]] = {}
+
+
+def _after_last_newline(start: int, chunk: bytes) -> int:
+    nl = chunk.rfind(b"\n")
+    return start + nl + 1 if nl >= 0 else start
+
+
 def _read_last_assistant_text(path: Path) -> str:
     """Last non-empty assistant text, read from the tail of the transcript (#45).
 
     The Stop hook polls this every NHJ_HOOK_POLL while waiting for the final
-    message to flush, so cost must not grow with transcript size: read the last
-    _TAIL_BYTES, and only widen (x4) when no assistant text is in the window —
-    e.g. a final message that is itself larger than the window. Worst case is
-    one whole-file read, never a whole-file read per poll."""
+    message to flush, so cost must not grow with transcript size *or* with poll
+    count: the first call reads the last _TAIL_BYTES (widening x4 only when no
+    assistant text is in the window — e.g. a final message larger than the
+    window, which may mean one whole-file read); later calls answer from the
+    scan cache when the file is unchanged and parse only appended bytes when
+    it grew. A truncated or replaced file (size shrink / inode change) rescans."""
     try:
-        size = path.stat().st_size
+        st = path.stat()
     except OSError:
         return ""
+    size, ino = st.st_size, st.st_ino
     if size == 0:
         return ""
-    window = max(1024, int(_TAIL_BYTES))
+    key = str(path)
+    cached = _TAIL_CACHE.get(key)
+    if cached and cached[0] == ino and cached[1] == size:
+        return cached[3]                       # unchanged since last poll: no re-read
     try:
         with path.open("rb") as f:
-            while True:
-                offset = max(0, size - window)
-                f.seek(offset)
+            if cached and cached[0] == ino and cached[1] < size and cached[2] <= size:
+                start = cached[2]              # append-only growth: new bytes only
+                f.seek(start)
                 chunk = f.read()
-                if offset > 0:                 # first line is partial; drop it
-                    nl = chunk.find(b"\n")
-                    chunk = chunk[nl + 1:] if nl >= 0 else b""
-                last = _last_assistant_in(chunk)
-                if last or offset == 0:
-                    return last
-                window *= 4
+                last = _last_assistant_in(chunk) or cached[3]
+                line_off = _after_last_newline(start, chunk)
+            else:
+                window = max(1024, int(_TAIL_BYTES))
+                while True:
+                    offset = max(0, size - window)
+                    f.seek(offset)
+                    raw = f.read()
+                    chunk = raw
+                    if offset > 0:             # first line is partial; drop it
+                        nl = chunk.find(b"\n")
+                        chunk = chunk[nl + 1:] if nl >= 0 else b""
+                    last = _last_assistant_in(chunk)
+                    if last or offset == 0:
+                        line_off = _after_last_newline(offset, raw)
+                        break
+                    window *= 4
     except OSError:
         return ""
+    if len(_TAIL_CACHE) > 8:                  # one transcript per hook process in practice
+        _TAIL_CACHE.clear()
+    _TAIL_CACHE[key] = (ino, size, line_off, last)
+    return last
 
 
 def _parse_inline(payload: str) -> tuple[dict, str]:
