@@ -28,7 +28,7 @@ music:
 
 3. **The stem source** (`nhj.music.source`) renders the plan into the mixer's music buffer. The mixer's ducking under speech, master volume, pause/resume and output-device handling are unchanged.
 
-Accents are requested with `nhj music accent err|ok` (they ride the muzak state file). **Not yet wired:** the Stop hook does not know the verdict when it marks a session idle, so real `err`/`ok` events do not trigger accents on their own; `warn` and `attn` are accepted and ignored.
+Accents come from real events. When the Stop hook fires a verdict, `[..:err|..]` requests the breakdown and `[..:ok|..]` / `[..:celebrate|..]` request the release; an API failure (`StopFailure`) is always an `err`. The request travels through the muzak state file, only in `generative` mode, and without importing the audio stack in the hook. It is a **musical** event for the sessions that are still busy: when the finishing session was the last busy one, the bed pauses as usual, and an accent that waits more than 8 seconds (the bed was paused) is discarded rather than played at the start of the next turn. `warn` and `attn` do not change the music. For testing, `nhj music accent err|ok` asks for one by hand.
 
 ## Continuation (optional, needs a GPU model)
 

@@ -103,6 +103,31 @@ def _patch(**kw) -> None:
     _update(lambda d: d.update(kw))
 
 
+ACCENT_FOR = {"err": "err", "ok": "ok", "celebrate": "ok"}    # event intent -> music accent
+ACCENT_TTL_S = 8.0           # an accent older than this is stale (the bed was paused when it arrived)
+
+
+def _write_accent(accent: str) -> None:
+    _patch(music_accent=accent, music_accent_ts=time.time())
+
+
+def note_accent(intent: str) -> None:
+    """Ask the controller's music director for an accent after a verdict (hooks call this). A no-op
+    unless music.mode is `generative`, so recorded-music installs never write the extra state, and
+    numpy-free so a hook never imports the audio stack. Only err and ok/celebrate map to accents."""
+    accent = ACCENT_FOR.get(intent)
+    if not accent:
+        return
+    try:
+        from nhj import config
+        mode = os.getenv("NHJ_MUSIC_MODE") or (config.CFG.get("music") or {}).get("mode", "recorded")
+        if str(mode).strip().lower() != "generative":
+            return
+        _write_accent(accent)
+    except Exception:
+        pass
+
+
 def _alive(pid) -> bool:
     if not pid:
         return False
