@@ -6,7 +6,7 @@ REPO="${NHJ_REPO:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 dups=()
 
 echo "== worktrees (every agent works in its own) =="
-declare -A seen_issue
+seen_issues=""   # lines of "<issue> <branch>"; no associative array (macOS ships Bash 3.2)
 slugs=()   # "agent|slug" for every agent-prefixed branch, to compare across agents
 while read -r path branch; do
   [ -z "$path" ] && continue
@@ -18,8 +18,9 @@ while read -r path branch; do
   fi
   if [[ "$branch" =~ ^[a-z]+/([0-9]+)- ]]; then
     n="${BASH_REMATCH[1]}"
-    [ -n "${seen_issue[$n]:-}" ] && dups+=("issue #$n is on two branches: ${seen_issue[$n]} and $branch")
-    seen_issue[$n]="$branch"
+    prev="$(printf '%s\n' "$seen_issues" | awk -v n="$n" '$1==n{print $2; exit}')"
+    [ -n "$prev" ] && dups+=("issue #$n is on two branches: $prev and $branch")
+    seen_issues="$seen_issues$n $branch"$'\n'
   fi
 done < <(git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch /{b=$2; sub("refs/heads/","",b)} /^$/{if(p){print p, b}; p=""; b=""} END{if(p)print p, b}')
 

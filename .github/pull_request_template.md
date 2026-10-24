@@ -11,5 +11,5 @@ Fixes #
 - [ ] Live / manual check (say what):
 
 ## Cross-review (required before the maintainer merges)
-- [ ] Added the label `needs-review:<other agent>`; the reviewer posts a review comment (format in AGENTS.md) and adds `reviewed`
+- [ ] Added the label `needs-review:<other agent>`; the reviewer posts a review comment (format in AGENTS.md) and swaps it for `reviewed` once the verdict is approve
 - [ ] Rebased on `origin/main`; no unrelated files staged (`git diff --cached --stat` was read before committing)

@@ -38,7 +38,8 @@ that nobody edits**. Updating it is a deliberate step after a merge:
 scripts/update-live.sh /path/to/nhj-live    # fast-forwards to origin/main, reinstalls, restarts services
 ```
 
-The script refuses to run if the live checkout has local modifications. Git-ignored runtime assets
+The script refuses to run unless the live checkout is **already detached** (so it can never detach
+another agent's branch) and unmodified. Git-ignored runtime assets
 (`.env`, `audio/`, `voices/`) belong in the live checkout; copy them in once.
 
 ## Before you open a PR
@@ -63,6 +64,9 @@ and `mkdocs build --strict` must pass.
 ## Gotchas worth knowing
 
 - `pkill -f "nhj.something"` matches your own shell's command line and kills it; use `pkill -f "[n]hj.something"`.
+  NHJ's long-lived processes also rename themselves (`setproctitle`: the mixer is just `NHJ muzak`), so a
+  `pkill -f` on the module name may match nothing; stop the pid recorded in the state file instead
+  (`scripts/update-live.sh` does).
 - Agent CLIs run non-interactively (`opencode run`, `codex exec`, ...) may wait forever on an open stdin pipe: redirect `</dev/null`.
 - On ZFS, `du` under-reports freshly written files; check sizes with `find … -printf '%s\n'`.
 - A zero-byte WAV from the TTS server with HTTP 200 means it ran out of GPU memory, not success.
@@ -81,9 +85,11 @@ rules below make that explicit and keep two agents from doing the same work.
 3. **One issue, one branch, one PR.** Branch `<agent>/<issue>-<slug>` (the number lets tools spot
    duplicates), PR body `Fixes #N`, rebased on `origin/main` before review is requested.
 4. **Every PR gets a cross-review by a different agent** before the maintainer merges. The author
-   adds `needs-review:<other-agent>`; the reviewer posts a review comment (format below) and adds
-   `reviewed`. GitHub will not let one account approve its own PR, so the comment plus the label
-   *is* the signal. Do not review your own PR.
+   adds `needs-review:<other-agent>`; the reviewer posts a review comment (format below). On
+   **approve** the reviewer swaps `needs-review:<agent>` for `reviewed`. On **changes-requested** the
+   label stays, the author fixes and pushes, then asks again (a new `[author]` comment with the new
+   sha); the reviewer re-reviews and only then marks `reviewed`. GitHub will not let one account
+   approve its own PR, so the comment plus the label *is* the signal. Do not review your own PR.
 5. **Review format:**
 
    ```
