@@ -229,6 +229,39 @@ def append_log(path: str | Path, line: str) -> None:
         return
 
 
+def _stderr_raw_path() -> str:
+    """Path currently attached to stderr, or "" when it cannot be named.
+
+    Linux exposes it through ``/proc/self/fd/2``. macOS does not, and
+    ``readlink("/dev/fd/2")`` fails there; ``F_GETPATH`` is the call that
+    returns the path a LaunchAgent opened.
+    """
+    proc = "/proc/self/fd/2"
+    if os.path.exists(proc):
+        try:
+            raw = os.readlink(proc)
+        except OSError:
+            raw = ""
+        if raw:
+            return raw
+    getpath = getattr(fcntl, "F_GETPATH", None)
+    if getpath is not None:
+        try:
+            raw = fcntl.fcntl(2, getpath, bytes(1024))
+        except (OSError, OverflowError, TypeError):
+            raw = b""
+        if isinstance(raw, bytes):
+            text = raw.split(b"\0", 1)[0].decode(errors="surrogateescape")
+        else:
+            text = str(raw).split("\0", 1)[0]
+        if text:
+            return text
+    try:
+        return os.readlink("/dev/fd/2")
+    except OSError:
+        return ""
+
+
 def _attached_log(name: str) -> Path | None:
     """Regular file on stderr, when it is this server's log under ``log_dir``.
 
@@ -241,14 +274,7 @@ def _attached_log(name: str) -> Path | None:
             return None
     except OSError:
         return None
-    raw = ""
-    for link in ("/proc/self/fd/2", "/dev/fd/2"):
-        try:
-            raw = os.readlink(link)
-        except OSError:
-            continue
-        if raw:
-            break
+    raw = _stderr_raw_path()
     if not raw or raw.startswith(("pipe:", "socket:", "anon_inode:")):
         return None
     if raw.endswith(" (deleted)") or not Path(raw).is_absolute():
