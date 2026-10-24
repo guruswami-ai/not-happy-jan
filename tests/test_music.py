@@ -351,3 +351,71 @@ def test_render_timeline_follows_the_script_on_bar_lines():
     bars = {b: lbl for b, lbl in log}
     assert all(bars[b] == "busy:1" for b in (0, 1))                  # 2 s bars: seconds 0-4
     assert all(bars[b] == "busy:2" for b in (2, 3))
+
+
+# ---- review fixes (grok, #67) ---------------------------------------------------------------
+@pytest.mark.parametrize("reading", [0, 100, None])
+def test_vram_guard_skips_when_full_or_unreadable(tmp_path, monkeypatch, reading):
+    from nhj.music import continuation
+    calls = []
+    _, c = _composer(tmp_path, _fake_runner(calls), min_free_vram_mib=500)
+    monkeypatch.setattr(continuation, "_free_vram_mib", lambda: reading)
+    assert c.prime(frozenset({"kick"})) is False and calls == []
+    assert "min_free_vram_mib" in c.last_error
+    monkeypatch.setattr(continuation, "_free_vram_mib", lambda: 9000)
+    _, ok = _composer(tmp_path / "other", _fake_runner(calls), min_free_vram_mib=500)
+    assert ok.prime(frozenset({"kick"})) and len(calls) == 1
+
+
+def test_timeout_s_reaches_the_subprocess(tmp_path, monkeypatch):
+    from nhj.music import continuation
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen.update(kw)
+        raise RuntimeError("stop here")
+    monkeypatch.setattr(continuation.subprocess, "run", fake_run)
+    _, c = _composer(tmp_path, None, command=["x", "{workdir}"], timeout_s=17)
+    assert c.enabled and c.prime(frozenset({"kick"})) is False
+    assert seen["timeout"] == 17
+
+
+def test_short_cache_file_is_regenerated_and_writes_are_atomic(tmp_path):
+    calls = []
+    _, c = _composer(tmp_path, _fake_runner(calls))
+    layers = frozenset({"kick"})
+    wav = tmp_path / "cache" / f"{c.cache_key(layers, 0)}.wav"
+    wav.parent.mkdir(parents=True)
+    _wav(wav, np.zeros((1000, 2), np.float32))                  # torn/short file at the cache path
+    assert c.prime(layers) and len(calls) == 1                  # not accepted as a hit
+    assert wav.stat().st_size > 1000 * 4 and not list(wav.parent.glob("*.tmp"))
+    _, c2 = _composer(tmp_path, _fake_runner(calls))
+    assert c2.prime(layers) and len(calls) == 1                 # the repaired file is a hit now
+
+
+def test_source_survives_an_exception_and_keeps_producing():
+    pack = _const_pack(kick=0.5)
+
+    class Flaky(Director):
+        boom = True
+
+        def at_bar(self, bar):
+            if Flaky.boom and bar == 1:
+                Flaky.boom = False
+                raise RuntimeError("one bad bar")
+            return super().at_bar(bar)
+
+    d = Flaky()
+    d.update(1, 0)
+    buf, stop = [], threading.Event()
+    src = StemSource(pack, d, buf, threading.Event())
+    src.stop = stop
+    pushed = []
+
+    def push(block):
+        pushed.append(len(block))
+        if sum(pushed) > 3 * int(pack.spb):
+            stop.set()
+    src._push = push
+    src.run()                                                   # returns because we set stop, not because it died
+    assert sum(pushed) > 3 * int(pack.spb) and not Flaky.boom

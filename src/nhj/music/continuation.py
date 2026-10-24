@@ -50,7 +50,7 @@ class Composer:
         self.timeout_s = float(c.get("timeout_s", 120))
         self.min_free_vram_mib = int(c.get("min_free_vram_mib", 0))
         command = c.get("command")
-        self._runner = runner or (self._command_runner(list(command)) if command else None)
+        self._runner = runner or (self._command_runner(list(command), self.timeout_s) if command else None)
         self.enabled = bool(c.get("enabled")) and self._runner is not None
         self._cache = Path(cache_dir) if cache_dir else resources.cache_dir() / "music"
         self._lock = threading.Lock()
@@ -110,7 +110,7 @@ class Composer:
         try:
             key = self.cache_key(layers, variant)
             wav = self._cache / f"{key}.wav"
-            audio = self._load(wav)
+            audio = self._load(wav, int(round((self.total_bars - self.keep_bars) * self.pack.spb)))
             if audio is None:
                 audio = self._generate(layers, variant, wav)
             new_bars = self.total_bars - self.keep_bars
@@ -124,7 +124,7 @@ class Composer:
             with self._lock:
                 self._busy = False
 
-    def _load(self, wav: Path):
+    def _load(self, wav: Path, expect: int):
         try:
             with wave.open(str(wav), "rb") as w:
                 if (w.getframerate(), w.getnchannels(), w.getsampwidth()) != (SR, 2, 2):
@@ -132,11 +132,15 @@ class Composer:
                 raw = w.readframes(w.getnframes())
         except (OSError, wave.Error, EOFError):
             return None
-        return (np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32767.0).reshape(-1, 2)
+        audio = (np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32767.0).reshape(-1, 2)
+        return audio if len(audio) == expect else None          # a short/torn cache file is regenerated
 
     def _generate(self, layers: frozenset, variant: int, wav_out: Path) -> np.ndarray:
-        if self.min_free_vram_mib and (_free_vram_mib() or 10 ** 9) < self.min_free_vram_mib:
-            raise RuntimeError("not enough free GPU memory for continuation")
+        if self.min_free_vram_mib:
+            free = _free_vram_mib()
+            if free is None or free < self.min_free_vram_mib:
+                raise RuntimeError(f"free GPU memory {free} MiB is below min_free_vram_mib "
+                                   f"{self.min_free_vram_mib} (or could not be read); skipping continuation")
         spb = self.pack.spb
         src = self.pack.mix(layers, bars=self.keep_bars)
         peak = float(np.max(np.abs(src))) or 1.0
@@ -159,7 +163,9 @@ class Composer:
         rms_ref = float(np.sqrt(np.mean(self.pack.mix(layers) ** 2))) or rms_new
         new = (new * float(np.clip(rms_ref / rms_new, 0.25, 4.0))).astype(np.float32)
         self._cache.mkdir(parents=True, exist_ok=True)
-        _write_wav(wav_out, new, SR)
+        tmp_wav = wav_out.with_name(wav_out.name + ".tmp")
+        _write_wav(tmp_wav, new, SR)
+        tmp_wav.replace(wav_out)                                # atomic: a crash never leaves a short file
         wav_out.with_suffix(".json").write_text(json.dumps({
             "model": self.model_id, "licence": self.licence, "prompt": self.prompt, "seed": seed,
             "layers": sorted(layers), "keep_bars": self.keep_bars, "total_bars": self.total_bars,
@@ -169,12 +175,12 @@ class Composer:
         return new
 
     @staticmethod
-    def _command_runner(template: list):
+    def _command_runner(template: list, timeout_s: float = 120.0):
         def run(workdir: Path, prompt: str, seed: int, duration: float, mask_start: float) -> None:
             subs = {"workdir": str(workdir), "prompt": prompt, "seed": str(seed),
                     "duration": f"{duration:.3f}", "mask_start": f"{mask_start:.3f}"}
             argv = [str(part).format_map(subs) for part in template]
-            r = subprocess.run(argv, capture_output=True, text=True, timeout=300, cwd=workdir)
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s, cwd=workdir)
             if r.returncode != 0 or not (workdir / "out.wav").exists():
                 raise RuntimeError(f"continuation command failed rc={r.returncode}: {(r.stderr or r.stdout)[-200:]}")
         return run

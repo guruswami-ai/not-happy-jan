@@ -16,6 +16,7 @@ from typing import Protocol
 import numpy as np
 from scipy.signal import lfilter
 
+from nhj import resources
 from nhj.duck_player import BLOCK, SR, _Decoder
 from nhj.music.director import Director, Plan
 from nhj.music.pack import Pack
@@ -46,13 +47,15 @@ class StemSource(_Decoder):
         self.plan_log: list[tuple[int, str]] = []              # (bar, label); small, for the demo and tests
 
     def run(self) -> None:
-        try:
-            for block in self.iter_blocks():
-                if self.stop.is_set():
-                    return
-                self._push(block)
-        except Exception:                                      # never take the mixer down with the bed
-            time.sleep(0.05)
+        while not self.stop.is_set():
+            try:
+                for block in self.iter_blocks():
+                    if self.stop.is_set():
+                        return
+                    self._push(block)
+            except Exception as e:                             # one bad block must not silence the bed
+                resources.debug(f"music: stem source error, restarting the arrangement: {type(e).__name__}: {e}")
+                time.sleep(0.2)
 
     def iter_blocks(self):
         pack, spb, n_loop = self.pack, self.pack.spb, self.pack.n
