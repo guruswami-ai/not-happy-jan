@@ -419,3 +419,14 @@ def test_source_survives_an_exception_and_keeps_producing():
     src._push = push
     src.run()                                                   # returns because we set stop, not because it died
     assert sum(pushed) > 3 * int(pack.spb) and not Flaky.boom
+
+
+def test_music_cli_explains_a_missing_audio_extra(monkeypatch):
+    from typer.testing import CliRunner
+
+    from nhj import cli
+    monkeypatch.setitem(sys.modules, "numpy", None)               # `import numpy` now raises ImportError
+    for args in (["music", "status"], ["music", "build-pack"], ["music", "accent", "err"], ["music", "demo"]):
+        r = CliRunner().invoke(cli.cli, args)
+        assert r.exit_code == 1, args
+        assert "audio extra" in r.output and "Traceback" not in r.output, args
