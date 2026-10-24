@@ -687,6 +687,7 @@ def run_duck_controller() -> int:
     resume_pending = False                                   # resume the music bed only after the on-hold intro+click play
     active_since = None
     idle_since = time.monotonic()
+    last_evict = 0.0
     rave_adapter = None                                      # lazy AWTRIX adapter for rave display cycling
     last_party = 0.0
     active_ambient = None                                    # looped mode bed currently feeding the ambient bus
@@ -708,6 +709,12 @@ def run_duck_controller() -> int:
     try:
         while True:
             now = time.monotonic()
+            if now - last_evict >= 1.0:
+                last_evict = now
+                try:
+                    M.evict_stale()
+                except Exception:
+                    resources.debug("muzak evict_stale failed")
             if _dev_changed.is_set():                        # output device switched → follow it
                 _dev_changed.clear()
                 keeper.mark_down()
@@ -794,8 +801,12 @@ def run_duck_controller() -> int:
             time.sleep(0.05)
     finally:
         mixer.stop()
-        d = M._read()
-        if d.get("controller_pid") == os.getpid():
-            d.pop("controller_pid", None); d.pop("child_pid", None); d.pop("stop", None)
-            M._write(d)
+
+        def _clear(d):
+            if d.get("controller_pid") == os.getpid():
+                d.pop("controller_pid", None)
+                d.pop("child_pid", None)
+                d.pop("stop", None)
+
+        M._update(_clear)
     return 0
