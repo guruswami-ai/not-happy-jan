@@ -333,6 +333,54 @@ def test_claim_retries_unclaimable_file_after_backoff(qm, monkeypatch):
     qm.ack(token)
 
 
+def test_holding_claim_keeps_a_long_pause_from_being_reclaimed(qm, monkeypatch):
+    monkeypatch.setattr(queue_manager, "_CLAIM_LEASE_SECONDS", 0.4)
+    monkeypatch.setattr(queue_manager, "_HEARTBEAT_SECONDS", 0.05)
+    qm.add("ok", message="held")
+    token, _ = qm.claim_next()
+
+    with qm.holding_claim(token):
+        time.sleep(0.9)
+        assert qm.claim_next() is None
+        assert token.exists()
+    qm.ack(token)
+
+
+def test_holding_claim_releases_a_dispatch_past_the_budget(qm, monkeypatch):
+    """A hung dispatch stops being refreshed, so the short lease can reclaim it."""
+    monkeypatch.setattr(queue_manager, "_CLAIM_LEASE_SECONDS", 0.25)
+    monkeypatch.setattr(queue_manager, "_HEARTBEAT_SECONDS", 0.05)
+    monkeypatch.setattr(queue_manager, "_DISPATCH_BUDGET_SECONDS", 0.4)
+    qm.add("ok", message="hung")
+    token, _ = qm.claim_next()
+
+    with qm.holding_claim(token):
+        time.sleep(0.2)
+        assert qm.claim_next() is None
+        assert token.exists()
+        time.sleep(1.0)
+        recovered = qm.claim_next()
+
+    assert recovered is not None
+    recovered_token, data = recovered
+    assert data["message"] == "hung"
+    assert not token.exists()
+    qm.ack(recovered_token)
+
+
+def test_holding_claim_stops_when_the_dispatch_returns(qm, monkeypatch):
+    monkeypatch.setattr(queue_manager, "_HEARTBEAT_SECONDS", 0.05)
+    qm.add("ok", message="done")
+    token, _ = qm.claim_next()
+    with qm.holding_claim(token):
+        time.sleep(0.1)
+    old = time.time() - 30
+    os.utime(token, (old, old))
+    time.sleep(0.2)
+    assert time.time() - token.stat().st_mtime > 5
+    qm.ack(token)
+
+
 def test_expired_lease_recovers_claim_even_if_pid_alive(tmp_path):
     """A .proc whose lease has expired is recovered even when the owner PID is still
     alive — guards against an over-long lease (#73)."""
