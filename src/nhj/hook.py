@@ -131,27 +131,58 @@ def _seen_set(sid: str, sig: str) -> None:
         pass
 
 
+_TAIL_BYTES = 256 * 1024   # first transcript read window; grows only if no answer in it
+
+
+def _last_assistant_in(chunk: bytes) -> str:
+    last = ""
+    for raw in chunk.splitlines():
+        try:
+            e = json.loads(raw.strip())
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if not isinstance(e, dict):
+            continue
+        msg = e.get("message") or e
+        if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            continue
+        content = msg.get("content", "")
+        text = "\n".join(
+            b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+        ) if isinstance(content, list) else str(content)
+        if text:
+            last = text
+    return last
+
+
 def _read_last_assistant_text(path: Path) -> str:
-    if not path.exists():
-        return ""
+    """Last non-empty assistant text, read from the tail of the transcript (#45).
+
+    The Stop hook polls this every NHJ_HOOK_POLL while waiting for the final
+    message to flush, so cost must not grow with transcript size: read the last
+    _TAIL_BYTES, and only widen (x4) when no assistant text is in the window —
+    e.g. a final message that is itself larger than the window. Worst case is
+    one whole-file read, never a whole-file read per poll."""
     try:
-        last = ""
-        with path.open() as f:
-            for line in f:
-                try:
-                    e = json.loads(line.strip())
-                except json.JSONDecodeError:
-                    continue
-                msg = e.get("message") or e
-                if msg.get("role") != "assistant":
-                    continue
-                content = msg.get("content", "")
-                text = "\n".join(
-                    b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
-                ) if isinstance(content, list) else str(content)
-                if text:
-                    last = text
-        return last
+        size = path.stat().st_size
+    except OSError:
+        return ""
+    if size == 0:
+        return ""
+    window = max(1024, int(_TAIL_BYTES))
+    try:
+        with path.open("rb") as f:
+            while True:
+                offset = max(0, size - window)
+                f.seek(offset)
+                chunk = f.read()
+                if offset > 0:                 # first line is partial; drop it
+                    nl = chunk.find(b"\n")
+                    chunk = chunk[nl + 1:] if nl >= 0 else b""
+                last = _last_assistant_in(chunk)
+                if last or offset == 0:
+                    return last
+                window *= 4
     except OSError:
         return ""
 
