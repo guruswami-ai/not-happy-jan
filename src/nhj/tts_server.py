@@ -37,6 +37,20 @@ from typing import Optional
 
 from nhj import resources
 
+
+def _load_env() -> None:
+    """A LaunchAgent starts this module without a shell, so read ``.env`` here.
+
+    The shared secret is checked on each request. Loading once at import is
+    enough, and it matches the MCP server.
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv(resources.env_file())
+
+
+_load_env()
+
 _VOICES = resources.voices_dir()        # downloaded ref.wav / ref.txt for voice cloning
 
 # Model tier -> mlx-community model id. One model is loaded per daemon (the tier
@@ -107,11 +121,14 @@ def _migrate_legacy_models() -> int:
 
 # Module-level so FastAPI recognises it as the request BODY (a closure-local
 # BaseModel gets mis-read as a query param). pydantic is always available.
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# One request must not be able to hold the single GPU executor for minutes.
+_TTS_MAX_CHARS = 500
 
 
 class GenReq(BaseModel):
-    text: str
+    text: str = Field(max_length=_TTS_MAX_CHARS)
     voice: str = "jan"
     model_tier: str = "fast"
     instruct: str = ""
@@ -120,6 +137,8 @@ class GenReq(BaseModel):
 
 
 def _log(msg: str) -> None:
+    from nhj import resources
+    resources.rotate_attached_log("tts")
     print(f"[nhj-tts] {msg}", file=sys.stderr, flush=True)
 
 
@@ -218,11 +237,34 @@ def _load_impl(tier: str) -> None:
     _log(f"ready — sample_rate={_sample_rate}")
 
 
+def request_allowed(path: str, headers) -> bool:
+    """True when a TTS request may proceed.
+
+    ``/health`` stays open so a readiness probe does not need the secret. A
+    blank ``NHJ_SHARED_SECRET`` allows every other path too. Otherwise the
+    caller sends ``X-NHJ-Token`` or ``Authorization: Bearer``.
+    """
+    from nhj.lan_auth import allows, secret
+
+    if path == "/health" or not secret():
+        return True
+    return allows(headers)
+
+
 def build_app():
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
     app = FastAPI(title="nhj-tts", version="1.0")
+
+    @app.middleware("http")
+    async def _lan_secret(request, call_next):
+        from nhj import resources
+
+        resources.rotate_attached_log("tts")
+        if not request_allowed(request.url.path, request.headers):
+            return JSONResponse({"status": "error", "reason": "unauthorised"}, status_code=401)
+        return await call_next(request)
 
     @app.get("/health")
     def health():

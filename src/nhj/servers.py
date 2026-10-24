@@ -176,6 +176,7 @@ def _spawn_supervisor(name: str) -> None:
     try:
         logf = Path(resources.log_file(f"{name}-server.log"))
         logf.parent.mkdir(parents=True, exist_ok=True)
+        resources.rotate_log(logf)
         out = open(logf, "ab")
     except OSError:
         out = subprocess.DEVNULL

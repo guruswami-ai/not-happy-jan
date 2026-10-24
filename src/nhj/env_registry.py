@@ -120,6 +120,8 @@ _ENTRIES = [
     _e("NHJ_TRANSPORT", "enum", "stdio", None, "startup", "MCP server transport: stdio/streamable-http"),
     _e("NHJ_HOST", "str", "127.0.0.1", None, "startup", "MCP HTTP bind address (LAN exposure is opt-in)"),
     _e("NHJ_PORT", "int", "8765", None, "startup", "MCP HTTP port"),
+    _e("NHJ_SHARED_SECRET", "str", "", None, "live",
+       "Shared secret for the TTS server and the network MCP. Blank means no check"),
     _e("NHJ_TTS_HOST", "str", "127.0.0.1", None, "startup", "TTS server bind address"),
     _e("NHJ_TTS_PORT", "int", "9992", None, "startup", "TTS server port"),
     _e("NHJ_TTS_MODEL", "str", None, None, "startup", "TTS model or cache directory the server loads"),
