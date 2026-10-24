@@ -6,6 +6,7 @@ safe PID ownership. No torch / GPU / network — pure filesystem + mocks.
 """
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import sys
@@ -15,6 +16,7 @@ import time
 import pytest
 
 from nhj import queue_manager
+from nhj.event import VibeValidationError
 from nhj.queue_manager import QueueManager
 
 
@@ -118,6 +120,54 @@ def test_poison_quarantined_and_does_not_block(qm):
     assert data["message"] == "good"                       # valid item returned despite poison
     assert list(qm.queue_dir.glob("*.poison"))             # poison quarantined
     qm.ack(token)
+
+
+def _b64(text: str) -> str:
+    return base64.b64encode(text.encode()).decode("ascii")
+
+
+def test_add_rejects_a_bad_event_without_writing(qm):
+    with pytest.raises(VibeValidationError):
+        qm.add("nope", message="no")
+    with pytest.raises(VibeValidationError):
+        qm.add("ok", vibe_level=0)
+    assert _vibes(qm) == []
+
+
+def test_add_stores_canonical_fields(qm):
+    qm.add("OK", message="hi", vibe_level="7.0", emotion="Alert", character="Karren", speed="1.5")
+    _, data = qm.claim_next()
+    assert data["intent"] == "ok"
+    assert data["vibe_level"] == "7"
+    assert data["emotion"] == "alert"
+    assert data["character"] == "karren"
+    assert data["speed"] == "1.5"
+    assert int(data["vibe_level"]) == 7
+
+
+def test_claim_quarantines_an_invalid_event_without_retry(qm):
+    (qm.queue_dir / "0000000000001-x-000000-bad.vibe").write_text(
+        f"intent={_b64('ok')}\nvibe_level=99\nemotion=neutral\nspeed=1.0\n"
+    )
+    qm.add("ok", message="good")
+
+    token, data = qm.claim_next()
+
+    assert data["message"] == "good"
+    assert list(qm.queue_dir.glob("*.poison"))
+    assert list(qm.queue_dir.glob("*.r*.vibe")) == []
+    qm.ack(token)
+    assert qm.claim_next() is None
+
+
+def test_claim_canonicalises_a_numeric_vibe_level(qm):
+    (qm.queue_dir / "0000000000001-x-000000-num.vibe").write_text(
+        f"intent={_b64('OK')}\nvibe_level=5.0\nemotion=neutral\nspeed=1\n"
+    )
+    _, data = qm.claim_next()
+    assert data["intent"] == "ok"
+    assert data["vibe_level"] == "5"
+    assert int(data["vibe_level"]) == 5
 
 
 def test_missing_intent_is_poison(qm):

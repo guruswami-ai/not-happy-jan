@@ -1556,9 +1556,99 @@ def config_check():
     app.print(f"[green]✓[/green] config valid ({len(cfg)} top-level sections)")
 
 
+# ---- generative hold music (#63) -------------------------------------------------------------
+music_cli = typer.Typer(help="Generative hold music (opt-in: music.mode: generative)")
+cli.add_typer(music_cli, name="music")
+
+
+@music_cli.command("build-pack")
+def music_build_pack(dest: str = typer.Option("", "--dest", help="default: the data dir's music_packs/default")):
+    """Render the bundled synth's stem pack (a few seconds of CPU)."""
+    from nhj.music import runtime, synth
+    path = Path(dest).expanduser() if dest else runtime.default_pack_dir()
+    synth.build_default_pack(path)
+    app.print(f"[green]✓[/green] pack written to {path}")
+
+
+@music_cli.command("status")
+def music_status():
+    """Mode, pack and continuation settings as the controller will see them."""
+    from nhj.music import runtime
+    from nhj.music.pack import PackError, load_pack
+    cfg = runtime.settings()
+    app.print(f"mode: {cfg.get('mode', 'recorded')}   (set music.mode: generative or NHJ_MUSIC_MODE=generative)")
+    dest = runtime.pack_dir(cfg)
+    try:
+        p = load_pack(dest)
+        app.print(f"pack: {p.name}  {p.bpm:g} BPM  {p.bars} bars  layers: {', '.join(sorted(p.layers))}  ({dest})")
+    except PackError as e:
+        app.print(f"pack: none ({e}); run `nhj music build-pack`")
+    cont = cfg.get("continuation") or {}
+    app.print(f"continuation: {'on' if cont.get('enabled') and cont.get('command') else 'off'}")
+
+
+@music_cli.command("accent")
+def music_accent(intent: str = typer.Argument("err", help="err (4-bar breakdown) | ok (1-bar release)")):
+    """Ask the running controller for a musical accent."""
+    from nhj import inference_muzak
+    from nhj.music import runtime
+    runtime.note_accent(inference_muzak, intent)
+
+
+@music_cli.command("demo")
+def music_demo(
+    out: str = typer.Option("music-demo.wav", "--out", "-o"),
+    pack_dir: str = typer.Option("", "--pack", help="default: the configured pack (built on demand)"),
+    continuation: bool = typer.Option(False, "--continuation", help="prime continuation sections (needs music.continuation configured)"),
+):
+    """Render a scripted timeline offline: 1, 2, 3, 4 sessions busy, a long turn, an error, recovery."""
+    import wave
+    import numpy as np
+    from nhj.music import runtime, synth
+    from nhj.music.continuation import Composer
+    from nhj.music.director import Director
+    from nhj.music.pack import PackError, load_pack
+    from nhj.music.source import render_timeline
+    cfg = runtime.settings()
+    dest = Path(pack_dir).expanduser() if pack_dir else runtime.pack_dir(cfg)
+    try:
+        pack = load_pack(dest)
+    except PackError:
+        synth.build_default_pack(dest)
+        pack = load_pack(dest)
+    director = Director(long_after_s=8, long_ramp_s=12)
+    composer = None
+    if continuation:
+        composer = Composer(pack, cfg.get("continuation") or {})
+        if not composer.enabled:
+            app.print("[red]continuation is not configured (music.continuation.enabled + command)[/red]")
+            raise typer.Exit(1)
+        for layers in ({"kick", "bass", "hats", "clap", "arp", "pad"},):
+            if not composer.prime(frozenset(layers)):
+                app.print(f"[red]continuation failed: {composer.last_error}[/red]")
+                raise typer.Exit(1)
+    bar_s = 4 * 60.0 / pack.bpm
+    script = [(4 * bar_s, 1, 0.0, None), (4 * bar_s, 2, 0.0, None), (4 * bar_s, 3, 0.0, None),
+              (8 * bar_s, 4, 0.0, None), (8 * bar_s, 4, 12.0, None), (8 * bar_s, 4, 22.0, None),
+              (4 * bar_s, 4, 0.0, "err"), (4 * bar_s, 4, 0.0, "ok"), (4 * bar_s, 2, 0.0, None)]
+    audio, log = render_timeline(pack, director, script, composer)
+    pcm = (np.clip(audio, -1, 1) * 32767).astype("<i2")
+    with wave.open(out, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(48000)
+        w.writeframes(pcm.tobytes())
+    labels = []
+    for bar, label in log:
+        if not labels or labels[-1][1] != label:
+            labels.append((bar, label))
+    app.print(f"[green]✓[/green] {out}  ({len(audio) / 48000:.1f} s)   plan: " + " → ".join(f"bar {b}: {name}" for b, name in labels))
+
+
 def main():
     cli()
 
 
 if __name__ == "__main__":
     main()
+

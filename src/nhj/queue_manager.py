@@ -11,8 +11,9 @@ Durability model
   so a half-written file is never visible and same-millisecond writes never
   collide.
 - ``claim_next()`` atomically renames the oldest ``*.vibe`` → ``*.proc.<pid>``
-  (a claim), parses it, and returns a token. Unparseable items are quarantined
-  to ``*.poison`` so a poison file can never block the queue.
+  (a claim), parses it, and returns a token. Unparseable items, and items
+  ``event.validate`` rejects, are quarantined to ``*.poison`` so a bad file
+  can never block the queue or burn the retry budget.
 - The worker calls ``ack(token)`` (deletes the ``.proc`` file) only **after**
   dispatch completes. A ``.proc`` file left by a dead worker is re-queued on the
   next claim, with a bounded retry count before it is quarantined.
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Tuple
 
 from nhj import resources
+from nhj.event import VibeValidationError, validate
 
 _B64_FIELDS = ("intent", "message", "pretext", "source")
 _MAX_RETRIES = 3          # re-queue a crashed-worker item this many times, then quarantine
@@ -138,20 +140,30 @@ class QueueManager:
             pretext: str = "", verbosity: str = "medium", emotion: str = "neutral",
             speed: float = 1.0, voice_variant: str = "", nfe_step: int = 0,
             character: str = "", source: str = "") -> str:
+        """Queue one event.
+
+        Raises :class:`VibeValidationError` on a bad field and writes nothing.
+        Stored fields are the canonical values from ``event.validate``.
+        """
+        ev = validate(
+            intent, message=message, vibe_level=vibe_level, pretext=pretext,
+            verbosity=verbosity, emotion=emotion, speed=speed,
+            voice_variant=voice_variant, character=character, source=source,
+        )
         ts = int(time.time() * 1000)
         name = f"{ts:013d}-{os.getpid()}-{next(_seq):06d}-{uuid.uuid4().hex[:8]}.vibe"
         data = {
-            "intent":        base64.b64encode(intent.encode("utf-8")).decode("ascii"),
-            "message":       base64.b64encode(message.encode("utf-8")).decode("ascii"),
-            "vibe_level":    str(vibe_level),
-            "pretext":       base64.b64encode(pretext.encode("utf-8")).decode("ascii"),
-            "verbosity":     verbosity,
-            "emotion":       emotion,
-            "speed":         str(speed),
-            "voice_variant": voice_variant,
+            "intent":        base64.b64encode(ev.intent.encode("utf-8")).decode("ascii"),
+            "message":       base64.b64encode(ev.message.encode("utf-8")).decode("ascii"),
+            "vibe_level":    str(ev.vibe_level),
+            "pretext":       base64.b64encode(ev.pretext.encode("utf-8")).decode("ascii"),
+            "verbosity":     ev.verbosity,
+            "emotion":       ev.emotion,
+            "speed":         str(ev.speed),
+            "voice_variant": ev.voice_variant,
             "nfe_step":      str(nfe_step),
-            "character":     character,
-            "source":        base64.b64encode(source.encode("utf-8")).decode("ascii"),
+            "character":     ev.character,
+            "source":        base64.b64encode(ev.source.encode("utf-8")).decode("ascii"),
         }
         body = "\n".join(f"{k}={v}" for k, v in data.items())
         self._atomic_write(self.queue_dir / name, body)
@@ -201,6 +213,11 @@ class QueueManager:
             if data is None:                   # poison — quarantine and keep scanning
                 self._quarantine(token, "unparseable")
                 continue
+            try:
+                data = self._checked(data)
+            except VibeValidationError as e:  # bad fields — quarantine, do not retry
+                self._quarantine(token, str(e))
+                continue
             return token, data
         return None
 
@@ -234,6 +251,39 @@ class QueueManager:
         token, data = claimed
         self.ack(token)
         return data
+
+    def _checked(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Canonical copy of *data*. Raises VibeValidationError when a field is bad.
+
+        ``vibe_level`` is written back as a plain integer string so the worker's
+        ``int()`` accepts values validate allows, such as ``5.0``.
+        """
+        ev = validate(
+            data.get("intent", ""),
+            message=data.get("message", ""),
+            vibe_level=data.get("vibe_level", 5),
+            pretext=data.get("pretext", ""),
+            verbosity=data.get("verbosity", "medium"),
+            emotion=data.get("emotion", "neutral"),
+            speed=data.get("speed", 1.0),
+            voice_variant=data.get("voice_variant", ""),
+            character=data.get("character", ""),
+            source=data.get("source", ""),
+        )
+        checked = dict(data)
+        checked.update({
+            "intent": ev.intent,
+            "message": ev.message,
+            "vibe_level": str(ev.vibe_level),
+            "pretext": ev.pretext,
+            "verbosity": ev.verbosity,
+            "emotion": ev.emotion,
+            "speed": str(ev.speed),
+            "voice_variant": ev.voice_variant,
+            "character": ev.character,
+            "source": ev.source,
+        })
+        return checked
 
     def _parse(self, path: Path) -> Optional[Dict[str, Any]]:
         try:
