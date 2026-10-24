@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
-from nhj import worker
+from nhj import queue_manager, worker
+from nhj.queue_manager import QueueManager
+
+
+class _NoHeartbeat:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *exc):
+        return False
 
 
 def test_dispatch_failure_nacks_instead_of_acknowledging(monkeypatch, tmp_path):
@@ -25,6 +36,9 @@ def test_dispatch_failure_nacks_instead_of_acknowledging(monkeypatch, tmp_path):
 
         def release_worker_slot(self):
             pass
+
+        def holding_claim(self, token):
+            return _NoHeartbeat()
 
     queue = FakeQueue()
     monkeypatch.setattr(worker, "QueueManager", lambda: queue)
@@ -62,6 +76,9 @@ def test_invalid_queued_speed_nacks_without_dispatch(monkeypatch, tmp_path, spee
         def release_worker_slot(self):
             pass
 
+        def holding_claim(self, token):
+            return _NoHeartbeat()
+
     class FakeAdapter:
         calls = []
 
@@ -94,3 +111,32 @@ def test_valid_queued_speed_dispatches(monkeypatch):
     worker._dispatch({"intent": "ok", "vibe_level": "5", "speed": "1.5"}, [FakeAdapter()])
 
     assert calls[0]["speed"] == 1.5
+
+
+def test_slow_adapter_is_not_reclaimed_mid_dispatch(monkeypatch, tmp_path):
+    """A dispatch longer than the lease must not be claimed again (#48 B5)."""
+    monkeypatch.setattr(queue_manager, "_CLAIM_LEASE_SECONDS", 0.4)
+    monkeypatch.setattr(queue_manager, "_HEARTBEAT_SECONDS", 0.05)
+    monkeypatch.setattr(worker, "resolve_character", lambda intent: object())
+    monkeypatch.setattr("nhj.gate.voice_allowed", lambda source="": False)
+
+    qm = QueueManager(queue_dir=str(tmp_path / "queue"))
+    qm.add("ok", message="slow")
+    claimed = qm.claim_next()
+    assert claimed is not None
+    token, task = claimed
+    stolen = {}
+
+    class Slow:
+        channel = "visual"
+
+        def fire(self, **kwargs):
+            time.sleep(0.9)
+            stolen["next"] = qm.claim_next()
+
+    with qm.holding_claim(token):
+        worker._dispatch(task, [Slow()])
+
+    assert stolen["next"] is None
+    assert token.exists()
+    qm.ack(token)
