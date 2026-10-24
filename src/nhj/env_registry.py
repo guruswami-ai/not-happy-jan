@@ -92,6 +92,7 @@ _ENTRIES = [
     _e("NHJ_MUZAK_DIR", "path", "", None, "live", "Extra/replacement music directory for the hold bed"),
     _e("NHJ_MUZAK_STATE", "path", None, None, "import", "Override the music.json state file location"),
     _e("NHJ_MUZAK_VOLUME", "float", "0.5", None, "live", "Music bed level (0-1)"),
+    _e("NHJ_MUSIC_MODE", "enum", None, "music.mode", "startup", "Hold-music source: recorded (default) or generative (stem pack + director)"),
     _e("NHJ_MUZAK_DUCK_GAIN", "float", "0.22", None, "live", "Music level while ducking under speech (0-1)"),
     _e("NHJ_MUZAK_RETURN", "bool", "1", None, "live", "Play the reconnect ('you still there?') return clip"),
     _e("NHJ_MUZAK_INTRO", "bool", "1", None, "live", "Play the hold intro sting"),
