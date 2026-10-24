@@ -28,6 +28,7 @@ import contextlib
 import fcntl
 import os
 import platform
+import stat
 from pathlib import Path
 
 APP_NAME = "not-happy-jan"
@@ -224,19 +225,57 @@ def append_log(path: str | Path, line: str) -> None:
             with open(path, "a") as handle:
                 handle.write(text)
     except OSError:
-        pass
+        # A full disk or a permissions error must not break the caller.
+        return
+
+
+def _attached_log(name: str) -> Path | None:
+    """Regular file on stderr, when it is this server's log under ``log_dir``.
+
+    The on-demand supervisor opens ``{name}-server.log``. A LaunchAgent opens
+    ``{name}.log`` before the process starts. A pipe, a socket, a tty,
+    ``/dev/null``, or any other file is left alone.
+    """
+    try:
+        if not stat.S_ISREG(os.fstat(2).st_mode):
+            return None
+    except OSError:
+        return None
+    raw = ""
+    for link in ("/proc/self/fd/2", "/dev/fd/2"):
+        try:
+            raw = os.readlink(link)
+        except OSError:
+            continue
+        if raw:
+            break
+    if not raw or raw.startswith(("pipe:", "socket:", "anon_inode:")):
+        return None
+    if raw.endswith(" (deleted)") or not Path(raw).is_absolute():
+        return None
+    try:
+        path = Path(raw).resolve()
+        path.relative_to(log_dir(create=False).resolve())
+    except (OSError, ValueError):
+        return None
+    if path.name not in {f"{name}.log", f"{name}-server.log"} or not path.is_file():
+        return None
+    return path
 
 
 def rotate_attached_log(name: str) -> None:
-    """Rotate ``{name}-server.log`` when stderr is that file and it is over the cap.
+    """Reopen stdout and stderr when the attached log is already over the cap.
 
-    The supervisor hands the server process the open log as stdout and stderr.
-    Renaming the path leaves that fd on the old inode, so this reopens both
-    streams onto a fresh file. A tty, or any other stderr, is left alone.
-    An external binary (llama.cpp) keeps the fd it was started with; its log
-    rotates the next time the supervisor opens it.
+    Renaming the path leaves the existing descriptor on the old inode, so this
+    rotates that file and points both streams at the new one. ``name`` selects
+    ``{name}.log`` (LaunchAgent) or ``{name}-server.log`` (supervisor).
+
+    llama.cpp holds its own descriptor. Calling this in the parent before the
+    child starts retargets the child. A later rename does not.
     """
-    path = Path(log_file(f"{name}-server.log"))
+    path = _attached_log(name)
+    if path is None:
+        return
     try:
         err = os.fstat(2)
         st = path.stat()
@@ -255,7 +294,8 @@ def rotate_attached_log(name: str) -> None:
             if (err.st_dev, err.st_ino) != (st.st_dev, st.st_ino) or err.st_size < _LOG_MAX_BYTES:
                 return
             rotate_log(path)
-            fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o644)
+            # Owner-only. NHJ_DEBUG logs can contain the spoken text.
+            fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
             try:
                 os.dup2(fd, 1)
                 os.dup2(fd, 2)

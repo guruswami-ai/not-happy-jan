@@ -21,6 +21,10 @@ def main() -> None:
     cmd = sys.argv[1:]
     if not cmd:
         sys.exit("usage: python -m nhj.llm_server <llama-server> [args...]")
+    # Launchd has already opened llm.log on stderr. Rotate before the child
+    # inherits that descriptor. A rename after Popen does not retarget llama.cpp.
+    from nhj import resources
+    resources.rotate_attached_log("llm")
     child = subprocess.Popen(cmd)
 
     def _forward(signum, _frame):

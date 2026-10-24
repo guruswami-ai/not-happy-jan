@@ -74,7 +74,7 @@ ULANZI_HTTP_HOSTS=awtrix_96895c.local       # mDNS name; one display or many
 
 `NHJ_HOST` defaults to loopback. `nhj install-mcp` and `nhj install-mcp-service` warn when `--listen` is anything else: that listener can queue speech and display updates for anyone who can reach it. Set `NHJ_SHARED_SECRET` and send it as the `X-NHJ-Token` header (or `Authorization: Bearer`) on the TTS server and on the network MCP transport. The stdio MCP transport is local and does not use the header. TTS text is limited to 500 characters so one request cannot hold the speech server.
 
-`hook.log`, `worker.log` and `*-server.log` rotate at 1 MB, keeping three older files. The hook log records intent and message length. The message text, and the tail of the assistant turn, are written only when `NHJ_DEBUG` is set. A long-lived llama.cpp process keeps the log file it was started with, so `llm-server.log` rotates the next time its supervisor starts.
+`hook.log`, `worker.log`, `tts.log`, `llm.log` and `*-server.log` rotate at 1 MB, keeping three older files. The TTS process reopens its own log, including the LaunchAgent file `tts.log`. `llm.log` is rotated when `nhj.llm_server` starts, before llama.cpp inherits the descriptor. A later rename does not retarget that child, so a long run still waits for the next start. The hook log records intent and message length. The message text, and the tail of the assistant turn, are written only when `NHJ_DEBUG` is set.
 
 ## Inference muzak
 

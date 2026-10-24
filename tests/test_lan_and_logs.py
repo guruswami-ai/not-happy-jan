@@ -44,10 +44,11 @@ def test_append_log_rotates_and_drops_the_oldest(tmp_path, monkeypatch):
     assert "0019" in kept
 
 
-def test_rotate_attached_log_reopens_stderr(tmp_path, monkeypatch):
+@pytest.mark.parametrize("log_name", ["tts-server.log", "tts.log", "llm.log"])
+def test_rotate_attached_log_reopens_stderr(tmp_path, monkeypatch, log_name):
     monkeypatch.setattr(resources, "_LOG_MAX_BYTES", 50)
-    monkeypatch.setattr(resources, "log_file", lambda name: str(tmp_path / name))
-    path = tmp_path / "tts-server.log"
+    monkeypatch.setattr(resources, "log_dir", lambda create=True: tmp_path)
+    path = tmp_path / log_name
     path.write_bytes(b"x" * 80)
     saved_out, saved_err = os.dup(1), os.dup(2)
     fd = os.open(path, os.O_APPEND | os.O_WRONLY)
@@ -55,16 +56,43 @@ def test_rotate_attached_log_reopens_stderr(tmp_path, monkeypatch):
         os.dup2(fd, 1)
         os.dup2(fd, 2)
         os.close(fd)
-        resources.rotate_attached_log("tts")
+        server = "llm" if log_name.startswith("llm") else "tts"
+        resources.rotate_attached_log(server)
         os.write(2, b"fresh\n")
     finally:
         os.dup2(saved_out, 1)
         os.dup2(saved_err, 2)
         os.close(saved_out)
         os.close(saved_err)
-    assert (tmp_path / "tts-server.log.1").read_bytes().startswith(b"x")
+    assert (tmp_path / f"{log_name}.1").read_bytes().startswith(b"x")
     assert b"fresh" in path.read_bytes()
     assert not path.read_bytes().startswith(b"x" * 80)
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_rotate_attached_log_ignores_other_stderr(tmp_path, monkeypatch):
+    monkeypatch.setattr(resources, "_LOG_MAX_BYTES", 50)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(resources, "log_dir", lambda create=True: logs)
+    outside = tmp_path / "tts.log"
+    inside = logs / "hook.log"
+    for path in (outside, inside):
+        path.write_bytes(b"x" * 80)
+        saved_out, saved_err = os.dup(1), os.dup(2)
+        fd = os.open(path, os.O_APPEND | os.O_WRONLY)
+        try:
+            os.dup2(fd, 1)
+            os.dup2(fd, 2)
+            os.close(fd)
+            resources.rotate_attached_log("tts")
+        finally:
+            os.dup2(saved_out, 1)
+            os.dup2(saved_err, 2)
+            os.close(saved_out)
+            os.close(saved_err)
+        assert path.read_bytes() == b"x" * 80
+        assert not Path(f"{path}.1").exists()
 
 
 def test_hook_log_records_length_not_text(monkeypatch):
@@ -140,6 +168,20 @@ def _queue_text(res) -> str:
 
 
 def test_tts_rejects_a_missing_secret_and_an_overlong_text(monkeypatch):
+    monkeypatch.setenv("NHJ_SHARED_SECRET", "s3cret")
+    assert tts_server.request_allowed("/health", {})
+    assert not tts_server.request_allowed("/tts/generate", {})
+    assert tts_server.request_allowed(
+        "/tts/generate", {"Authorization": "Bearer s3cret"})
+    with pytest.raises(ValidationError):
+        tts_server.GenReq(text="x" * 501)
+    tts_server.GenReq(text="x" * 500)
+    monkeypatch.delenv("NHJ_SHARED_SECRET")
+    assert tts_server.request_allowed("/tts/generate", {})
+
+
+def test_tts_http_enforces_the_secret_and_the_length_cap(monkeypatch):
+    pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
     monkeypatch.setenv("NHJ_SHARED_SECRET", "s3cret")
@@ -155,9 +197,15 @@ def test_tts_rejects_a_missing_secret_and_an_overlong_text(monkeypatch):
     monkeypatch.delenv("NHJ_SHARED_SECRET")
     open_client = TestClient(tts_server.build_app())
     assert open_client.post("/tts/generate", json={"text": "x" * 501}).status_code == 422
-    with pytest.raises(ValidationError):
-        tts_server.GenReq(text="x" * 501)
-    tts_server.GenReq(text="x" * 500)
+
+
+def test_tts_loads_the_env_file(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text("NHJ_TTS_PROVE=from-file\n")
+    monkeypatch.setattr(resources, "env_file", lambda: env)
+    monkeypatch.delenv("NHJ_TTS_PROVE", raising=False)
+    tts_server._load_env()
+    assert os.environ.get("NHJ_TTS_PROVE") == "from-file"
 
 
 def test_synth_qwen_sends_the_shared_secret(monkeypatch):

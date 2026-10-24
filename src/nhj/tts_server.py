@@ -37,6 +37,20 @@ from typing import Optional
 
 from nhj import resources
 
+
+def _load_env() -> None:
+    """A LaunchAgent starts this module without a shell, so read ``.env`` here.
+
+    The shared secret is checked on each request. Loading once at import is
+    enough, and it matches the MCP server.
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv(resources.env_file())
+
+
+_load_env()
+
 _VOICES = resources.voices_dir()        # downloaded ref.wav / ref.txt for voice cloning
 
 # Model tier -> mlx-community model id. One model is loaded per daemon (the tier
@@ -223,6 +237,20 @@ def _load_impl(tier: str) -> None:
     _log(f"ready — sample_rate={_sample_rate}")
 
 
+def request_allowed(path: str, headers) -> bool:
+    """True when a TTS request may proceed.
+
+    ``/health`` stays open so a readiness probe does not need the secret. A
+    blank ``NHJ_SHARED_SECRET`` allows every other path too. Otherwise the
+    caller sends ``X-NHJ-Token`` or ``Authorization: Bearer``.
+    """
+    from nhj.lan_auth import allows, secret
+
+    if path == "/health" or not secret():
+        return True
+    return allows(headers)
+
+
 def build_app():
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
@@ -232,11 +260,9 @@ def build_app():
     @app.middleware("http")
     async def _lan_secret(request, call_next):
         from nhj import resources
-        from nhj.lan_auth import allows, secret
 
         resources.rotate_attached_log("tts")
-        # /health stays open so a readiness probe does not need the secret.
-        if request.url.path != "/health" and secret() and not allows(request.headers):
+        if not request_allowed(request.url.path, request.headers):
             return JSONResponse({"status": "error", "reason": "unauthorised"}, status_code=401)
         return await call_next(request)
 
