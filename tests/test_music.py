@@ -333,13 +333,13 @@ def test_feed_applies_each_accent_once_and_drops_stale_ones():
     now = time.time()
     M.state = {"music_accent": "err", "music_accent_ts": now}
     d = Director()
-    seen = runtime.feed(M, d, 0.0, 5.0, last_accent_ts=now - 50)
+    seen = runtime.feed(M, d, 0.0, 5.0, last_accent_ts=0.0)           # a controller's initial cursor
     assert seen == now and d.at_bar(0).label == "breakdown"
     assert runtime.feed(M, d, 0.0, 6.0, last_accent_ts=seen) == now
     assert d.at_bar(4).label == "busy:1"                          # not applied twice
     M.state = {"music_accent": "err", "music_accent_ts": now - 60}   # written long ago (e.g. at the last turn end)
     d2 = Director()
-    assert runtime.feed(M, d2, 0.0, 6.0, last_accent_ts=now - 100) == now - 60
+    assert runtime.feed(M, d2, 0.0, 6.0, last_accent_ts=0.0) == now - 60
     assert d2.at_bar(0).label == "busy:1"                         # seen, but stale: ignored
 
 
@@ -505,3 +505,13 @@ def test_stop_failure_is_always_an_err_accent(monkeypatch):
     monkeypatch.setattr(sys, "stdin", StringIO(json.dumps({"hook_event_name": "StopFailure", "session_id": "s1"})))
     assert prompt_hook.main() == 0
     assert _state()["music_accent"] == "err"
+
+
+def test_controller_starts_its_accent_cursor_at_zero():
+    """Codex review on #75: an accent written while the controller is still starting must not be
+    mistaken for a pre-existing one. The cursor starts at 0.0; feed()'s TTL does the staleness work."""
+    import inspect
+
+    from nhj import duck_player
+    src = inspect.getsource(duck_player.run_duck_controller)
+    assert "last_accent = 0.0" in src and "last_accent = time.time()" not in src

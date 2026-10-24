@@ -542,7 +542,8 @@ def run_duck_controller() -> int:
         resources.debug("music: generative source unavailable")
     mixer = Mixer(pool, source=gen[0] if gen else None)
     music_dir = gen[1] if gen else None
-    last_accent = time.time()                                # ignore accents from before this controller
+    last_accent = 0.0                                        # feed() drops accents older than the TTL, so none is replayed stale;
+                                                             # one written while this controller starts (fast StopFailure) is kept
     _EVENTS.mkdir(parents=True, exist_ok=True)
 
     fx_dir = M._REPO_ROOT / "audio" / "sfx"
