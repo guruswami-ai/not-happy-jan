@@ -244,6 +244,17 @@ def _fire_local(ev) -> bool:
     return True
 
 
+_REMOTE_TIMEOUT = 5.0   # s; override with NHJ_REMOTE_TIMEOUT
+
+
+def _remote_timeout() -> float:
+    try:
+        v = float(os.getenv("NHJ_REMOTE_TIMEOUT", str(_REMOTE_TIMEOUT)))
+    except ValueError:
+        return _REMOTE_TIMEOUT
+    return v if v > 0 else _REMOTE_TIMEOUT
+
+
 def _fire_remote(url: str, ev) -> bool:
     try:
         import asyncio
@@ -253,7 +264,8 @@ def _fire_remote(url: str, ev) -> bool:
             async with Client(url) as c:
                 # Full option set (incl. character) — identical to the local path.
                 await c.call_tool("nhj_vibe", ev.to_kwargs())
-        asyncio.run(_call())
+        # A hung LAN daemon must not hang the hook to the agent's 30s hook timeout.
+        asyncio.run(asyncio.wait_for(_call(), timeout=_remote_timeout()))
         return True
     except Exception as e:
         print(f"[nhj] remote dispatch failed ({url}): {e}", file=sys.stderr)
