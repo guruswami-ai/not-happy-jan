@@ -354,6 +354,37 @@ def test_install_model_skips_launchagent_off_darwin(tmp_path, monkeypatch):
     assert calls["n"] == 0                       # LaunchAgent NOT installed on Linux
 
 
+def _project():
+    import sys
+    if sys.version_info >= (3, 11):
+        import tomllib as toml
+    else:
+        import tomli as toml
+    with open(_REPO / "pyproject.toml", "rb") as fh:
+        return toml.load(fh)["project"]
+
+
+def _names(deps) -> set:
+    import re
+    return {re.split(r"[^A-Za-z0-9_.-]", d, 1)[0].lower() for d in deps}
+
+
+def test_core_dependencies_are_lean():
+    """#49: heavy media/device wheels live in extras, not the base install —
+    a hooks/text-only install must not download av/scipy/hidapi/mqtt."""
+    heavy = {"av", "sounddevice", "scipy", "hidapi", "paho-mqtt", "numpy"}
+    assert not (heavy & _names(_project()["dependencies"]))
+
+
+def test_extras_carry_the_heavy_dependencies():
+    extras = _project()["optional-dependencies"]
+    assert {"av", "sounddevice", "numpy", "scipy"} <= _names(extras["audio"])
+    assert "hidapi" in _names(extras["haptic"])
+    assert "paho-mqtt" in _names(extras["displays"])
+    # The test suite imports these at runtime, so dev must carry them too.
+    assert {"av", "sounddevice", "numpy", "scipy", "hidapi", "paho-mqtt"} <= _names(extras["dev"])
+
+
 def test_scipy_runtime_dep_declared():
     """scipy is imported at runtime by duck_player (call-centre bandpass) — must be declared (#64)."""
     import sys

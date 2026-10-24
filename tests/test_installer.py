@@ -314,8 +314,8 @@ def test_install_sh_minimal_skips_the_server_extra():
     """--minimal must not pull the [server] extra (fastapi/uvicorn/mlx-audio)."""
     script = _INSTALL_SH.read_text()
 
-    assert 'PKG_SPEC="$ROOT"' in script
-    assert 'PKG_SPEC="$ROOT[server]"' in script
+    assert 'PKG_SPEC="$ROOT[audio]"' in script          # minimal: bank plays, no server stack
+    assert 'PKG_SPEC="$ROOT[server,audio,haptic,displays]"' in script
     # The install line uses the computed spec, never a hard-coded [server].
     assert 'uv pip install --python "$VENV_PYTHON" --reinstall "$PKG_SPEC"' in script
     assert '--reinstall "$ROOT[server]"' not in script
