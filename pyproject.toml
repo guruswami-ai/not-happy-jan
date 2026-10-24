@@ -53,7 +53,7 @@ dev = [
     "build>=1.2",
     "hatchling>=1.27",
     "pytest>=7.0",
-    "ruff>=0.1.0",
+    "ruff>=0.15.16",
     "tomli>=2.0; python_version < '3.11'",
 ]
 
@@ -142,6 +142,11 @@ target-version = "py310"
 #   E701/E702 — compact one-liners (`if x: return`, `os.kill(pid, 0); return True`)
 #   E402      — intentional late/after-setup module imports
 # Real dead code (unused imports, empty f-strings) is fixed, not ignored.
+#
+# `select` is explicit on purpose: with only `ignore`, the active rule set is ruff's built-in
+# default, which changes between ruff versions (a newer ruff reported ~270 extra findings on
+# unchanged code while the locked one was green). Widening the gate is a deliberate change here.
+select = ["E4", "E7", "E9", "F"]
 ignore = ["E402", "E701", "E702"]
 
 [tool.pytest.ini_options]

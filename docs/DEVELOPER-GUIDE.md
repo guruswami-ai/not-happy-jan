@@ -260,6 +260,13 @@ Notes for working in the tree:
   the next vibe with no restart. Test a channel end-to-end with `nhj test err -m "…"`.
 - Logs land in the platform log dir (`hook.log`, `worker.log`); set `NHJ_*_DIR` env roots to
   redirect any filesystem location during local testing.
+- **Tests are hermetic.** `tests/conftest.py` points the state, log, cache and config directories at a throwaway
+  directory *before* NHJ is imported (several modules compute module-level paths at import time), wipes them between
+  tests, and removes host-specific environment variables (`TTS_ENGINE`, `NHJ_OUTPUT_DEVICE`, `CLAKY_*`, ...). A test that
+  needs a value sets it with `monkeypatch`. If a test passes in CI but fails on your machine, it is reading your real
+  install: fix the test, not your install.
+- **Lint gate.** `pyproject.toml` pins ruff (`>=0.15.16`, the version in `uv.lock`) and sets `select` explicitly, because the
+  built-in default rule set changes between ruff versions. Widen the rule set deliberately, in a PR.
 - Live TTS is **Apple-Silicon (MLX)** (`TTS_ENGINE=qwen`) or an **audio.cpp server** (`TTS_ENGINE=audiocpp`,
   Linux/CUDA); run with `TTS_ENGINE=none` and `NHJ_DYNAMIC` unset to exercise the queue/adapter/bank paths
   without models. The suite runs on both macOS and Linux (`pytest -q`); the opencode plugin tests need `node`.
