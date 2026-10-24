@@ -220,11 +220,12 @@ def _default_output_device() -> str:
 class Mixer:
     """The single-stream mixer. music bed + concurrent fx + sequential voice queue."""
 
-    def __init__(self, playlist):
+    def __init__(self, playlist, source=None):
         self.buf: collections.deque = collections.deque()
         self._paused_evt = threading.Event()
         self._paused_evt.set()                               # music starts silent
-        self._decoder = _Decoder(playlist, self.buf, self._paused_evt)
+        # `source(buf, paused)` builds an alternative music producer (generative stems, #63)
+        self._decoder = source(self.buf, self._paused_evt) if source else _Decoder(playlist, self.buf, self._paused_evt)
         try:
             self.master = float(os.getenv("NHJ_MUZAK_VOLUME", "0.5"))
         except ValueError:
@@ -533,7 +534,15 @@ def run_duck_controller() -> int:
 
     pool = M.tracks()                # may be empty → mixer still plays voice/fx one-shots
     random.shuffle(pool)
-    mixer = Mixer(pool)
+    gen = None
+    try:
+        from nhj.music import runtime as music
+        gen = music.make_source()                            # None unless music.mode: generative + a pack
+    except Exception:
+        resources.debug("music: generative source unavailable")
+    mixer = Mixer(pool, source=gen[0] if gen else None)
+    music_dir = gen[1] if gen else None
+    last_accent = time.time()                                # ignore accents from before this controller
     _EVENTS.mkdir(parents=True, exist_ok=True)
 
     fx_dir = M._REPO_ROOT / "audio" / "sfx"
@@ -723,6 +732,8 @@ def run_duck_controller() -> int:
             # again. Never kills the controller; queued voice keeps buffering meanwhile.
             keeper.ensure(now)
             mixer.pump_events()                              # ingest voice from other processes
+            if music_dir is not None:
+                last_accent = music.feed(M, music_dir, active_since, now, last_accent)
             mixer.duck_external = M.duck_gain() < 1.0
 
             # rave: actively cycle the display party tile (this loop is the heartbeat)

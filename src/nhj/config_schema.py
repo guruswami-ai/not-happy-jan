@@ -103,6 +103,34 @@ class Orchestration(_Forbid):
         return _check_enum(v, ("quiet-while-busy", "always-speak"))
 
 
+class Continuation(_Forbid):
+    enabled: Optional[bool] = None
+    command: Optional[list[str]] = None
+    model_id: Optional[str] = None
+    licence: Optional[str] = None
+    prompt: Optional[str] = None
+    keep_bars: Optional[Annotated[int, Field(ge=4, le=64)]] = None
+    total_bars: Optional[Annotated[int, Field(ge=8, le=128)]] = None
+    stable_phrases: Optional[Annotated[int, Field(ge=1)]] = None
+    cooldown_phrases: Optional[Annotated[int, Field(ge=0)]] = None
+    max_variants: Optional[Annotated[int, Field(ge=1, le=16)]] = None
+    timeout_s: Optional[Annotated[Union[int, float], Field(gt=0)]] = None
+    min_free_vram_mib: Optional[Annotated[int, Field(ge=0)]] = None
+
+
+class Music(_Forbid):
+    mode: Optional[str] = None
+    pack: Optional[str] = None
+    long_after_s: Optional[Annotated[Union[int, float], Field(ge=0)]] = None
+    long_ramp_s: Optional[Annotated[Union[int, float], Field(gt=0)]] = None
+    continuation: Optional[Continuation] = None
+
+    @field_validator("mode")
+    @classmethod
+    def _v_mode(cls, v):
+        return _check_enum(v, ("recorded", "generative"))
+
+
 class Voice(_Forbid):
     default: Optional[Union[str, bool]] = None
 
@@ -194,6 +222,7 @@ class NhjConfig(_Forbid):
     adapters: Optional[list[NonEmptyStr]] = None
     playback: Optional[Playback] = None
     orchestration: Optional[Orchestration] = None
+    music: Optional[Music] = None
     voice: Optional[Voice] = None
     audiocpp: Optional[Audiocpp] = None
     claky: Optional[Claky] = None
