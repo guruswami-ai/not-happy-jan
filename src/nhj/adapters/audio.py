@@ -145,13 +145,19 @@ def bank_clip_count(voice: str) -> int:
     return len(names)
 
 
-def _cache_backend_id() -> str:
-    """What will synthesize a cache miss right now — part of the cache identity,
-    so switching engine (or Piper model / OS voice / server URL) does not keep
-    serving the previous backend's audio until LRU eviction."""
+def _cache_backend_id(model_tier: str = "") -> str:
+    """What will synthesize a cache miss right now.
+
+    The string uses the same URL, voice directory and tier the synth call uses.
+    A config URL alone would replay another server's clip, and the intensity band
+    is not the model tier.
+    """
     engine = os.getenv("TTS_ENGINE", "qwen").lower()
     if engine == "audiocpp":
-        return f"audiocpp:{_audiocpp_cfg().get('url', '')}"
+        acfg = _audiocpp_cfg()
+        url = os.getenv("NHJ_AUDIOCPP_URL") or acfg.get("url") or "http://127.0.0.1:8092"
+        voices = os.getenv("NHJ_AUDIOCPP_VOICES") or acfg.get("voices_dir") or "~/s2s/voices"
+        return f"audiocpp:{url}:{voices}"
     if engine == "os":
         return f"os:{sys.platform}:{(os.getenv('NHJ_OS_TTS_VOICE') or '').strip()}"
     if engine == "piper":
@@ -159,14 +165,16 @@ def _cache_backend_id() -> str:
                 f"{(os.getenv('NHJ_PIPER_SPEAKER') or '').strip()}")
     if engine == "none":
         return "none"
-    return f"qwen:{os.getenv('NHJ_TTS_URL', '')}"   # model tier rides in `variant`
+    url = os.getenv("NHJ_TTS_URL") or "http://localhost:9992"
+    tier = (os.getenv("NHJ_TTS_MODEL_TIER") or model_tier or "").strip()
+    return f"qwen:{url}:{tier}"
 
 
-def _cache_path(voice: str, text: str, variant: str = "") -> Path:
+def _cache_path(voice: str, text: str, variant: str = "", model_tier: str = "") -> Path:
     # variant (intensity band) + backend identity keep the same novel line cached
     # separately per dial level and per synthesis backend/settings.
     digest = hashlib.sha256(
-        f"{voice}::{variant}::{_cache_backend_id()}::{text}".encode()).hexdigest()[:32]
+        f"{voice}::{variant}::{_cache_backend_id(model_tier)}::{text}".encode()).hexdigest()[:32]
     return _CLIPS_ROOT / "cache" / f"{digest}.wav"
 
 
@@ -185,8 +193,8 @@ def _riff_size_ok(p: Path) -> bool:
         return False
 
 
-def cache_hit(voice: str, text: str, variant: str = "") -> Optional[str]:
-    p = _cache_path(voice, text, variant)
+def cache_hit(voice: str, text: str, variant: str = "", model_tier: str = "") -> Optional[str]:
+    p = _cache_path(voice, text, variant, model_tier)
     try:
         if not p.is_file() or p.stat().st_size < 100:
             return None
@@ -378,14 +386,15 @@ def synth_piper(text: str, model: str, timeout: float = 60.0) -> Optional[bytes]
     return _run_synth_cli(cmd, out, stdin_text=text, timeout=timeout, label="piper")
 
 
-def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> None:
+def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "",
+                    model_tier: str = "") -> None:
     """Write the cache WAV via a temp file and replace.
 
     A crash mid-write must not leave a truncated file at the cache path.
     ``cache_hit`` treats any file of 100 bytes or more as playable, so a partial
     WAV there would be spoken on the next turn.
     """
-    cache = _cache_path(voice, text, variant)
+    cache = _cache_path(voice, text, variant, model_tier)
     cache.parent.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_name(f".{cache.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
     try:
@@ -473,8 +482,9 @@ class AudioAdapter(NotificationAdapter):
 
         # Tier 1: bank clip (bare markers only) · Tier 2: message cache (per band)
         path = pick_bank_clip(voice, intent) if not message else None
+        model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
         if path is None and tts_text:
-            path = cache_hit(voice, tts_text, variant)
+            path = cache_hit(voice, tts_text, variant, model_tier)
             digest_delivered = bool(digest_n and path)        # a cached clip of the same sentence
 
         # Speed is applied ONCE, at playback (below) — never at synthesis. The deployed
@@ -503,7 +513,6 @@ class AudioAdapter(NotificationAdapter):
                     os.getenv("NHJ_AUDIOCPP_VOICES") or acfg.get("voices_dir", "~/s2s/voices"))
             else:
                 base_url   = os.getenv("NHJ_TTS_URL", "http://localhost:9992")
-                model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
                 try:                                          # on-demand: warm the TTS server up first
                     from nhj import servers
                     servers.ensure("tts")
@@ -515,7 +524,7 @@ class AudioAdapter(NotificationAdapter):
             if wav:
                 wav = _normalize_voice_wav(wav)           # level live TTS to match the banks
                 if tts_text:
-                    _save_and_cache(voice, tts_text, wav, variant)
+                    _save_and_cache(voice, tts_text, wav, variant, model_tier)
                 path = _write_temp_wav(wav)
                 ephemeral = True
                 digest_delivered = bool(digest_n)
