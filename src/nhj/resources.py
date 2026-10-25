@@ -38,6 +38,7 @@ BUNDLED_SKILLS_DIR = "claude-skills"
 
 _PKG = Path(__file__).resolve().parent          # .../nhj  (src/nhj in a checkout, site-packages/nhj in a wheel)
 _CHECKOUT_ROOT = _PKG.parents[1]                 # repo root when running from a src/ checkout
+_ENV_LOADED = False
 
 
 def _is_checkout() -> bool:
@@ -389,3 +390,21 @@ def audio_dir() -> Path:
 
 def env_file() -> Path:
     return (_CHECKOUT_ROOT / ".env") if _is_checkout() else (config_dir(create=False) / ".env")
+
+
+def load_env() -> bool:
+    """Load NHJ's ``.env`` once for this process.
+
+    Entry points call this explicitly before reading environment-backed
+    settings. Importing NHJ library modules does not call it. Variables
+    already present in the process environment win (``override=False``).
+    Returns True only when this call loaded an existing file.
+    """
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return False
+    from dotenv import load_dotenv
+
+    loaded = bool(load_dotenv(env_file(), override=False))
+    _ENV_LOADED = True
+    return loaded

@@ -66,6 +66,8 @@ def main() -> int:
     event = payload.get("hook_event_name", "")
     sid = payload.get("session_id", "")
     try:
+        from nhj import resources
+        resources.load_env()
         from nhj import inference_muzak
         from nhj.state import get_flag
         if event == "SessionEnd":

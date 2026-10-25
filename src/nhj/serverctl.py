@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from nhj import servers
+from nhj import resources, servers
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -20,6 +20,7 @@ def main(argv: list[str] | None = None) -> int:
         print("usage: python -m nhj.serverctl <tts|llm>", file=sys.stderr)
         return 2
     name = argv[0]
+    resources.load_env()
     if servers.is_up(name):
         return 0                                   # another supervisor already owns the port
 

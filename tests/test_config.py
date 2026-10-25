@@ -86,6 +86,23 @@ def test_failed_reload_keeps_previous_config(monkeypatch):
     assert config.get() is loaded
 
 
+def test_reload_can_read_the_previous_config_reentrantly(monkeypatch):
+    _reset_lazy_config(monkeypatch)
+    previous = {"voice": {"default": False}}
+    replacement = {"voice": {"default": True}}
+    seen = {}
+    monkeypatch.setattr(config, "load_config", lambda force_validate=False: previous)
+    assert config.get() is previous
+
+    def reentrant_load(force_validate=False):
+        seen["during_reload"] = config.section("voice")
+        return replacement
+
+    monkeypatch.setattr(config, "load_config", reentrant_load)
+    assert config.reload() is replacement
+    assert seen["during_reload"] == {"default": False}
+
+
 def test_lazy_compatibility_from_imports(monkeypatch):
     _reset_lazy_config(monkeypatch)
     loaded = {"adapters": ["audio"], "intents": {"ok": {"label": "Ready"}}}

@@ -11,15 +11,16 @@ import sys
 import time
 import math
 
-from dotenv import load_dotenv
+from nhj import config, resources
 
-from nhj import resources
-
-load_dotenv(resources.env_file())
+if __name__ == "__main__":
+    # Executable entry point: load .env before imports that capture paths or
+    # adapter settings. Importing nhj.worker as a library stays side-effect free;
+    # main() repeats the idempotent bootstrap for direct callers.
+    resources.load_env()
 
 from nhj.adapters import load_adapters
 from nhj.characters import character_by_name, resolve_character
-from nhj.config import ADAPTER_ORDER
 from nhj.queue_manager import QueueManager
 from nhj.state import get_flag
 
@@ -88,10 +89,12 @@ def _dispatch(task, adapters) -> None:
 
 
 def main() -> None:
+    resources.load_env()
+    config.get()                 # fail fast once, before claiming work
     from nhj.procname import set_title
     set_title("NHJ worker")
     qm = QueueManager()
-    adapters = load_adapters(ADAPTER_ORDER)
+    adapters = load_adapters(config.ADAPTER_ORDER)
 
     idle = 0
     try:

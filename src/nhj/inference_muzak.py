@@ -31,15 +31,18 @@ import time
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 from nhj import resources
+
+if __name__ == "__main__":
+    # Controller entry point: load .env before resolving the data root.
+    # Importing this module as a library stays side-effect free; run() repeats
+    # the idempotent bootstrap for direct callers.
+    resources.load_env()
 
 # data_dir() = repo root in a checkout, else the platform data dir (macOS Application
 # Support, XDG ~/.local/share elsewhere). `_REPO_ROOT / "audio"` is the music/sfx/voice
 # tree in both layouts (duck_player reads it via M._REPO_ROOT).
 _REPO_ROOT = resources.data_dir()
-load_dotenv(resources.env_file())  # pick up NHJ_MUZAK_DIR / NHJ_MUZAK_VOLUME everywhere
 
 _AUDIO_EXT = {".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".aiff", ".caf"}
 _BUSY_TTL = 1800.0    # a busy entry older than this = a crashed session → evict
@@ -384,6 +387,9 @@ def submit_audio(path: str, bus: str = "voice", gain: float = 1.0,
 def run() -> int:
     """All audio runs through the uv-native streaming mixer (av+sounddevice). One engine,
     one timeline — music bed + beeps + voice on shared buses with automatic ducking."""
+    resources.load_env()
+    from nhj import config
+    config.get()                 # fail fast once, before starting the controller
     from nhj.procname import set_title
     set_title("NHJ muzak")
     from nhj.duck_player import run_duck_controller

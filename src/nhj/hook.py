@@ -21,19 +21,12 @@ from pathlib import Path
 
 from nhj import resources
 
-
-def _load_env() -> None:
-    """A hook is started by the agent, not a shell, so read ``.env`` here.
-
-    ``NHJ_SHARED_SECRET`` and ``NHJ_REMOTE_URL`` often live only in that file.
-    Loading once at import matches the MCP server and the TTS server.
-    """
-    from dotenv import load_dotenv
-
-    load_dotenv(resources.env_file())
-
-
-_load_env()
+if __name__ == "__main__":
+    # Hook entry point: agents do not start hooks from a shell, so load .env
+    # (NHJ_SHARED_SECRET / NHJ_REMOTE_URL) before resolving log/state paths.
+    # Importing nhj.hook as a library stays side-effect free; main() repeats
+    # the idempotent bootstrap for direct callers.
+    resources.load_env()
 
 _LOG = resources.log_file("hook.log")
 _SEEN = resources.state_file("hook-seen.json")   # per-session fire-once ledger
@@ -349,6 +342,7 @@ def _fire_remote_accent(url: str, intent: str) -> None:
 
 
 def main() -> int:
+    resources.load_env()
     raw = sys.stdin.read()
     if not raw.strip():
         return 0

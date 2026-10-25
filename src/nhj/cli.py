@@ -21,6 +21,12 @@ _VENV   = _ROOT / ".venv"
 _PYTHON = _VENV / "bin" / "python" if (_VENV / "bin" / "python").exists() else Path(sys.executable)
 
 
+@cli.callback()
+def _bootstrap() -> None:
+    """Load .env once before any CLI command reads environment settings."""
+    resources.load_env()
+
+
 @cli.command()
 def test(
     intent: str = typer.Argument("ok", help="Intent: ok|err|warn|attn|celebrate|step"),
@@ -494,12 +500,6 @@ def voices():
 @cli.command()
 def devices():
     """List configured notification adapters."""
-    # Load .env first — display/haptic adapters resolve their devices from env vars
-    # (ULANZI_*, LAMETRIC_*, …) exactly like the worker does. Without this, env-only
-    # adapters wrongly report unavailable and the table shows audio alone.
-    from dotenv import load_dotenv
-    from nhj import resources
-    load_dotenv(resources.env_file())
     from nhj.adapters import load_adapters
     from nhj.config import ADAPTER_ORDER
     adapters = load_adapters(ADAPTER_ORDER)
@@ -738,9 +738,7 @@ def mute():
 def audio_devices():
     """List audio OUTPUT devices and which one the mixer will use (NHJ_OUTPUT_DEVICE)."""
     import sounddevice as sd
-    from dotenv import load_dotenv
     from nhj import duck_player
-    load_dotenv(resources.env_file())      # the mixer daemon reads .env too; show what it will use
     devs = sd.query_devices()
     chosen = duck_player.output_device(devs)
     default = sd.default.device[1]
@@ -849,8 +847,6 @@ def status():
     t.add_row("inference muzak", _muzak_state)
     from nhj import censor as _censor
     t.add_row("censor", _censor.mode())
-    from dotenv import load_dotenv
-    load_dotenv(resources.env_file())
     if os.getenv("NHJ_DYNAMIC", "").strip().lower() in ("1", "true", "yes", "on"):
         t.add_row("dynamic", f"[green]ON[/green] · {os.getenv('NHJ_DYNAMIC_MODEL', 'local')}"
                              f" @ {os.getenv('NHJ_DYNAMIC_BASE_URL', 'localhost')}")
@@ -884,8 +880,6 @@ def dynamic_test(
 ):
     """Sanity-check a dynamic LLM endpoint: generate one in-character line and show it."""
     import time
-    from dotenv import load_dotenv
-    load_dotenv(resources.env_file())
     if base_url:
         os.environ["NHJ_DYNAMIC_BASE_URL"] = base_url
     if model:
@@ -1445,13 +1439,13 @@ def remove_opencode(
 def _network_mcp_headers() -> dict[str, str] | None:
     """Bearer header for a Claude network MCP entry, when the secret is set.
 
-    The command is often run from a shell that has not sourced ``.env``. Load
-    it here so a secret that lives only in that file is written into the entry.
+    The command is often run from a shell that has not sourced ``.env``. The
+    CLI callback normally loads it; this idempotent call also covers direct
+    calls to the installer helpers.
     """
-    from dotenv import load_dotenv
     from nhj.lan_auth import secret
 
-    load_dotenv(resources.env_file())
+    resources.load_env()
     token = secret()
     if not token:
         return None

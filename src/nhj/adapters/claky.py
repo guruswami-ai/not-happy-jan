@@ -133,6 +133,7 @@ def _send_local(cfg: dict, text: str) -> None:
 def sender_main() -> int:
     """Detached sender: take the lock, honour the rate limit, send the newest pending text."""
     import fcntl
+    resources.load_env()
     cfg = _cfg()
     interval = float(cfg.get("min_interval_s", 15))
     lock = open(_lock(), "w")

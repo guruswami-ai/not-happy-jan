@@ -60,6 +60,19 @@ def test_no_explicit_config_override_survives():
     assert not any(str(p) == os.environ.get("NHJ_CONFIG_FILE", "<none>") for p in config._override_paths())
 
 
+def test_lazy_config_attributes_materialise_on_access():
+    from nhj import config
+    assert config.CFG
+    assert "CFG" in vars(config)
+
+
+def test_lazy_config_attributes_are_reset_between_tests():
+    # Runs after the materialisation test above (file order). The merged
+    # config cache may stay loaded, but its lazy module globals must not.
+    from nhj import config
+    assert "CFG" not in vars(config)
+
+
 def test_import_time_env_is_cleared_before_nhj_is_imported(tmp_path):
     """config.CFG is built when nhj.config is imported, so clearing NHJ_CONFIG_FILE per test would be too
     late. Load conftest in a fresh interpreter that has the variable set, then import nhj."""

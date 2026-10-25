@@ -232,8 +232,10 @@ def test_hook_loads_the_env_file(tmp_path, monkeypatch):
     env = tmp_path / ".env"
     env.write_text("NHJ_HOOK_PROVE=from-file\n")
     monkeypatch.setattr(resources, "env_file", lambda: env)
+    monkeypatch.setattr(resources, "_ENV_LOADED", False)
     monkeypatch.delenv("NHJ_HOOK_PROVE", raising=False)
-    hook._load_env()
+    monkeypatch.setattr(sys, "stdin", StringIO(""))
+    assert hook.main() == 0
     assert os.environ.get("NHJ_HOOK_PROVE") == "from-file"
 
 
