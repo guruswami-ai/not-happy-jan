@@ -91,6 +91,25 @@ def test_stop_scans_marker_and_fires(tmp_path, monkeypatch):
     assert [(e.intent, e.message, e.source) for e in fired] == [("ok", "Fixture finished", "proj-alpha")]
 
 
+def test_stop_hook_caps_marker_message_at_500_before_validation(tmp_path, monkeypatch):
+    long_message = "x" * 600
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_text(json.dumps(
+        {"message": {"role": "assistant",
+                     "content": [{"type": "text", "text": f"done [vibes:ok|{long_message}]"}]}}) + "\n")
+    fired = []
+    monkeypatch.setenv("NHJ_HOOK_WAIT", "0")
+    monkeypatch.setenv("NHJ_HOOK_MIN", "0")
+    monkeypatch.setattr(hook, "_seen_get", lambda sid: "baseline")
+    monkeypatch.setattr(hook, "_seen_set", lambda sid, sig: None)
+    monkeypatch.setattr(hook, "_fire_local", lambda ev: fired.append(ev) or True)
+    monkeypatch.setattr(inference_muzak, "mark_idle", lambda sid: None)
+    _stdin(monkeypatch, _load("claude-code/stop.json", transcript))
+
+    assert hook.main() == 0                 # capped by the hook, so the turn never fails
+    assert [e.message for e in fired] == ["x" * 500]
+
+
 def test_notification_maps_permission_prompt(monkeypatch):
     fired = []
     monkeypatch.setattr(hook, "_fire_local", lambda ev: fired.append(ev) or True)
