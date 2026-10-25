@@ -62,9 +62,12 @@ def make_source(cfg: dict | None = None):
     return (lambda buf, paused: StemSource(pack, director, buf, paused, composer)), director
 
 
-def busy_count(M) -> int:
-    """Sessions mid-turn; a manual `muzak start` / rave session counts as a full arrangement."""
-    ids = M._fresh_busy(M._read())
+def busy_count(M, state=None) -> int:
+    """Sessions mid-turn; a manual `muzak start` / rave session counts as a full arrangement.
+
+    *state* is a music.json snapshot. The controller passes the one it just read.
+    """
+    ids = M._fresh_busy(M._read() if state is None else state)
     real = sum(1 for s in ids if s != M._MANUAL)
     return max(real, MANUAL_BUSY) if M._MANUAL in ids else real
 
@@ -74,11 +77,15 @@ def note_accent(M, intent: str) -> None:
     M._patch(music_accent=intent, music_accent_ts=time.time())
 
 
-def feed(M, director: Director, active_since: float | None, now: float, last_accent_ts: float) -> float:
+def feed(M, director: Director, active_since: float | None, now: float, last_accent_ts: float,
+         state=None) -> float:
     """One controller tick: push busy count, elapsed time and any new accent. Returns the newest
-    accent timestamp seen (pass it back next tick)."""
-    director.update(busy_count(M), None if active_since is None else now - active_since)
-    st = M._read()
+    accent timestamp seen (pass it back next tick).
+
+    *state* is the music.json snapshot for this tick. Without it the function reads the file.
+    """
+    st = M._read() if state is None else state
+    director.update(busy_count(M, st), None if active_since is None else now - active_since)
     ts = float(st.get("music_accent_ts") or 0.0)
     if ts > last_accent_ts:
         director.accent(str(st.get("music_accent") or ""))

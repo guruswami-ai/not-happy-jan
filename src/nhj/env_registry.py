@@ -87,7 +87,8 @@ _ENTRIES = [
     _e("NHJ_PHONE_FX", "bool", "", None, "live", "Telephone bandpass/compression colour on voice clips"),
     _e("NHJ_VOICE_TARGET_DBFS", "float", "-19.5", None, "live", "Peak target for voice loudness normalisation (dBFS)"),
     _e("NHJ_OUTPUT_DEVICE", "str", "", "playback.output_device", "live", "Pinned audio output device (name or index)"),
-    _e("NHJ_FOLLOW_DEVICE", "bool", "1", None, "startup", "Mixer follows the macOS default output device (0 disables)"),
+    _e("NHJ_FOLLOW_DEVICE", "bool", "1", None, "startup",
+       "Follows the macOS default output. Off on other platforms, and off when an output device is pinned, unless set explicitly"),
     _e("NHJ_FOLLOW_DEVICE_POLL", "float", "4", None, "startup", "Default-device watcher interval (seconds)"),
     # --- hold music / mixer ------------------------------------------------------
     _e("NHJ_MUZAK_DIR", "path", "", None, "live", "Extra/replacement music directory for the hold bed"),

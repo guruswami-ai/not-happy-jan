@@ -61,7 +61,7 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_FAILED_TRANSFER` | bool | `1` | — | live | Failed-transfer gag sting on/off |
 | `NHJ_FAILED_TRANSFER_PROB` | float | `0.05` | — | live | Probability of a failed-transfer sting |
 | `NHJ_FAILED_TRANSFER_VOLUME` | float | `0.9` | — | live | Failed-transfer sting level |
-| `NHJ_FOLLOW_DEVICE` | bool | `1` | — | startup | Mixer follows the macOS default output device (0 disables) |
+| `NHJ_FOLLOW_DEVICE` | bool | `1` | — | startup | Follows the macOS default output. Off on other platforms, and off when an output device is pinned, unless set explicitly |
 | `NHJ_FOLLOW_DEVICE_POLL` | float | `4` | — | startup | Default-device watcher interval (seconds) |
 | `NHJ_HANDSET` | bool | `1` | — | live | Handset pickup/putdown clunks on/off |
 | `NHJ_HANDSET_VOLUME` | float | `0.9` | — | live | FX handset sting level |
