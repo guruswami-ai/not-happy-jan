@@ -85,11 +85,15 @@ def run_command(argv: list[str]) -> tuple[int, float]:
     started = time.monotonic()
     try:
         proc = subprocess.Popen(argv)
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         print(f"nhj run: command not found: {argv[0]}", file=sys.stderr)
         return 127, time.monotonic() - started
-    except PermissionError:
-        print(f"nhj run: permission denied: {argv[0]}", file=sys.stderr)
+    except (OSError, ValueError) as e:
+        # Anything else that stops the exec (permission denied, exec format error, argument list
+        # too long, an embedded NUL, ...): a shell reports these as "cannot execute", status 126.
+        # Only the program name and the OS reason are printed, never the arguments.
+        reason = e.strerror if isinstance(e, OSError) and e.strerror else type(e).__name__
+        print(f"nhj run: cannot execute {argv[0]}: {reason}", file=sys.stderr)
         return 126, time.monotonic() - started
 
     previous = {}

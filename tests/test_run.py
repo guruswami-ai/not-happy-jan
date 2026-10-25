@@ -137,3 +137,31 @@ def test_ctrl_c_makes_us_keep_waiting_for_the_child(monkeypatch):
     monkeypatch.setattr(runwrap.subprocess, "Popen", lambda argv: FakeProc())
     rc, seconds = runwrap.run_command(["whatever"])
     assert rc == 4 and calls["n"] == 3 and seconds >= 0
+
+
+@pytest.mark.parametrize("exc,status,words", [
+    (OSError(8, "Exec format error"), 126, "Exec format error"),
+    (PermissionError(13, "Permission denied"), 126, "Permission denied"),
+    (OSError(7, "Argument list too long"), 126, "Argument list too long"),
+    (NotADirectoryError(20, "Not a directory"), 127, "command not found"),
+    (ValueError("embedded null byte"), 126, "ValueError"),
+])
+def test_every_launch_failure_is_a_shell_like_status_not_a_traceback(monkeypatch, capsys, exc, status, words):
+    """Codex review on #85: only FileNotFoundError/PermissionError were handled; other launch errors escaped."""
+    def boom(argv):
+        raise exc
+    monkeypatch.setattr(runwrap.subprocess, "Popen", boom)
+    rc, seconds = runwrap.run_command(["/opt/tool", "--password=hunter2"])
+    err = capsys.readouterr().err
+    assert rc == status and words in err
+    assert "hunter2" not in err                                   # arguments are never printed
+
+
+def test_a_real_file_with_an_invalid_executable_format_gives_126(events, tmp_path):
+    script = tmp_path / "noshebang"
+    script.write_text("echo hi\n")
+    script.chmod(0o755)
+    r = _run("--", str(script))
+    assert r.exit_code == 126
+    assert "cannot execute" in r.output and "Exec format error" in r.output
+    assert events and events[0]["intent"] == "err" and "status 126" in events[0]["message"]

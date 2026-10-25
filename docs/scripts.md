@@ -12,7 +12,7 @@ make build || nhj vibe err -m "The build failed"   # one-off, no wrapping (alrea
 
 ## What it does
 
-- Runs the command **without a shell**, with stdin, stdout and stderr untouched, and **exits with the command's own status**. NHJ never changes a script's result: if announcing fails, the command's status still wins. Death by signal N becomes `128+N`, as in a shell. A command that cannot start gives `127` (not found) or `126` (not executable), with the same message a shell would print.
+- Runs the command **without a shell**, with stdin, stdout and stderr untouched, and **exits with the command's own status**. NHJ never changes a script's result: if announcing fails, the command's status still wins. Death by signal N becomes `128+N`, as in a shell. A command that cannot start gives `127` (not found) or `126` (cannot execute: permission denied, exec format error, argument list too long, ...), with a one-line message naming the program and the OS reason, never its arguments.
 - `nhj run` prints nothing itself, so it is safe in pipelines and cron.
 - On exit it queues one event, the same way `nhj vibe` does, so it uses your characters, displays, voice settings, `nhj mute`, and the per-project voice rules:
 
