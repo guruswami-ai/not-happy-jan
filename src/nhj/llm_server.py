@@ -24,6 +24,7 @@ def main() -> None:
     # Launchd has already opened llm.log on stderr. Rotate before the child
     # inherits that descriptor. A rename after Popen does not retarget llama.cpp.
     from nhj import resources
+    resources.load_env()
     resources.rotate_attached_log("llm")
     child = subprocess.Popen(cmd)
 

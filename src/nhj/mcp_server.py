@@ -17,12 +17,15 @@ from __future__ import annotations
 import os
 import signal
 
-from dotenv import load_dotenv
 from fastmcp import FastMCP
 
-from nhj import resources
+from nhj import config, resources
 
-load_dotenv(resources.env_file())
+if __name__ == "__main__":
+    # Executable entry point: load .env before imports that capture paths.
+    # Importing nhj.mcp_server as a library stays side-effect free; run()
+    # repeats the idempotent bootstrap for direct callers.
+    resources.load_env()
 
 from nhj.queue_manager import QueueManager
 
@@ -110,6 +113,8 @@ def nhj_music_accent(intent: str = "err") -> str:
 
 
 def run() -> None:
+    resources.load_env()
+    config.get()                 # fail fast once, before serving
     from nhj.procname import set_title
     # The tool spawns the queue worker and does not wait for it. Ignore
     # SIGCHLD while serving so those children are reaped. Restored on the way

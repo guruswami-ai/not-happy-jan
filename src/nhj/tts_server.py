@@ -37,19 +37,11 @@ from typing import Optional
 
 from nhj import resources
 
-
-def _load_env() -> None:
-    """A LaunchAgent starts this module without a shell, so read ``.env`` here.
-
-    The shared secret is checked on each request. Loading once at import is
-    enough, and it matches the MCP server.
-    """
-    from dotenv import load_dotenv
-
-    load_dotenv(resources.env_file())
-
-
-_load_env()
+if __name__ == "__main__":
+    # LaunchAgent entry point: load .env (including the shared secret) before
+    # resolving the voices root. Importing this module stays side-effect free;
+    # main() repeats the idempotent bootstrap for direct callers.
+    resources.load_env()
 
 _VOICES = resources.voices_dir()        # downloaded ref.wav / ref.txt for voice cloning
 
@@ -314,6 +306,7 @@ def build_app():
 
 
 def main() -> None:
+    resources.load_env()
     from nhj.procname import set_title
     set_title("NHJ TTS")
     ap = argparse.ArgumentParser(description="Not-Happy-Jan warm Qwen3-TTS server")

@@ -154,7 +154,7 @@ def load_config(force_validate: bool = False) -> dict:
 
 
 _CFG: dict | None = None
-_CFG_LOCK = threading.Lock()
+_CFG_LOCK = threading.RLock()
 _LAZY_ATTRS = ("CFG", "INTENTS", "ADAPTER_ORDER")
 
 # Compatibility declarations only; module __getattr__ materialises the values on

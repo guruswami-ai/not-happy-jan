@@ -230,8 +230,9 @@ def test_tts_loads_the_env_file(tmp_path, monkeypatch):
     env = tmp_path / ".env"
     env.write_text("NHJ_TTS_PROVE=from-file\n")
     monkeypatch.setattr(resources, "env_file", lambda: env)
+    monkeypatch.setattr(resources, "_ENV_LOADED", False)
     monkeypatch.delenv("NHJ_TTS_PROVE", raising=False)
-    tts_server._load_env()
+    assert tts_server.resources.load_env() is True
     assert os.environ.get("NHJ_TTS_PROVE") == "from-file"
 
 

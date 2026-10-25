@@ -16,6 +16,14 @@ import json
 import os
 import sys
 
+from nhj import resources
+
+if __name__ == "__main__":
+    # Hook entry point: load .env before importing nhj.hook (which resolves
+    # log/state paths). Library import stays side-effect free; main() repeats
+    # the idempotent bootstrap for direct callers.
+    resources.load_env()
+
 from nhj import event, hook
 
 _MAP = {
@@ -26,6 +34,7 @@ _MAP = {
 
 
 def main() -> int:
+    resources.load_env()
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:

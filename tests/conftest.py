@@ -68,10 +68,10 @@ _HOST_ENV = (
 )
 
 
-# NHJ modules call ``load_dotenv(resources.env_file())`` themselves, at import time (worker, mixer, MCP server)
-# and inside CLI commands. In a checkout that file is ``<repo>/.env`` -- the developer's real one -- and
-# python-dotenv would put its values straight back after the clean-up above (an import-time variable such as
-# NHJ_CONFIG_FILE is read right after, when ``nhj.config`` is imported). So wrap it for the test session: it
+# NHJ entry points call ``resources.load_env()``, which in turn calls
+# ``dotenv.load_dotenv(resources.env_file())``. In a checkout that file is ``<repo>/.env`` -- the
+# developer's real one -- and python-dotenv would put its values straight back after the clean-up
+# above. So wrap it for the test session: it
 # still loads the file, but the host-specific variables the FILE introduced are removed again. Variables that
 # were already set (by a test, with monkeypatch) are left alone, as dotenv itself would not override them.
 import dotenv  # noqa: E402
@@ -100,10 +100,28 @@ def _empty(directory: Path) -> None:
             child.unlink(missing_ok=True)
 
 
+def _reset_process_bootstrap_state() -> None:
+    """Drop process-lifetime entry-point state that would leak between tests.
+
+    ``CFG``/``INTENTS``/``ADAPTER_ORDER`` are materialised in the config
+    module's globals on first access (including by a monkeypatch read), so
+    remove those globals without discarding the already-loaded merged
+    config. Also let the next entry point perform its one .env load.
+    """
+    try:
+        from nhj import config, resources
+    except Exception:
+        return
+    for name in getattr(config, "_LAZY_ATTRS", ("CFG", "INTENTS", "ADAPTER_ORDER")):
+        vars(config).pop(name, None)
+    resources._ENV_LOADED = False
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_install(monkeypatch):
     for directory in _DIRS.values():
         _empty(directory)
     for var in _HOST_ENV:
         monkeypatch.delenv(var, raising=False)
+    _reset_process_bootstrap_state()
     yield

@@ -94,7 +94,7 @@ Two side-channels run alongside this main path:
 | `config.py` | Lazily loads and process-caches `default.yaml` + user `config.yaml` overrides (deep-merge). Prefer `get()`, `reload()`, and `section()`; `CFG`, `INTENTS`, and `ADAPTER_ORDER` remain lazy compatibility attributes. |
 | `state.py` | **Runtime state** — live `nhj set` / `mute` / mode dials, written under an `flock`, read fresh by the worker each cycle. |
 | `modes.py` | **Mode macros** — one named preset that atomically sets every axis (muzak, audio FX, persona, dials, display, voice, haptic, ambient). |
-| `resources.py` | Filesystem locations that resolve correctly in **both** a source checkout and a wheel install (bundled data vs user data/config/state/cache dirs). |
+| `resources.py` | Filesystem locations that resolve correctly in **both** a source checkout and a wheel install (bundled data vs user data/config/state/cache dirs), plus the explicit process-once `load_env()` bootstrap used by entry points. |
 | `cli.py` | The `nhj` command (status, set, mode, muzak, test, install-hook, build-bank, …). |
 | `procname.py` | Sets readable process titles (`NHJ worker`, `NHJ MCP`, `NHJ LLM`). |
 
@@ -198,6 +198,11 @@ an installed wheel:
 
 Override roots with `NHJ_DATA_DIR` / `NHJ_CONFIG_DIR` / `NHJ_STATE_DIR` / `NHJ_CACHE_DIR` /
 `NHJ_LOG_DIR`.
+
+Entry points call `resources.load_env()` once before reading environment-backed settings;
+importing library modules does not load `.env`. Long-lived config consumers (worker, MCP
+server, mixer controller) then call `config.get()` once at startup so an invalid config
+fails immediately rather than on every later lookup.
 
 ---
 
