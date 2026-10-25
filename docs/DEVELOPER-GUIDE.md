@@ -61,7 +61,7 @@ Two side-channels run alongside this main path:
 | Module | Responsibility |
 |---|---|
 | `characters.py` | The **Jan → Bazza → Karren ladder**. Loads `character.yaml`, picks a phrase band from the intensity dial, builds a `Delivery` (text + TTS params). Intent→rung routing + explicit-character override. |
-| `boganify.py` | Optional **dynamic line generation** — rephrase the status in-character via any OpenAI-compatible LLM (`NHJ_DYNAMIC`). Any failure returns `None` → caller falls back to the static bank. |
+| `boganify.py` | Optional **dynamic line generation** — rephrase the status in-character via any OpenAI-compatible LLM (`NHJ_DYNAMIC`). A spoken line that drops or changes a number from the status is retried once at a lower temperature, then abandoned. Any failure returns `None` → caller falls back to the static bank. |
 | `censor.py` | Swear bleeping (`quack`/`beep`/`honk`/`off`). Applied to every line at the end of `Character.delivery()`. |
 | `garble.py` | Jan's *incompetence* dial — umms, mishears, trailing-off, and peak-chaos "oblivious" lines. |
 | `scenes.py` | Easter-egg hold vignettes (pub, party, durry) with ambient beds; fires rarely on a go-on-hold transition. |
@@ -202,7 +202,9 @@ Override roots with `NHJ_DATA_DIR` / `NHJ_CONFIG_DIR` / `NHJ_STATE_DIR` / `NHJ_C
 Entry points call `resources.load_env()` once before reading environment-backed settings;
 importing library modules does not load `.env`. Long-lived config consumers (worker, MCP
 server, mixer controller) then call `config.get()` once at startup so an invalid config
-fails immediately rather than on every later lookup.
+fails immediately rather than on every later lookup. Environment-dependent paths in the
+hook, queue, mixer and audio adapter are likewise resolved at point of use; their historical
+private constants remain lazy compatibility attributes for existing callers and test seams.
 
 ---
 

@@ -18,7 +18,9 @@ Config (.env):
   NHJ_DYNAMIC_TIMEOUT=8
 
 Stdlib only (urllib) — no extra deps. Any failure returns None so the caller falls
-back to the static phrase bank: dynamic is always safe to enable.
+back to the static phrase bank: dynamic is always safe to enable. A spoken line
+that drops or changes a number from the status is retried once at a lower
+temperature, then abandoned the same way.
 """
 from __future__ import annotations
 
@@ -63,6 +65,59 @@ _INTENT_DEFAULT = {
     "celebrate": "a milestone was reached",
     "step": "a step of the work is done",
 }
+
+# Fact guard (#87): the model is a stylist, not a fact-keeper. Digits and
+# number-words from the status must survive in a spoken line; a display
+# headline may drop them but must not change them. Cheap regex, no extra call.
+_RETRY_TEMP = 0.3
+_ONES = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen",
+)
+_WORD_TO_CANON = {w: str(i) for i, w in enumerate(_ONES)}
+_WORD_TO_CANON.update({
+    "nought": "0",
+    "twenty": "20", "thirty": "30", "forty": "40", "fifty": "50",
+    "sixty": "60", "seventy": "70", "eighty": "80", "ninety": "90",
+    "hundred": "100", "thousand": "1000",
+})
+_WORD_RE = re.compile(
+    r"\b(" + "|".join(sorted(_WORD_TO_CANON, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+_DIGIT_RE = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _canon_digit(raw: str) -> str:
+    if "." in raw:
+        return raw.rstrip("0").rstrip(".") if raw != "." else raw
+    return str(int(raw)) if raw.lstrip("0") or raw == "0" else "0"
+
+
+def facts(text: str) -> frozenset[str]:
+    """Canonical number tokens (digits and number-words) found in *text*."""
+    found: set[str] = set()
+    for m in _DIGIT_RE.finditer(text or ""):
+        found.add(_canon_digit(m.group()))
+    for m in _WORD_RE.finditer(text or ""):
+        found.add(_WORD_TO_CANON[m.group().lower()])
+    return frozenset(found)
+
+
+def keeps_facts(status: str, line: str) -> bool:
+    """True when every number in *status* also appears in the spoken *line*."""
+    need = facts(status)
+    return not need or need <= facts(line)
+
+
+def display_facts_ok(status: str, line: str) -> bool:
+    """True when the display line introduces no number that was not in *status*."""
+    return facts(line) <= facts(status)
+
+
+def _retry_temp(temp: float) -> float:
+    return min(_RETRY_TEMP, temp) if temp > _RETRY_TEMP else temp * 0.5
 
 
 def enabled() -> bool:
@@ -110,8 +165,7 @@ def _persona(character, level: int, swearing: bool, band_instruct: str, chaos: i
     return " ".join(b for b in bits if b)
 
 
-def generate(character, intent: str, message: str, level: int,
-             swearing: bool = False, band_instruct: str = "", chaos: int = 0) -> str | None:
+def _endpoint() -> tuple[str, str, str]:
     base = os.getenv("NHJ_DYNAMIC_BASE_URL", "http://localhost:9991/v1").rstrip("/")
     model = os.getenv("NHJ_DYNAMIC_MODEL", "local")
     key = os.getenv("NHJ_DYNAMIC_API_KEY", "not-needed")
@@ -121,6 +175,49 @@ def generate(character, intent: str, message: str, level: int,
             servers.ensure("llm")
     except Exception:
         pass
+    return base, model, key
+
+
+def _chat(messages: list[dict], *, temperature: float, top_p: float,
+          max_tokens: int, timeout: float) -> str | None:
+    """One /chat/completions call. None means the request failed; '' means empty content."""
+    base, model, key = _endpoint()
+    body = json.dumps({
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_tokens": max_tokens,
+    }).encode()
+    req = urllib.request.Request(
+        f"{base}/chat/completions", data=body,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read())
+        return _strip_reasoning(data["choices"][0]["message"]["content"] or "")
+    except Exception:
+        return None
+
+
+def _guarded(status: str, temperatures: list[float], fetch, ok) -> str | None:
+    """Call *fetch(temp)* until a line keeps the facts, or the request fails.
+
+    *fetch* returns None on a failed request (stop), or the candidate string
+    (empty counts as a fact-check miss when the status has numbers).
+    """
+    for temp in temperatures:
+        line = fetch(temp)
+        if line is None:
+            return None
+        if ok(status, line):
+            return line or None
+    return None
+
+
+def generate(character, intent: str, message: str, level: int,
+             swearing: bool = False, band_instruct: str = "", chaos: int = 0) -> str | None:
     try:
         temp = float(os.getenv("NHJ_DYNAMIC_TEMP", "0.85"))
         top_p = float(os.getenv("NHJ_DYNAMIC_TOP_P", "0.95"))
@@ -129,28 +226,15 @@ def generate(character, intent: str, message: str, level: int,
         temp, top_p, timeout = 0.85, 0.95, 8.0
 
     status = message.strip() if message else _INTENT_DEFAULT.get(intent, "an update")
-    body = json.dumps({
-        "model": model,
-        "messages": [
-            {"role": "system", "content": _persona(character, level, swearing, band_instruct, chaos)},
-            {"role": "user", "content": f"Status update: {status}"},
-        ],
-        "temperature": temp,
-        "top_p": top_p,          # curbs the repetition loops small quantised models can fall into
-        "max_tokens": 60,
-    }).encode()
+    messages = [
+        {"role": "system", "content": _persona(character, level, swearing, band_instruct, chaos)},
+        {"role": "user", "content": f"Status update: {status}"},
+    ]
 
-    req = urllib.request.Request(
-        f"{base}/chat/completions", data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.loads(r.read())
-        text = data["choices"][0]["message"]["content"] or ""
-        return _strip_reasoning(text) or None
-    except Exception:
-        return None
+    def fetch(temperature: float) -> str | None:
+        return _chat(messages, temperature=temperature, top_p=top_p, max_tokens=60, timeout=timeout)
+
+    return _guarded(status, [temp, _retry_temp(temp)], fetch, keeps_facts)
 
 
 def _display_persona(character, level: int, swearing: bool) -> str:
@@ -170,20 +254,23 @@ def _display_persona(character, level: int, swearing: bool) -> str:
     )
 
 
+def _glanceable(line: str) -> str | None:
+    """Keep a display headline short: first ~5 words, no dangling little words."""
+    if not line:
+        return None
+    _DANGLE = {"to", "ya", "the", "a", "and", "is", "are", "my", "your",
+               "of", "for", "at", "on", "with", "mate"}
+    words = line.split()[:5]
+    while words and words[-1].lower().strip(",.!?:;") in _DANGLE:
+        words.pop()
+    return " ".join(words).rstrip(" ,.;:-")[:28].strip() or None
+
+
 def generate_display(character, intent: str, message: str = "",
                      level: int | None = None, swearing: bool | None = None) -> str | None:
     """Like generate(), but for a tiny LED sign: a 2-3 word in-character headline.
     Returns None on any failure so the caller falls back to the marker message /
     a fixed phrase. Uses a shorter timeout than the spoken-line generator."""
-    base = os.getenv("NHJ_DYNAMIC_BASE_URL", "http://localhost:9991/v1").rstrip("/")
-    model = os.getenv("NHJ_DYNAMIC_MODEL", "local")
-    key = os.getenv("NHJ_DYNAMIC_API_KEY", "not-needed")
-    try:                                    # on-demand: warm NHJ's own LLM (skip BYO endpoints)
-        from nhj import servers
-        if servers.is_managed_llm(base):
-            servers.ensure("llm")
-    except Exception:
-        pass
     try:
         temp = float(os.getenv("NHJ_DYNAMIC_TEMP", "0.85"))
         timeout = min(float(os.getenv("NHJ_DYNAMIC_TIMEOUT", "8")), 4.0)
@@ -194,34 +281,15 @@ def generate_display(character, intent: str, message: str = "",
     if swearing is None:
         swearing = lvl >= 11
     status = message.strip() if message else _INTENT_DEFAULT.get(intent, "an update")
-    body = json.dumps({
-        "model": model,
-        "messages": [
-            {"role": "system", "content": _display_persona(character, lvl, swearing)},
-            {"role": "user", "content": f"Status: {status}"},
-        ],
-        "temperature": temp,
-        "top_p": 0.9,
-        "max_tokens": 16,
-    }).encode()
-    req = urllib.request.Request(
-        f"{base}/chat/completions", data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.loads(r.read())
-        line = _strip_reasoning(data["choices"][0]["message"]["content"] or "")
-        if not line:
+    messages = [
+        {"role": "system", "content": _display_persona(character, lvl, swearing)},
+        {"role": "user", "content": f"Status: {status}"},
+    ]
+
+    def fetch(temperature: float) -> str | None:
+        raw = _chat(messages, temperature=temperature, top_p=0.9, max_tokens=16, timeout=timeout)
+        if raw is None:
             return None
-        # keep it glanceable: first ~5 words, then trim trailing punctuation and
-        # any dangling little word the cut left hanging.
-        _DANGLE = {"to", "ya", "the", "a", "and", "is", "are", "my", "your",
-                   "of", "for", "at", "on", "with", "mate"}
-        words = line.split()[:5]
-        while words and words[-1].lower().strip(",.!?:;") in _DANGLE:
-            words.pop()
-        line = " ".join(words).rstrip(" ,.;:-")
-        return line[:28].strip() or None
-    except Exception:
-        return None
+        return _glanceable(raw) or ""
+
+    return _guarded(status, [temp, _retry_temp(temp)], fetch, display_facts_ok)
