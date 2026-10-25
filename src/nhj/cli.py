@@ -1611,6 +1611,11 @@ def music_status():
     from nhj.music.pack import PackError, load_pack
     cfg = runtime.settings()
     app.print(f"mode: {cfg.get('mode', 'recorded')}   (set music.mode: generative or NHJ_MUSIC_MODE=generative)")
+    from nhj.state import get_flag
+    if get_flag("muzak", True):
+        app.print("hold music: on")
+    else:
+        app.print("hold music: [red]OFF[/red]; no music of any kind plays until you run `nhj muzak on`")
     dest = runtime.pack_dir(cfg)
     try:
         p = load_pack(dest)
