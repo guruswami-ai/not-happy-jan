@@ -43,6 +43,8 @@ _ENTRIES = [
     _e("NHJ_BIN_DIR", "path", None, None, "live", "Directory the `nhj` launcher is written to on install"),
     _e("NHJ_MEDIA_BASE", "url", None, None, "live", "Base URL media downloads are fetched from"),
     _e("NHJ_DEBUG", "bool", None, None, "live", "Enable `[nhj]` debug lines on stderr (any set value)"),
+    _e("NHJ_TEST_NO_MIXER", "bool", None, None, "live",
+       "If set, start_controller does not spawn (the test suite sets this so worker subprocesses cannot leave a mixer)"),
     _e("USER", "str", None, None, "startup", "Login name (queue dir suffix, session labels)", "system"),
     _e("USERNAME", "str", None, None, "startup", "Login name fallback on Windows-style environments", "system"),
     _e("XDG_CACHE_HOME", "path", None, None, "startup", "XDG cache base for TTS model cache", "system"),
