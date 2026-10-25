@@ -488,6 +488,9 @@ class AudioAdapter(NotificationAdapter):
     def fire(self, intent: str, message: str, character: "Character",
              vibe_level: int = 5, **kwargs) -> bool:
         tts_enabled = os.getenv("TTS_ENGINE", "qwen").lower() != "none"
+        # `nhj say`: speak exactly this text, nothing before it and nothing instead of it. With no
+        # message there is nothing to be literal about, so a bare marker keeps its normal behaviour.
+        literal = bool(kwargs.get("literal")) and bool(message and str(message).strip())
 
         # Another session is still working (see nhj.orchestration): a routine completion
         # is only a soft chime so the music bed and the session you are waiting on are not
@@ -503,7 +506,8 @@ class AudioAdapter(NotificationAdapter):
         try:
             from nhj import inference_muzak
             from nhj.state import get_flag
-            if get_flag("muzak", True) and not inference_muzak._any_busy():   # only if the music really paused
+            # not for a literal `say`: the words before it would be ones the caller did not give
+            if not literal and get_flag("muzak", True) and not inference_muzak._any_busy():   # only if the music really paused
                 ret = pick_return_clip()
                 if ret:
                     _emit_voice(ret, gain=0.9)
@@ -511,7 +515,6 @@ class AudioAdapter(NotificationAdapter):
             from nhj import resources
             resources.debug(f"return-clip dispatch failed: {e}")
 
-        literal = bool(kwargs.get("literal"))                 # `nhj say`: speak exactly this text
         d = character.delivery(intent, message, literal=True) if literal else character.delivery(intent, message)
         voice, tts_text, variant = d.voice, d.text, d.band
         # Mention completions that were only chimed while other sessions were busy. Only when a
@@ -588,6 +591,10 @@ class AudioAdapter(NotificationAdapter):
             # unreachable) → fall back to the bundled bare-marker bank so the character
             # still speaks its generic in-character line. Keeps a minimal install — and
             # any message vibe without a model — audible.
+            if literal:
+                # A literal `say` has no stand-in: a generic clip would be different words. Report
+                # "not spoken" (the CLI has already printed the text to stderr when it knew).
+                return False
             path = pick_bank_clip(voice, intent)
             if path is None:
                 return False

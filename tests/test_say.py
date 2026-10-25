@@ -299,3 +299,56 @@ def test_the_spoken_words_are_never_written_to_nhjs_logs(queue, monkeypatch):
     monkeypatch.setattr(resources, "append_log", lambda path, line, *a, **k: (logged.append(line), real(path, line, *a, **k))[1])
     assert _say("the launch code is swordfish").exit_code == 0
     assert all("swordfish" not in line for line in logged)
+
+
+# ---- muse's review of #100: a literal event must never speak other words -----------------------
+def _audio_stubs(monkeypatch, *, engine="audiocpp", cache=None, ret=None, bank="/bank/generic.wav", synth=None):
+    """Stub the audio adapter's collaborators; returns the list of clips handed to the mixer."""
+    emitted = []
+    monkeypatch.setenv("TTS_ENGINE", engine)
+    monkeypatch.setattr(audio, "_audiocpp_cfg", lambda: {})
+    monkeypatch.setattr(audio, "cache_hit", lambda *a, **k: cache)
+    monkeypatch.setattr(audio, "pick_return_clip", lambda: ret)
+    monkeypatch.setattr(audio, "pick_bank_clip", lambda v, i: bank)
+    monkeypatch.setattr(audio, "_normalize_voice_wav", lambda w: w)
+    monkeypatch.setattr(audio, "_save_and_cache", lambda *a, **k: None)
+    monkeypatch.setattr(audio, "_write_temp_wav", lambda w: "/tmp/exact.wav")
+    monkeypatch.setattr(audio, "_emit_voice", lambda path, **k: emitted.append(path))
+    monkeypatch.setattr(audio, "synth_audiocpp", lambda *a, **k: synth)
+    return emitted
+
+
+@pytest.mark.parametrize("engine,synth", [("none", None), ("audiocpp", None)])
+def test_literal_without_a_voice_is_not_spoken_instead_of_playing_a_generic_clip(monkeypatch, engine, synth):
+    emitted = _audio_stubs(monkeypatch, engine=engine, synth=synth)
+    assert audio.AudioAdapter().fire("ok", "Deploy 42 is done.", resolve_character("ok"), literal=True) is False
+    assert emitted == []                                              # no stand-in words
+
+
+def test_a_normal_event_still_falls_back_to_the_bundled_clip(monkeypatch):
+    emitted = _audio_stubs(monkeypatch, engine="none")
+    assert audio.AudioAdapter().fire("ok", "all done", resolve_character("ok")) is True
+    assert emitted == ["/bank/generic.wav"]                           # unchanged behaviour for hooks and markers
+
+
+def test_a_literal_event_may_use_a_cached_clip_of_the_exact_text(monkeypatch):
+    emitted = _audio_stubs(monkeypatch, engine="none", cache="/cache/exact.wav")
+    assert audio.AudioAdapter().fire("ok", "Deploy 42 is done.", resolve_character("ok"), literal=True) is True
+    assert emitted == ["/cache/exact.wav"]
+
+
+def test_literal_is_not_preceded_by_the_you_still_there_clip(monkeypatch):
+    from nhj import inference_muzak
+    monkeypatch.setattr(inference_muzak, "_any_busy", lambda: False)  # the music really paused
+    emitted = _audio_stubs(monkeypatch, ret="/return/you-still-there.wav", synth=b"RIFF" + b"\0" * 2000)
+    audio.AudioAdapter().fire("ok", "Deploy 42 is done.", resolve_character("ok"), literal=True)
+    assert emitted == ["/tmp/exact.wav"]
+    emitted.clear()
+    audio.AudioAdapter().fire("ok", "all done", resolve_character("ok"))
+    assert emitted[0] == "/return/you-still-there.wav"                # a normal completion keeps the cue
+
+
+def test_a_literal_flag_with_no_message_behaves_like_a_bare_marker(monkeypatch):
+    emitted = _audio_stubs(monkeypatch, engine="none")
+    assert audio.AudioAdapter().fire("err", "", resolve_character("err"), literal=True) is True
+    assert emitted == ["/bank/generic.wav"]
