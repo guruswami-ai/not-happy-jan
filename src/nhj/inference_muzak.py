@@ -213,8 +213,11 @@ def _continuous() -> bool:
         return False
 
 
-def _should_play() -> bool:
-    return _continuous() or _any_busy()
+def _should_play(d: dict | None = None) -> bool:
+    """True when the bed should be running. Pass the tick's music.json snapshot to avoid a second read."""
+    if d is None:
+        d = _read()
+    return _continuous() or bool(_fresh_busy(d))
 
 
 # ---- control surface (CLI / hooks call these) -------------------------------
@@ -333,15 +336,19 @@ def unduck() -> None:
     _patch(ducked=False, duck_until=0.0)
 
 
-def duck_gain() -> float:
-    """Current music gain multiplier: _DUCK_GAIN while a (non-expired) duck is held, else 1.0."""
-    d = _read()
+def duck_gain_from(d: dict) -> float:
+    """Music gain multiplier for an already-read music.json snapshot."""
     if d.get("ducked") and time.time() < float(d.get("duck_until") or 0.0):
         try:
             return float(os.getenv("NHJ_MUZAK_DUCK_GAIN", str(_DUCK_GAIN)))
         except ValueError:
             return _DUCK_GAIN
     return 1.0
+
+
+def duck_gain() -> float:
+    """Current music gain multiplier: _DUCK_GAIN while a (non-expired) duck is held, else 1.0."""
+    return duck_gain_from(_read())
 
 
 # ---- single-stream mixer routing (cross-process) ----------------------------

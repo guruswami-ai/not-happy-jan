@@ -81,12 +81,14 @@ _ENTRIES = [
     _e("NHJ_TTS_MODEL_TIER", "enum", None, None, "live", "Qwen model tier override (fast/full; else per-line default)"),
     _e("NHJ_AUDIOCPP_URL", "url", None, "audiocpp.url", "live", "audio.cpp (Breeze-TTS) server base URL"),
     _e("NHJ_AUDIOCPP_VOICES", "path", None, "audiocpp.voices_dir", "live", "Server voices dir holding <name>.txt transcripts"),
-    # NHJ_OS_TTS_VOICE / NHJ_PIPER_MODEL / NHJ_PIPER_SPEAKER arrive with PR #68;
-    # the completeness test requires their entries in whichever change lands second.
+    _e("NHJ_OS_TTS_VOICE", "str", None, None, "live", "CPU tier: espeak voice / say -v name (TTS_ENGINE=os)"),
+    _e("NHJ_PIPER_MODEL", "path", None, None, "live", "CPU tier: Piper .onnx voice file (TTS_ENGINE=piper)"),
+    _e("NHJ_PIPER_SPEAKER", "int", None, None, "live", "CPU tier: speaker id for multi-speaker Piper models"),
     _e("NHJ_PHONE_FX", "bool", "", None, "live", "Telephone bandpass/compression colour on voice clips"),
     _e("NHJ_VOICE_TARGET_DBFS", "float", "-19.5", None, "live", "Peak target for voice loudness normalisation (dBFS)"),
     _e("NHJ_OUTPUT_DEVICE", "str", "", "playback.output_device", "live", "Pinned audio output device (name or index)"),
-    _e("NHJ_FOLLOW_DEVICE", "bool", "1", None, "startup", "Mixer follows the macOS default output device (0 disables)"),
+    _e("NHJ_FOLLOW_DEVICE", "bool", "1", None, "startup",
+       "Follows the macOS default output. Off on other platforms, and off when an output device is pinned, unless set explicitly"),
     _e("NHJ_FOLLOW_DEVICE_POLL", "float", "4", None, "startup", "Default-device watcher interval (seconds)"),
     # --- hold music / mixer ------------------------------------------------------
     _e("NHJ_MUZAK_DIR", "path", "", None, "live", "Extra/replacement music directory for the hold bed"),
