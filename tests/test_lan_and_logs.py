@@ -203,6 +203,10 @@ def test_tts_rejects_a_missing_secret_and_an_overlong_text(monkeypatch):
     with pytest.raises(ValidationError):
         tts_server.GenReq(text="x" * 501)
     tts_server.GenReq(text="x" * 500)
+    with pytest.raises(ValidationError):
+        tts_server.GenReq(text="hi", instruct="x" * 501)
+    tts_server.GenReq(text="hi", instruct="x" * 500)
+    tts_server.GenReq(text="hi", instruct="")
     monkeypatch.delenv("NHJ_SHARED_SECRET")
     assert tts_server.request_allowed("/tts/generate", {})
 
@@ -221,9 +225,15 @@ def test_tts_http_enforces_the_secret_and_the_length_cap(monkeypatch):
         "/tts/generate", json={"text": "x" * 501},
         headers={"Authorization": "Bearer s3cret"})
     assert bearer.status_code == 422
+    overlong_instruct = client.post(
+        "/tts/generate", json={"text": "hi", "instruct": "x" * 501},
+        headers={"Authorization": "Bearer s3cret"})
+    assert overlong_instruct.status_code == 422
     monkeypatch.delenv("NHJ_SHARED_SECRET")
     open_client = TestClient(tts_server.build_app())
     assert open_client.post("/tts/generate", json={"text": "x" * 501}).status_code == 422
+    assert open_client.post(
+        "/tts/generate", json={"text": "hi", "instruct": "x" * 501}).status_code == 422
 
 
 def test_tts_loads_the_env_file(tmp_path, monkeypatch):
