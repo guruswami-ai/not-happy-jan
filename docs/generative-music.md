@@ -8,7 +8,18 @@ music:
   mode: generative
 ```
 
-`nhj music status` shows what the controller will use; `nhj music demo -o demo.wav` renders a scripted timeline offline so you can hear it without a running session.
+Generative music is a *source* for the hold-music bed, so the bed itself has to be on (`nhj muzak on`; hold music is a global switch, and when it is off nothing plays, recorded or generative). **Configure first, switch the bed on last**, because the controller chooses its source once, when it starts:
+
+```sh
+nhj music build-pack         # render the bundled pack once (a few seconds)
+# set music.mode: generative in ~/.config/not-happy-jan/config.yaml
+nhj music status             # check: mode, pack, and whether hold music is on
+nhj muzak on                 # hold music master switch (skip if it is already on)
+```
+
+If hold music was already running (a session was busy, or you changed the mode later), the running controller keeps its old source until it restarts: run `nhj muzak stop`, and the next busy session starts a fresh controller that reads the new mode. (`stop` also clears the busy list; sessions re-register on their next prompt.)
+
+`nhj music status` shows what the controller will use, including whether hold music is on; `nhj music demo -o demo.wav` renders a scripted timeline offline so you can hear it without a running session.
 
 ## How it works
 

@@ -602,3 +602,17 @@ def test_feed_works_with_a_muzak_double_that_has_no_accent_ttl():
     st = {"music_accent": "err", "music_accent_ts": now}
     assert runtime.feed(M, d, 0.0, 1.0, 0.0, state=st) == now
     assert d.at_bar(0).label == "breakdown"
+
+
+def test_music_status_says_whether_hold_music_is_on(monkeypatch):
+    """Generative music only plays when the hold-music switch is on; `nhj music status` must say so."""
+    from typer.testing import CliRunner
+
+    from nhj import cli
+    from nhj.state import set_flag
+    set_flag("muzak", False)
+    off = CliRunner().invoke(cli.cli, ["music", "status"])
+    assert off.exit_code == 0 and "hold music: OFF" in off.output and "nhj muzak on" in off.output
+    set_flag("muzak", True)
+    on = CliRunner().invoke(cli.cli, ["music", "status"])
+    assert on.exit_code == 0 and "hold music: on" in on.output
