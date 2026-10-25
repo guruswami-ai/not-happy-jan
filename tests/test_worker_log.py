@@ -54,6 +54,31 @@ def test_reopen_stdio_log_rotates_an_oversize_attached_file(tmp_path, monkeypatc
     assert path.stat().st_mode & 0o777 == 0o600
 
 
+def test_reopen_stdio_log_leaves_an_unrelated_regular_file_alone(tmp_path):
+    nhj_log = tmp_path / "worker.log"
+    nhj_log.write_text("nhj\n")
+    operators = tmp_path / "operators-own.log"
+    operators.write_text("mine\n")
+    saved_out, saved_err = os.dup(1), os.dup(2)
+    fd = os.open(operators, os.O_APPEND | os.O_WRONLY)
+    try:
+        os.dup2(fd, 1)
+        os.dup2(fd, 2)
+        os.close(fd)
+        before = os.fstat(2)
+        resources.reopen_stdio_log(nhj_log)
+        after = os.fstat(2)
+        os.write(2, b"still-mine\n")
+    finally:
+        os.dup2(saved_out, 1)
+        os.dup2(saved_err, 2)
+        os.close(saved_out)
+        os.close(saved_err)
+    assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+    assert operators.read_text().endswith("still-mine\n")
+    assert nhj_log.read_text() == "nhj\n"
+
+
 def test_reopen_stdio_log_leaves_a_pipe_alone(tmp_path):
     path = tmp_path / "worker.log"
     path.write_text("keep\n")

@@ -332,28 +332,49 @@ def rotate_attached_log(name: str) -> None:
         return
 
 
+def _stderr_is_rotated_copy(path: Path, err: os.stat_result) -> bool:
+    """True when fd 2 is a rotation backup of *path*, or an unlinked copy of it."""
+    for i in range(1, _LOG_BACKUPS + 1):
+        try:
+            backup = Path(f"{path}.{i}").stat()
+        except OSError:
+            continue
+        if (err.st_dev, err.st_ino) == (backup.st_dev, backup.st_ino):
+            return True
+    if err.st_nlink == 0:
+        raw = _stderr_raw_path().removesuffix(" (deleted)")
+        if raw and Path(raw).name == path.name:
+            return True
+    return False
+
+
 def reopen_stdio_log(path: str | Path) -> None:
-    """Point stdout/stderr at *path* when this process still holds an old inode.
+    """Point stdout/stderr at *path* when fd 2 is provably this log.
 
     The worker inherits ``worker.log`` from the spawner. ``append_log`` in the
-    parent (or this process) may rename that file; the inherited descriptor
-    stays on the old inode. A tty, pipe or socket is left alone.
-
-    Also rotates and reopens when the named file is already over the cap.
+    parent may rename that file; the inherited descriptor stays on the old
+    inode (``worker.log.N``) or, if unlinked, ``st_nlink == 0``. Act only then,
+    or when fd 2 is still the named log and already over the cap. A tty, pipe,
+    socket, or an unrelated regular file is left alone.
     """
     path = Path(path)
     try:
         if not stat.S_ISREG(os.fstat(2).st_mode):
             return
+        err = os.fstat(2)
     except OSError:
         return
     try:
-        err = os.fstat(2)
         st = path.stat()
-        if (err.st_dev, err.st_ino) == (st.st_dev, st.st_ino) and st.st_size < _LOG_MAX_BYTES:
-            return
+        same = (err.st_dev, err.st_ino) == (st.st_dev, st.st_ino)
     except OSError:
-        pass
+        same = False
+        st = None
+    if same:
+        if st is None or st.st_size < _LOG_MAX_BYTES:
+            return
+    elif not _stderr_is_rotated_copy(path, err):
+        return
     try:
         with _log_lock(path):
             rotate_log(path)
