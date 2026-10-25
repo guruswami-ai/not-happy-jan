@@ -120,7 +120,7 @@ def note_accent(intent: str) -> None:
         return
     try:
         from nhj import config
-        mode = os.getenv("NHJ_MUSIC_MODE") or (config.CFG.get("music") or {}).get("mode", "recorded")
+        mode = os.getenv("NHJ_MUSIC_MODE") or (config.get().get("music") or {}).get("mode", "recorded")
         if str(mode).strip().lower() != "generative":
             return
         _write_accent(accent)

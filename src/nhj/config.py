@@ -16,8 +16,10 @@ level) raises :class:`ConfigError` — never a silent fallback. A *missing* over
 normal. Every file is also checked against the schema in ``nhj.config_schema``
 (unknown keys, bad types/ranges/enums are errors naming the source file; partial
 overrides validate as-is). ``nhj config check`` runs the same load on demand.
-Config is frozen at import into :data:`CFG` — long-lived processes need a
-restart to see edits; live state (``state.json``) is read per event instead.
+Config is loaded on first use by :func:`get` and then cached for the process;
+call :func:`reload` to discard that cache. Importing this module does not read
+config files. Long-lived processes therefore still need a restart (or an
+explicit reload) to see edits; live state (``state.json``) is read per event.
 
 For settings that also read an environment variable (e.g. ``NHJ_DEFAULT_CHARACTER``,
 ``NHJ_<NAME>_LEVEL``), the env var takes precedence over YAML at the point of use.
@@ -27,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from pathlib import Path
 
 import yaml
@@ -150,16 +153,15 @@ def load_config(force_validate: bool = False) -> dict:
     return cfg
 
 
-_CFG = load_config()
+_CFG: dict | None = None
+_CFG_LOCK = threading.Lock()
+_LAZY_ATTRS = ("CFG", "INTENTS", "ADAPTER_ORDER")
 
-#: Full parsed config, for adapters that need their own section.
-CFG: dict = _CFG
-
-
-def section(name: str) -> dict:
-    """Return a top-level config section as a dict (empty if absent)."""
-    return CFG.get(name, {}) or {}
-
+# Compatibility declarations only; module __getattr__ materialises the values on
+# first access so importing nhj.config does not load any config files.
+CFG: dict
+INTENTS: dict[str, dict]
+ADAPTER_ORDER: list[str]
 
 _DEFAULT_INTENTS = {
     "ok":        {"haptic": 7,  "icon": "ok",        "sound": "positive4",   "label": "Done"},
@@ -169,7 +171,55 @@ _DEFAULT_INTENTS = {
     "celebrate": {"haptic": 10, "icon": "celebrate", "sound": "win",         "label": "Celebration"},
     "step":      {"haptic": 6,  "icon": "progress",  "sound": None,          "label": "Progress"},
 }
+_DEFAULT_ADAPTER_ORDER = ["haptic", "lametric", "ulanzi", "esp32", "audio"]
 
-INTENTS: dict[str, dict] = _CFG.get("intents", _DEFAULT_INTENTS)
 
-ADAPTER_ORDER: list[str] = _CFG.get("adapters", ["haptic", "lametric", "ulanzi", "esp32", "audio"])
+def get() -> dict:
+    """Return the merged config, loading and caching it on first use.
+
+    If ``CFG`` has been materialised (including by a test monkeypatch), that
+    object is authoritative; this keeps the historical compatibility surface
+    and :func:`get` in agreement."""
+    global _CFG
+    with _CFG_LOCK:
+        materialised = globals().get("CFG")
+        if materialised is not None:
+            return materialised
+        if _CFG is None:
+            _CFG = load_config()
+        return _CFG
+
+
+def reload(force_validate: bool = False) -> dict:
+    """Reload the merged config and invalidate all lazy compatibility values.
+
+    A failed reload leaves the previous cached config intact."""
+    global _CFG
+    with _CFG_LOCK:
+        cfg = load_config(force_validate=force_validate)
+        _CFG = cfg
+        for name in _LAZY_ATTRS:
+            globals().pop(name, None)
+        return cfg
+
+
+def section(name: str) -> dict:
+    """Return a top-level config section as a dict (empty if absent)."""
+    return get().get(name, {}) or {}
+
+
+def __getattr__(name: str) -> object:
+    if name == "CFG":
+        value: object = get()
+    elif name == "INTENTS":
+        value = get().get("intents", _DEFAULT_INTENTS)
+    elif name == "ADAPTER_ORDER":
+        value = get().get("adapters", list(_DEFAULT_ADAPTER_ORDER))
+    else:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))

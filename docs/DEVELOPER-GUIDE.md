@@ -91,7 +91,7 @@ Two side-channels run alongside this main path:
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | Loads `default.yaml` + user `config.yaml` overrides (deep-merge). Exposes `INTENTS`, `ADAPTER_ORDER`, `section()`. |
+| `config.py` | Lazily loads and process-caches `default.yaml` + user `config.yaml` overrides (deep-merge). Prefer `get()`, `reload()`, and `section()`; `CFG`, `INTENTS`, and `ADAPTER_ORDER` remain lazy compatibility attributes. |
 | `state.py` | **Runtime state** — live `nhj set` / `mute` / mode dials, written under an `flock`, read fresh by the worker each cycle. |
 | `modes.py` | **Mode macros** — one named preset that atomically sets every axis (muzak, audio FX, persona, dials, display, voice, haptic, ambient). |
 | `resources.py` | Filesystem locations that resolve correctly in **both** a source checkout and a wheel install (bundled data vs user data/config/state/cache dirs). |

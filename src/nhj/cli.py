@@ -1577,7 +1577,7 @@ def config_check():
     """Load and schema-validate the merged config; exit 1 with the error if invalid."""
     from nhj import config
     try:
-        cfg = config.load_config(force_validate=True)
+        cfg = config.reload(force_validate=True)
     except config.ConfigError as e:
         app.print(f"[red]✗[/red] {e}")
         raise typer.Exit(1)
