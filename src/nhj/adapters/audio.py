@@ -23,6 +23,7 @@ import base64
 import hashlib
 import os
 import random
+import struct
 import sys
 import time
 import uuid
@@ -146,9 +147,35 @@ def _cache_path(voice: str, text: str, variant: str = "") -> Path:
     return _CLIPS_ROOT / "cache" / f"{digest}.wav"
 
 
+def _riff_size_ok(p: Path) -> bool:
+    """True when the file's RIFF header declares exactly its actual size.
+
+    A clip truncated before the atomic-write fix (#56) can sit in the cache
+    indefinitely; size >= 100 alone would serve it forever (#59)."""
+    try:
+        with p.open("rb") as f:
+            head = f.read(8)
+        if len(head) < 8 or head[:4] != b"RIFF":
+            return False
+        return struct.unpack("<I", head[4:8])[0] == p.stat().st_size - 8
+    except OSError:
+        return False
+
+
 def cache_hit(voice: str, text: str, variant: str = "") -> Optional[str]:
     p = _cache_path(voice, text, variant)
-    return str(p) if p.is_file() and p.stat().st_size >= 100 else None
+    try:
+        if not p.is_file() or p.stat().st_size < 100:
+            return None
+    except OSError:
+        return None
+    if _riff_size_ok(p):
+        return str(p)
+    try:                       # truncated/foreign entry: drop it, treat as a miss
+        p.unlink()
+    except OSError:
+        pass
+    return None
 
 
 def pick_return_clip() -> Optional[str]:
@@ -253,7 +280,14 @@ def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> Non
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
-    try:  # LRU prune
+    try:  # sweep orphan temp files a hard kill mid-write leaked (#59), then LRU prune
+        cutoff = time.time() - 3600
+        for orphan in cache.parent.glob(".*.tmp"):
+            try:
+                if orphan.stat().st_mtime < cutoff:
+                    orphan.unlink()
+            except OSError:
+                pass
         entries = sorted(cache.parent.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
         for old in entries[_MAX_CACHE:]:
             try:

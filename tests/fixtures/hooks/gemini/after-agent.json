@@ -1,0 +1,6 @@
+{
+  "session_id": "gemini-fixture-1",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/home/user/proj-delta",
+  "hook_event_name": "AfterAgent"
+}

@@ -243,7 +243,7 @@ Override any root with `NHJ_CONFIG_DIR` / `NHJ_CACHE_DIR` / `NHJ_STATE_DIR` / `N
 
 ## Requirements & minimum specs
 
-For the three ways to run NHJ — silent, pre-recorded samples, or the full live experience — and the RAM/disk each needs, see **[Minimum specs](minimum-specs.md)**.
+For the three ways to run NHJ — silent, pre-recorded samples, or the full live experience — and the RAM/disk each needs, see **[Minimum specs](minimum-specs.md)**. Installing from pip directly: the base package is the lean hooks/text core — add extras for sound (`[audio]`), the haptic mouse (`[haptic]`), AWTRIX-over-MQTT (`[displays]`), or the local TTS server (`[server]`); `install.sh` composes these per profile for you.
 
 | Tier | What you need | Notes |
 |---|---|---|
