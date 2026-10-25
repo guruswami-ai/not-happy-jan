@@ -60,7 +60,7 @@ The words are the ones you give and nothing else: the arguments, or stdin only w
 | `--rewrite` | let the character rephrase it instead of speaking it exactly |
 | `--wait`, `--timeout S` | wait (default 30 s) until the worker has finished with the event; the last words may still be playing |
 | `--strict` | fail (status 10) when it cannot be spoken at all |
-| `--max-chars N` | refuse longer text; default 240, never more than 1000 |
+| `--max-chars N` | refuse longer text; default 240, never more than 500 (the speech server's own limit, and a literal line has no fallback) |
 
 Text is cleaned (control characters become spaces, whitespace collapsed) and **refused, never truncated**, when it is over the limit. The words are never written to NHJ's logs (the queue file holds them until the worker has used them).
 

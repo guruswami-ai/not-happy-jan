@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_MAX_CHARS = 240
-HARD_MAX_CHARS = 1000
+HARD_MAX_CHARS = 500        # the TTS server refuses longer text (tts_server._TTS_MAX_CHARS); a literal line has no fallback
 EXIT_OK, EXIT_USAGE, EXIT_UNDELIVERED, EXIT_TIMEOUT = 0, 2, 10, 124
 
 #: Friendly severities map onto the one event vocabulary (ok|err|warn|attn|celebrate|step).

@@ -158,9 +158,9 @@ def test_text_is_cleaned_joined_and_bounded():
         say.read_text(["  \n "], io.StringIO(), 240)
     with pytest.raises(say.SayError, match="limit is 240"):
         say.read_text(["x" * 241], io.StringIO(), 240)
-    assert len(say.read_text(["x" * 1000], io.StringIO(), 1000)) == 1000
+    assert len(say.read_text(["x" * say.HARD_MAX_CHARS], io.StringIO(), say.HARD_MAX_CHARS)) == say.HARD_MAX_CHARS
     with pytest.raises(say.SayError, match="--max-chars"):
-        say.read_text(["hi"], io.StringIO(), 1001)
+        say.read_text(["hi"], io.StringIO(), say.HARD_MAX_CHARS + 1)
 
 
 def test_stdin_is_read_only_for_a_lone_dash_and_is_bounded():
@@ -352,3 +352,13 @@ def test_a_literal_flag_with_no_message_behaves_like_a_bare_marker(monkeypatch):
     emitted = _audio_stubs(monkeypatch, engine="none")
     assert audio.AudioAdapter().fire("err", "", resolve_character("err"), literal=True) is True
     assert emitted == ["/bank/generic.wav"]
+
+
+def test_say_never_accepts_more_than_the_speech_server_does():
+    """A literal line has no fallback, so `say` must not queue text the TTS server would refuse.
+    Read the server's cap from its source: importing it needs fastapi, which not every test env has."""
+    import re
+    from pathlib import Path
+    src = (Path(say.__file__).parent / "tts_server.py").read_text()
+    cap = int(re.search(r"^_TTS_MAX_CHARS\s*=\s*(\d+)", src, re.M).group(1))
+    assert say.HARD_MAX_CHARS <= cap

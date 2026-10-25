@@ -1696,7 +1696,7 @@ def say_cmd(
     wait: bool = typer.Option(False, "--wait", help="block until the worker has dispatched it (default: return at once)"),
     timeout: float = typer.Option(30.0, "--timeout", help="seconds to wait with --wait; then status 124"),
     strict: bool = typer.Option(False, "--strict", help="status 10 when it cannot be spoken (muted, voice off, no engine)"),
-    max_chars: int = typer.Option(240, "--max-chars", help="refuse longer text (at most 1000)"),
+    max_chars: int = typer.Option(240, "--max-chars", help="refuse longer text (at most 500)"),
 ):
     """Speak exactly this text, in a character's voice. For scripts, cron and CI.
 
