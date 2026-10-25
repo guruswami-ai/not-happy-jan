@@ -6,7 +6,7 @@ validates, serialises, and forwards exactly the same options.
 
 Fields (all optional except ``intent``):
   intent         ok | err | warn | attn | celebrate | step
-  message        free text ("" → a random in-character phrase)
+  message        free text, at most 500 characters ("" → a random in-character phrase)
   vibe_level     haptic intensity, int 1–10
   pretext        spoken prefix (e.g. "Node Om:")
   verbosity      low | medium | high
@@ -26,6 +26,7 @@ import math
 from dataclasses import asdict, dataclass
 
 INTENTS   = ("ok", "err", "warn", "attn", "celebrate", "step")
+MAX_MESSAGE_CHARS = 500
 VERBOSITY = ("low", "medium", "high")
 EMOTIONS  = ("neutral", "alert", "confidential", "celebrate")
 #: Options accepted as inline marker kwargs ([Jan:ok|speed=1.2|…]) and MCP args.
@@ -95,6 +96,14 @@ def _as_bool(name: str, v) -> bool:
     raise VibeValidationError(f"{name} must be true or false, got {v!r}")
 
 
+def _as_message(v) -> str:
+    text = str(v or "")
+    if len(text) > MAX_MESSAGE_CHARS:
+        raise VibeValidationError(
+            f"message must be at most {MAX_MESSAGE_CHARS} characters, got {len(text)}")
+    return text
+
+
 def _as_enum(name: str, v, allowed: tuple[str, ...]) -> str:
     s = str(v).strip().lower()
     if s not in allowed:
@@ -112,7 +121,7 @@ def validate(intent, *, message="", vibe_level=5, pretext="", verbosity="medium"
     """
     return VibeEvent(
         intent=_as_enum("intent", intent, INTENTS),
-        message=str(message or ""),
+        message=_as_message(message),
         vibe_level=_as_int("vibe_level", vibe_level, 1, 10),
         pretext=str(pretext or ""),
         verbosity=_as_enum("verbosity", verbosity, VERBOSITY),

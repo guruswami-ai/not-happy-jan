@@ -26,6 +26,13 @@ def test_validate_accepts_and_coerces():
     assert ev.intent == "ok" and ev.vibe_level == 7 and ev.speed == 1.5 and ev.emotion == "alert"
 
 
+def test_message_length_boundary_is_500():
+    assert event.MAX_MESSAGE_CHARS == 500
+    assert len(event.validate("ok", message="x" * 500).message) == 500
+    with pytest.raises(event.VibeValidationError, match="message must be at most 500 characters"):
+        event.validate("ok", message="x" * 501)
+
+
 @pytest.mark.parametrize("kw", [
     {"intent": "nope"},                       # bad enum
     {"intent": "ok", "vibe_level": 99},       # out of range
@@ -33,6 +40,7 @@ def test_validate_accepts_and_coerces():
     {"intent": "ok", "speed": 9.0},           # out of range
     {"intent": "ok", "verbosity": "loud"},    # bad enum
     {"intent": "ok", "emotion": "happy"},     # bad enum
+    {"intent": "ok", "message": "x" * 501},   # over the message limit
 ])
 def test_validate_rejects(kw):
     with pytest.raises(event.VibeValidationError):
@@ -56,6 +64,26 @@ def test_options_survive_roundtrip():
     kw = ev.to_kwargs()
     assert kw["intent"] == "err" and kw["vibe_level"] == 8 and kw["character"] == "karren"
     assert kw["voice_variant"] == "x" and kw["message"] == "boom"
+
+
+def test_mcp_and_cli_reject_over_long_messages(monkeypatch):
+    from typer.testing import CliRunner
+
+    from nhj import cli, mcp_server
+
+    queued = []
+
+    class FakeQM:
+        def add(self, **kw): queued.append(kw)
+        def start_worker_if_needed(self, *a, **k): pass
+
+    monkeypatch.setattr(mcp_server, "QueueManager", FakeQM)
+    assert mcp_server.nhj_vibe(intent="ok", message="x" * 501).startswith("[nhj:error]")
+    assert queued == []
+
+    result = CliRunner().invoke(cli.cli, ["vibe", "ok", "-m", "x" * 501], input="")
+    assert result.exit_code == 2
+    assert "message must be at most 500 characters" in result.output
 
 
 # ---- local == remote payload ----------------------------------------------
