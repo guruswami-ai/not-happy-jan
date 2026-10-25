@@ -23,11 +23,13 @@ Two layers:
 3. ``NHJ_TEST_NO_MIXER=1`` is set for the session and ``start_controller`` is stubbed (#80).
    A leftover mixer would poll this session's spool dir and eat play-events. Worker
    subprocesses inherit the env var so they do not spawn either. A session-finish check
-   fails if a mixer process appeared during the run.
+   fails if a suite-owned mixer appeared during the run (detected, then cleaned up).
+   Mixers that only look similar are reported and left running.
 """
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import shutil
 import signal
@@ -193,19 +195,103 @@ def _mixer_pids() -> set[int]:
 
 
 _PREEXISTING_MIXERS: set[int] = set()
+_SUITE_STATE_DIR = str(_DIRS["NHJ_STATE_DIR"])
+_SUITE_STATE_MARKER = f"NHJ_STATE_DIR={_SUITE_STATE_DIR}"
 
 
-def _kill_suite_mixers() -> set[int]:
-    """Stop mixers the suite started. Leaves mixers that were already running (the live one)."""
-    leaked = _mixer_pids() - _PREEXISTING_MIXERS
-    if not leaked:
-        return leaked
-    for pid in leaked:
+def _proc_environ(pid: int) -> str:
+    """Best-effort environment text for *pid* (Linux procfs, else ``ps eww``)."""
+    try:
+        raw = Path("/proc", str(pid), "environ").read_bytes()
+        return raw.replace(b"\0", b"\n").decode("utf-8", "replace")
+    except OSError:
+        pass
+    try:
+        proc = _Popen(
+            ["ps", "eww", "-p", str(pid)],
+            stdout=_PIPE, stderr=_DEVNULL, text=True,
+        )
+        out, _ = proc.communicate()
+    except OSError:
+        return ""
+    return out or ""
+
+
+def _parent_pid(pid: int) -> int | None:
+    try:
+        for line in Path("/proc", str(pid), "status").read_text().splitlines():
+            if line.startswith("PPid:"):
+                return int(line.split()[1])
+    except (OSError, ValueError):
+        pass
+    try:
+        proc = _Popen(
+            ["ps", "-o", "ppid=", "-p", str(pid)],
+            stdout=_PIPE, stderr=_DEVNULL, text=True,
+        )
+        out, _ = proc.communicate()
+        return int(out.strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _is_descendant(pid: int, ancestor: int) -> bool:
+    seen: set[int] = set()
+    cur: int | None = pid
+    for _ in range(32):
+        if cur is None or cur in seen:
+            return False
+        if cur == ancestor:
+            return True
+        seen.add(cur)
+        cur = _parent_pid(cur)
+    return False
+
+
+def _suite_state_controller_pids() -> set[int]:
+    path = _DIRS["NHJ_STATE_DIR"] / "music.json"
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return set()
+    pids: set[int] = set()
+    for key in ("controller_pid", "child_pid"):
+        value = data.get(key)
+        if isinstance(value, int):
+            pids.add(value)
+    return pids
+
+
+def _is_suite_owned(pid: int) -> bool:
+    """True only when *pid* is proven to belong to this test session.
+
+    ``start_controller`` uses ``start_new_session=True``, so parent-pid
+    walking misses the usual leak. The session's unique ``NHJ_STATE_DIR``
+    in the process environment is the reliable signal.
+    """
+    if _SUITE_STATE_MARKER in _proc_environ(pid):
+        return True
+    if pid in _suite_state_controller_pids():
+        return True
+    return _is_descendant(pid, os.getpid())
+
+
+def _reap_suite_mixers() -> tuple[set[int], set[int]]:
+    """Detect new mixers, kill only suite-owned ones.
+
+    Returns ``(owned, unverified)``. *owned* is the set that appeared and
+    was proven ours, captured before SIGKILL so a successful kill still
+    fails the session check.
+    """
+    appeared = _mixer_pids() - _PREEXISTING_MIXERS
+    owned = {pid for pid in appeared if _is_suite_owned(pid)}
+    unverified = appeared - owned
+    for pid in owned:
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
-    return leaked & _mixer_pids()
+    return owned, unverified
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -213,9 +299,15 @@ def _fail_if_the_suite_left_a_mixer():
     global _PREEXISTING_MIXERS
     _PREEXISTING_MIXERS = _mixer_pids()
     yield
-    leftover = _kill_suite_mixers()
-    assert not leftover, (
-        f"the suite left mixer process(es) {sorted(leftover)}; "
+    owned, unverified = _reap_suite_mixers()
+    if unverified:
+        print(
+            f"[nhj tests] mixer pid(s) {sorted(unverified)} appeared during the "
+            "suite but are not suite-owned; left running",
+            file=sys.stderr,
+        )
+    assert not owned, (
+        f"the suite left mixer process(es) {sorted(owned)}; "
         "start_controller is stubbed — a test spawned one for real and did not stop it (#80)"
     )
 
