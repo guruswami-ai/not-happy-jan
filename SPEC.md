@@ -71,7 +71,12 @@ Rules (today's `hook.py` behaviour, now normative):
 
 Claude Code is the reference implementation. For every supported CLI there MUST be
 a captured real payload fixture per event under `tests/fixtures/hooks/<cli>/` and a
-snapshot test. `OPEN:` fixture capture is Phase 1 work; table below is the target.
+snapshot test. Fixtures exist for Claude Code (UserPromptSubmit, Stop, StopFailure,
+SessionEnd, Notification — identity + real hook routing pinned by
+`tests/test_hook_fixtures.py`), Grok Build and Gemini (identity), and Codex
+`notify`; opencode's plugin events are covered by `tests/test_opencode_plugin.py`.
+Provenance per CLI (Verified vs Documented) lives in the fixtures README. The
+table below is the target coverage; new CLIs land fixtures with their support.
 
 | NHJ action | Claude Code | Codex | opencode | Others |
 |---|---|---|---|---|

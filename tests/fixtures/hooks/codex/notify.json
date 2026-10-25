@@ -1,0 +1,8 @@
+{
+  "type": "agent-turn-complete",
+  "thread-id": "codex-thread-1",
+  "turn-id": "codex-turn-1",
+  "cwd": "/home/user/proj-gamma",
+  "input-messages": ["fix the test"],
+  "last-assistant-message": "All done, the test passes."
+}
