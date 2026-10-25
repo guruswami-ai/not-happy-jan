@@ -9,12 +9,14 @@ start a worker acted on the real queue.
 Two layers:
 
 1. At **import time** (here, before any test module imports ``nhj``) the four mutable directories are
-   pointed at a throwaway session directory, ``HOME`` and the XDG directories move there too (the legacy
-   config dir and ``~/.env`` come from the real home), and the variables NHJ reads while importing are
-   removed (``config.CFG`` is built on import, so ``NHJ_CONFIG_FILE`` must be gone before that). Several
-   modules compute module-level constants from these (``queue_manager._LOG``, ``hook._SEEN``,
-   ``audio._CLIPS_ROOT``, ...), so a per-test fixture alone would be too late. Read-only package data
-   (character definitions, the bundled clip bank, media) is left alone.
+   pointed at a throwaway session directory, and ``HOME`` and the XDG directories move there too (the
+   legacy config dir and ``~/.env`` come from the real home). This still has to happen before collection:
+   a few modules outside the #61 lazy-path set resolve data directories while importing, and subprocesses
+   spawned by tests inherit these session directories. Config and .env selection no longer need an
+   import-time scrub: importing ``nhj`` modules must not load either (the guard in
+   ``test_isolation.py`` proves it), and the per-test fixture below removes host variables before any
+   test body runs. Read-only package data (character definitions, the bundled clip bank, media) is
+   left alone.
 2. Before **each test** the contents of those directories are wiped and the host-specific environment
    variables below are removed, so every test starts from the same empty install. A test that needs a
    value sets it itself with ``monkeypatch``.
@@ -53,10 +55,6 @@ for _xdg, _sub in (("XDG_STATE_HOME", ".local/state"), ("XDG_CONFIG_HOME", ".con
     (_HOME / _sub).mkdir(parents=True)
     os.environ[_xdg] = str(_HOME / _sub)
 
-# Read while nhj is IMPORTED (config.CFG, audio._VOICE_TARGET_DBFS): remove them here, not per test.
-for _early in ("NHJ_CONFIG_FILE", "NHJ_VOICE_TARGET_DBFS"):
-    os.environ.pop(_early, None)
-
 # Variables a developer's shell, ``.env`` or service units set that change NHJ's behaviour.
 _HOST_ENV = (
     "NHJ_CONFIG_FILE", "NHJ_STATE_FILE", "NHJ_MUZAK_STATE", "NHJ_REMOTE_URL", "NHJ_ORCHESTRATION", "NHJ_OUTPUT_DEVICE",
@@ -77,7 +75,7 @@ _HOST_ENV = (
 # were already set (by a test, with monkeypatch) are left alone, as dotenv itself would not override them.
 import dotenv  # noqa: E402
 
-_HOST_VARS = frozenset(_HOST_ENV) | {"NHJ_CONFIG_FILE", "NHJ_VOICE_TARGET_DBFS"}
+_HOST_VARS = frozenset(_HOST_ENV)
 _real_load_dotenv = dotenv.load_dotenv
 
 

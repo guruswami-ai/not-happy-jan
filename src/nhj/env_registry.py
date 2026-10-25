@@ -6,7 +6,7 @@ overrides (if any), and when it is read:
 
 - ``live``    — read at the point of use (new processes / new calls see edits)
 - ``startup`` — read when a long-lived process (server, mixer, supervisor) starts
-- ``import``  — captured at module import (config/state path resolution)
+- ``import``  — captured at module import (no current entries; new ones need justification)
 
 ``tests/test_env_registry.py`` fails when code under ``src/nhj`` reads a literal
 env var that is not registered here, and when the generated table in
@@ -38,8 +38,8 @@ def _e(name, type, default, yaml, timing, description, scope="nhj"):
 
 _ENTRIES = [
     # --- core paths / process -------------------------------------------------
-    _e("NHJ_CONFIG_FILE", "path", None, None, "import", "Use exactly this config file instead of the search order"),
-    _e("NHJ_STATE_FILE", "path", None, None, "import", "Override the live state.json location"),
+    _e("NHJ_CONFIG_FILE", "path", None, None, "startup", "Use exactly this config file instead of the search order"),
+    _e("NHJ_STATE_FILE", "path", None, None, "live", "Override the live state.json location"),
     _e("NHJ_BIN_DIR", "path", None, None, "live", "Directory the `nhj` launcher is written to on install"),
     _e("NHJ_MEDIA_BASE", "url", None, None, "live", "Base URL media downloads are fetched from"),
     _e("NHJ_DEBUG", "bool", None, None, "live", "Enable `[nhj]` debug lines on stderr (any set value)"),
@@ -92,7 +92,7 @@ _ENTRIES = [
     _e("NHJ_FOLLOW_DEVICE_POLL", "float", "4", None, "startup", "Default-device watcher interval (seconds)"),
     # --- hold music / mixer ------------------------------------------------------
     _e("NHJ_MUZAK_DIR", "path", "", None, "live", "Extra/replacement music directory for the hold bed"),
-    _e("NHJ_MUZAK_STATE", "path", None, None, "import", "Override the music.json state file location"),
+    _e("NHJ_MUZAK_STATE", "path", None, None, "live", "Override the music.json state file location"),
     _e("NHJ_MUZAK_VOLUME", "float", "0.5", None, "live", "Music bed level (0-1)"),
     _e("NHJ_MUSIC_MODE", "enum", None, "music.mode", "startup", "Hold-music source: recorded (default) or generative (stem pack + director)"),
     _e("NHJ_MUZAK_DUCK_GAIN", "float", "0.22", None, "live", "Music level while ducking under speech (0-1)"),
