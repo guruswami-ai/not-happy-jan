@@ -511,13 +511,14 @@ class AudioAdapter(NotificationAdapter):
             from nhj import resources
             resources.debug(f"return-clip dispatch failed: {e}")
 
-        d = character.delivery(intent, message)
+        literal = bool(kwargs.get("literal"))                 # `nhj say`: speak exactly this text
+        d = character.delivery(intent, message, literal=True) if literal else character.delivery(intent, message)
         voice, tts_text, variant = d.voice, d.text, d.band
         # Mention completions that were only chimed while other sessions were busy. Only when a
         # message will actually be spoken (a bare marker plays a bundled clip with no digest in
         # it); the count is cleared below only once it has really been delivered.
         digest_n, digest_delivered = 0, False
-        if message and tts_text and tts_enabled and intent in ("ok", "celebrate", "step"):
+        if message and tts_text and tts_enabled and not literal and intent in ("ok", "celebrate", "step"):
             from nhj import orchestration
             digest_n = orchestration.peek_digest()
             if digest_n:

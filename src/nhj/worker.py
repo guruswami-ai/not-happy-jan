@@ -47,10 +47,11 @@ def _dispatch(task, adapters) -> None:
     who           = task.get("character", "") or ""
     source        = task.get("source", "") or ""
     speed = _parse_speed(task.get("speed", 1.0))
+    literal = str(task.get("literal", "")) == "1"        # `nhj say`: the caller's exact words
 
     # Full message = pretext + inline message
     full_message = f"{pretext} {message}".strip() if pretext else message
-    if verbosity == "low":
+    if verbosity == "low" and not literal:               # a literal message was asked for: never blank it
         full_message = ""
 
     # [Jan:ok]/[Bazza:err] explicitly name the character; [vibes:ok] auto-routes by intent.
@@ -58,7 +59,8 @@ def _dispatch(task, adapters) -> None:
 
     from nhj import gate, orchestration
     voice_ok = gate.voice_allowed(source)
-    voice_mode = orchestration.voice_mode(intent) if voice_ok else "speak"
+    # An explicit `say` is never downgraded to a chime: the caller asked for these words.
+    voice_mode = orchestration.voice_mode(intent) if (voice_ok and not literal) else "speak"
     if voice_mode == "chime":
         orchestration.note_chime(source)
     if voice_ok:
@@ -82,6 +84,7 @@ def _dispatch(task, adapters) -> None:
                 speed=speed,
                 source=source,
                 voice_mode=voice_mode,
+                literal=literal,
             )
         except Exception as e:
             print(f"[nhj] adapter {adapter.__class__.__name__} error: {e}",

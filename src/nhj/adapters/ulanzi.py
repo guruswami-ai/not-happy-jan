@@ -166,9 +166,9 @@ class UlanziAdapter(NotificationAdapter):
         return bool(self.mqtt_host) if self.transport == "mqtt" else any(d["http"] for d in self.displays)
 
     # ── text / payload ────────────────────────────────────────────────────────
-    def _text(self, intent: str, message: str, character) -> str:
+    def _text(self, intent: str, message: str, character, literal: bool = False) -> str:
         if message:
-            if self.dynamic_text and character is not None:
+            if self.dynamic_text and character is not None and not literal:   # `nhj say` shows the exact words
                 try:
                     from nhj import boganify
                     if boganify.enabled():
@@ -287,7 +287,7 @@ class UlanziAdapter(NotificationAdapter):
         except Exception:
             pass
         self._ensure_setup()
-        body = self._payload(intent, self._text(intent, message, character))
+        body = self._payload(intent, self._text(intent, message, character, bool(kwargs.get("literal"))))
         result = self._fire_mqtt(body) if self.transport == "mqtt" else self._fire_http(body)
         if self._rave_on():            # refresh the party tile so it varies between alerts
             self._publish_custom("rave", self._party_tile())

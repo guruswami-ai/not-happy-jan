@@ -41,6 +41,40 @@ Real replies on this setup, two samples each, **before** the fact guard (#87):
 
 **After the guard.** Spoken lines must keep every digit and number-word from the status (`12`, `3`, `1` and `5`); display headlines may drop a number but must not change it. A miss retries once at temperature 0.3, then NHJ falls back to the static phrase bank (still spoken). Measured against those same six replies: both backup samples and both make samples are rejected; the interrupted samples have no numbers, so they still pass; "in a hurry" is rejected. The fallback is the existing static bank, so the event is still spoken. Leave dynamic lines off if you need the status spoken verbatim.
 
+## `nhj say`: speak exactly this text
+
+```sh
+nhj say "Deploy complete"                              # info
+nhj say --severity error --character karren "The build failed on node 3"
+make build || nhj say -s error "The build failed"
+echo "backup finished" | nhj say -                     # "-" reads the words from stdin
+nhj say --wait --timeout 20 "Tests passed"             # block until the worker has dispatched it
+```
+
+The words are the ones you give and nothing else: the arguments, or stdin only when the single argument is `-`. Command output, other arguments and the environment are never spoken. The character picks the **voice and delivery, never the words**: a `say` event is *literal*, so it skips the dynamic LLM rewrite, the phrase templates, garbling, the quiet-while-busy chime and the "N other tasks finished" digest, and it appears unedited on the display matrix. The user's `censor` setting still applies, because that is an output policy, not characterisation. `--rewrite` opts back in to the character's own rendering.
+
+| Option | Meaning |
+|---|---|
+| `--severity, -s` | `success`, `info` (default), `warning`, `error`, `attention`, `celebrate`; they map onto the event intents `ok`, `step`, `warn`, `err`, `attn`, `celebrate`, which are also accepted |
+| `--character, -c` | `jan`, `bazza` or `karren` (default: chosen by severity) |
+| `--rewrite` | let the character rephrase it instead of speaking it exactly |
+| `--wait`, `--timeout S` | wait (default 30 s) until the worker has finished with the event; the last words may still be playing |
+| `--strict` | fail (status 10) when it cannot be spoken at all |
+| `--max-chars N` | refuse longer text; default 240, never more than 1000 |
+
+Text is cleaned (control characters become spaces, whitespace collapsed) and **refused, never truncated**, when it is over the limit. The words are never written to NHJ's logs (the queue file holds them until the worker has used them).
+
+**If it cannot be spoken** (NHJ is muted, voice is off for this project, or no speech engine is configured), the text is printed to **stderr** instead, so a muted or headless run does not lose the message. The event is still queued for the displays and the board.
+
+| Status | Meaning |
+|---|---|
+| `0` | delivered: queued (and, with `--wait`, dispatched). A muted call that printed the text also exits 0 |
+| `2` | usage or bounds error (bad severity, empty or over-long text); nothing was queued |
+| `10` | could not be delivered: the queue failed, the worker rejected the event, or `--strict` and it cannot be spoken |
+| `124` | `--wait` timed out (like `timeout(1)`) |
+
+Shell quoting is yours: `nhj say "$(cat secrets)"` will queue whatever the shell expands, and arguments are visible in `ps` while the command runs; use `-` and a pipe for anything sensitive.
+
 ## Not yet
 
-`nhj say "text"` (direct speech with `--severity`, `--wait`, bounded text and status codes) is the second phase of #16. `nhj summarize --speak` would need a deterministic reduction of the output to a short status line first, for the reasons above.
+`nhj summarize --speak` would need a deterministic reduction of the output to a short status line first, for the reasons above.

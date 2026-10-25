@@ -184,9 +184,19 @@ class Character:
         except Exception:
             return text
 
-    def delivery(self, intent: str, message: str = "") -> Delivery:
+    def delivery(self, intent: str, message: str = "", literal: bool = False) -> Delivery:
+        """How this character delivers *message*.
+
+        ``literal`` (``nhj say``) keeps the caller's exact words: no dynamic LLM rewrite, no phrase
+        template, no garbling, no preamble. The character still chooses the voice and delivery
+        (instruct, speed, temperature). The user's censor setting still applies, because that is an
+        output policy, not characterisation. With no message there is nothing to be literal about.
+        """
         band = self._band()
-        text = self._dynamic(intent, message, band) or self._phrase(intent, message)
+        if literal and message and message.strip():
+            text = message.strip()
+        else:
+            text = self._dynamic(intent, message, band) or self._phrase(intent, message)
         return Delivery(
             text=self._censor(text),
             voice=self.voice,

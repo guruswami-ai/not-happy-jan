@@ -158,7 +158,7 @@ class QueueManager:
     def add(self, intent: str, message: str = "", vibe_level: int = 5,
             pretext: str = "", verbosity: str = "medium", emotion: str = "neutral",
             speed: float = 1.0, voice_variant: str = "", nfe_step: int = 0,
-            character: str = "", source: str = "") -> str:
+            character: str = "", source: str = "", literal: bool = False) -> str:
         """Queue one event.
 
         Raises :class:`VibeValidationError` on a bad field and writes nothing.
@@ -167,7 +167,7 @@ class QueueManager:
         ev = validate(
             intent, message=message, vibe_level=vibe_level, pretext=pretext,
             verbosity=verbosity, emotion=emotion, speed=speed,
-            voice_variant=voice_variant, character=character, source=source,
+            voice_variant=voice_variant, character=character, source=source, literal=literal,
         )
         ts = int(time.time() * 1000)
         name = f"{ts:013d}-{os.getpid()}-{next(_seq):06d}-{uuid.uuid4().hex[:8]}.vibe"
@@ -184,6 +184,8 @@ class QueueManager:
             "character":     ev.character,
             "source":        base64.b64encode(ev.source.encode("utf-8")).decode("ascii"),
         }
+        if ev.literal:                       # only written when set: existing queue files are unchanged
+            data["literal"] = "1"
         body = "\n".join(f"{k}={v}" for k, v in data.items())
         self._atomic_write(self.queue_dir / name, body)
         return name
