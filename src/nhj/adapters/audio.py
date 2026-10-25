@@ -205,8 +205,11 @@ def synth_qwen(text: str, base_url: str, voice: str = "jan",
         payload["speed"] = speed
     if temperature is not None:
         payload["temperature"] = temperature
+    from nhj.lan_auth import HEADER, secret
+    headers = {HEADER: secret()} if secret() else None
     try:
-        r = requests.post(f"{base_url.rstrip('/')}/tts/generate", json=payload, timeout=timeout)
+        r = requests.post(f"{base_url.rstrip('/')}/tts/generate", json=payload,
+                          headers=headers, timeout=timeout)
         r.raise_for_status()
         body = r.json()
         if body.get("status") != "ok" or not body.get("audio_b64"):
