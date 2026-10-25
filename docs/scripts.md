@@ -39,7 +39,7 @@ Real replies on this setup, two samples each, **before** the fact guard (#87):
 
 `pytest finished in 1 hour 5 minutes` came back as "the tests done in a hurry, mate."
 
-**After the guard.** Spoken lines must keep every digit and number-word from the status (`12`, `3`, `1` and `5`); display headlines may drop a number but must not change it. A miss retries once at temperature 0.3, then NHJ falls back to the static phrase bank (still spoken). Measured against those same six replies: both backup samples and both make samples are rejected; the interrupted samples have no numbers, so they still pass; "in a hurry" is rejected. The fallback is the existing static bank, so the event is still spoken. Leave dynamic lines off if you need the status spoken verbatim.
+**After the guard.** Spoken lines must keep every digit and number-word from the status (`12`, `3`, `1` and `5`); display headlines may drop a number but must not change it. A line that only *drops* a figure is repaired by appending it (`Backup's done, mate` becomes `Backup's done, mate, 12 minutes`). A line that *changes* a figure is retried once at the same temperature with a nudge to mention the missing one. The guard still refuses any line that would speak the wrong number, and NHJ then falls back to the static phrase bank (still spoken). Measured on `ocker-bogan-nano`, six `nhj run` statuses × 8 samples: fallback went from 19/48 (40 %, retry at 0.3) to 0/48 with repair plus nudge, with 0 wrong-number lines either way. Leave dynamic lines off if you need the status spoken verbatim.
 
 ## Not yet
 

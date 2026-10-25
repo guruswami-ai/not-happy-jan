@@ -65,7 +65,7 @@ NHJ_DYNAMIC_BASE_URL=http://localhost:11434/v1
 NHJ_DYNAMIC_MODEL=qwen2.5:7b-instruct
 ```
 
-The character's persona, dial and swearing setting become the system prompt, so even a small general instruct model does a decent job — ocker-bogan-nano just does it better and cheaper because the personas are fine-tuned in. If the endpoint is ever unreachable, NHJ **silently falls back to the static banks**, so dynamic is always safe to enable. A spoken line that drops or changes a number from the status (a duration, an exit status) is retried once at a lower temperature, then abandoned the same way.
+The character's persona, dial and swearing setting become the system prompt, so even a small general instruct model does a decent job — ocker-bogan-nano just does it better and cheaper because the personas are fine-tuned in. If the endpoint is ever unreachable, NHJ **silently falls back to the static banks**, so dynamic is always safe to enable. A spoken line that drops a number from the status (a duration, an exit status) is repaired by appending the figure; a line that changes a number is retried once at the same temperature with a nudge to mention it, then abandoned the same way if it still would speak the wrong figure.
 
 ## Swearing & the bleep
 
