@@ -20,7 +20,7 @@ DEFAULT_ACCENT_TTL_S = 8.0       # used when the muzak module (or a test double)
 def settings() -> dict:
     from nhj import config
     import os
-    cfg = dict(config.CFG.get("music") or {})
+    cfg = dict(config.get().get("music") or {})
     env = os.getenv("NHJ_MUSIC_MODE", "").strip().lower()
     if env:
         cfg["mode"] = env
