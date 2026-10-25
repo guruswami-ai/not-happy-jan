@@ -203,10 +203,15 @@ def _read_last_assistant_text(path: Path) -> str:
     except OSError:
         return ""
     size, ino = st.st_size, st.st_ino
-    if size == 0:
-        return ""
     key = str(path)
     cached = _TAIL_CACHE.get(key)
+    if size == 0 or (cached and cached[0] == ino and size < cached[2]):
+        # Truncated (possibly about to be rewritten on the same inode): the cached
+        # offset no longer describes this file, so the next poll must rescan (#60).
+        _TAIL_CACHE.pop(key, None)
+        if size == 0:
+            return ""
+        cached = None
     if cached and cached[0] == ino and cached[1] == size:
         return cached[3]                       # unchanged since last poll: no re-read
     try:
