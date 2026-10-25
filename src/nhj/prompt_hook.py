@@ -32,6 +32,27 @@ def _scold_for_secret(prompt: str) -> None:
     qm.start_worker_if_needed()
 
 
+def _stop_failure_accent(payload: dict) -> None:
+    """Generative music (#63): an API failure is an `err` accent for the sessions still busy.
+
+    Gated exactly like `mark_busy` (a project with voice off does not move the bed). With
+    NHJ_REMOTE_URL the bed lives on the daemon, so nothing is written here: a local write would
+    land on the wrong host, and sending an `err` event instead would also make the daemon speak
+    and light the displays for a failure that is silent today. Marker verdicts do reach the
+    daemon (its worker notes them); this one does not yet."""
+    try:
+        import os
+
+        from nhj import gate, inference_muzak
+        from nhj.hook import source_label
+        if os.environ.get("NHJ_REMOTE_URL", "").strip():
+            return
+        if gate.voice_allowed(source_label(payload.get("cwd", ""))):
+            inference_muzak.note_accent("err")
+    except Exception:
+        pass                                    # a music accent must never fail the hook
+
+
 def main() -> int:
     raw = sys.stdin.read()
     try:
@@ -51,6 +72,7 @@ def main() -> int:
             # max-output-token failure). Mark the session idle immediately so hold music
             # unwinds — no marker scan because there is no reliable final assistant message.
             inference_muzak.mark_idle(sid)
+            _stop_failure_accent(payload)
             if get_flag("stop_failure_vibe", False):
                 try:
                     from nhj.queue_manager import QueueManager

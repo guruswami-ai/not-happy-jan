@@ -14,6 +14,9 @@ from nhj.music.director import MANUAL_BUSY, Director
 from nhj.music.pack import PackError, load_pack
 
 
+DEFAULT_ACCENT_TTL_S = 8.0       # used when the muzak module (or a test double) does not define ACCENT_TTL_S
+
+
 def settings() -> dict:
     from nhj import config
     import os
@@ -73,7 +76,8 @@ def busy_count(M, state=None) -> int:
 
 
 def note_accent(M, intent: str) -> None:
-    """Called by anything that wants a musical accent (cross-process, via the muzak state)."""
+    """Explicit accent request (`nhj music accent`); cross-process via the muzak state, not mode-gated.
+    Hooks use `inference_muzak.note_accent`, which is gated and numpy-free."""
     M._patch(music_accent=intent, music_accent_ts=time.time())
 
 
@@ -88,6 +92,7 @@ def feed(M, director: Director, active_since: float | None, now: float, last_acc
     director.update(busy_count(M, st), None if active_since is None else now - active_since)
     ts = float(st.get("music_accent_ts") or 0.0)
     if ts > last_accent_ts:
-        director.accent(str(st.get("music_accent") or ""))
+        if time.time() - ts <= getattr(M, "ACCENT_TTL_S", DEFAULT_ACCENT_TTL_S):
+            director.accent(str(st.get("music_accent") or ""))
         return ts
     return last_accent_ts

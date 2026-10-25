@@ -19,6 +19,7 @@ Nobody busy means silence; the controller pauses the bed then, exactly as for re
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass
 
 _LADDER = (
@@ -40,14 +41,17 @@ class Plan:
 
 
 class Director:
-    def __init__(self, long_after_s: float = 30.0, long_ramp_s: float = 30.0, breakdown_bars: int = 4):
+    def __init__(self, long_after_s: float = 30.0, long_ramp_s: float = 30.0, breakdown_bars: int = 4,
+                 accent_ttl_s: float = 8.0, clock=time.monotonic):
         self.long_after_s = long_after_s
         self.long_ramp_s = max(1.0, long_ramp_s)
         self.breakdown_bars = max(1, breakdown_bars)
+        self.accent_ttl_s = accent_ttl_s
+        self._clock = clock
         self._lock = threading.Lock()
         self._busy = 0
         self._elapsed = 0.0
-        self._pending: list[str] = []
+        self._pending: list[tuple[str, float]] = []       # (intent, when it was requested)
         self._hold_until = -1                       # bar index (exclusive) an accent holds the plan to
         self._hold_layers: frozenset = frozenset()
         self._hold_label = ""
@@ -61,13 +65,15 @@ class Director:
     def accent(self, intent: str) -> None:
         if intent in ("err", "ok"):
             with self._lock:
-                self._pending.append(intent)
+                self._pending.append((intent, self._clock()))
 
     def at_bar(self, bar: int) -> Plan:
         """The plan for the bar that starts now. Consumes pending accents."""
         with self._lock:
             while self._pending:
-                intent = self._pending.pop(0)
+                intent, asked = self._pending.pop(0)
+                if self._clock() - asked > self.accent_ttl_s:
+                    continue                          # stale: it arrived while the bed was paused
                 if intent == "err":
                     self._hold_until, self._hold_layers, self._hold_label = (
                         bar + self.breakdown_bars, _BREAKDOWN, "breakdown")
