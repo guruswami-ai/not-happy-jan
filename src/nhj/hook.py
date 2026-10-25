@@ -302,33 +302,50 @@ def _tool_text(result) -> str:
     return "".join(parts)
 
 
+def _call_remote_tool(url: str, name: str, args: dict) -> str:
+    """Call an MCP tool on *url*. Returns the tool text.
+
+    Raises on timeout, transport error, or a ``[nhj:error]`` result. A hung LAN
+    daemon must not hang the hook to the agent's 30s hook timeout.
+    """
+    import asyncio
+    from fastmcp import Client
+    from nhj.lan_auth import secret
+
+    token = secret()
+    # Omit auth when the secret is blank. The test doubles only accept ``url``,
+    # and a blank secret means the server is not checking.
+    auth = {"auth": token} if token else {}
+
+    async def _call():
+        async with Client(url, **auth) as c:
+            result = await c.call_tool(name, args)
+        text = _tool_text(result)
+        # The server returns a denial as ordinary tool text, not an MCP error.
+        # Counting that as fired hides the alert the secret is meant to protect.
+        if getattr(result, "is_error", False) or text.startswith("[nhj:error]"):
+            raise RuntimeError(text or "remote tool error")
+        return text
+
+    return asyncio.run(asyncio.wait_for(_call(), timeout=_remote_timeout()))
+
+
 def _fire_remote(url: str, ev) -> bool:
     try:
-        import asyncio
-        from fastmcp import Client
-        from nhj.lan_auth import secret
-
-        token = secret()
-        # Omit auth when the secret is blank. The test doubles only accept ``url``,
-        # and a blank secret means the server is not checking.
-        auth = {"auth": token} if token else {}
-
-        async def _call():
-            async with Client(url, **auth) as c:
-                # Full option set (incl. character), identical to the local path.
-                result = await c.call_tool("nhj_vibe", ev.to_kwargs())
-            text = _tool_text(result)
-            # The server returns a denial as ordinary tool text, not an MCP error.
-            # Counting that as fired hides the alert the secret is meant to protect.
-            if getattr(result, "is_error", False) or text.startswith("[nhj:error]"):
-                raise RuntimeError(text or "remote tool error")
-
-        # A hung LAN daemon must not hang the hook to the agent's 30s hook timeout.
-        asyncio.run(asyncio.wait_for(_call(), timeout=_remote_timeout()))
+        # Full option set (incl. character), identical to the local path.
+        _call_remote_tool(url, "nhj_vibe", ev.to_kwargs())
         return True
     except Exception as e:
         print(f"[nhj] remote dispatch failed ({url}): {e}", file=sys.stderr)
         return False
+
+
+def _fire_remote_accent(url: str, intent: str) -> None:
+    """Ask the remote daemon for a music-only accent. Never raises; never prints."""
+    try:
+        _call_remote_tool(url, "nhj_music_accent", {"intent": intent})
+    except Exception:
+        pass            # a music accent must never fail the hook
 
 
 def main() -> int:

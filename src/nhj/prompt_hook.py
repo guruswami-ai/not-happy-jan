@@ -36,19 +36,23 @@ def _stop_failure_accent(payload: dict) -> None:
     """Generative music (#63): an API failure is an `err` accent for the sessions still busy.
 
     Gated exactly like `mark_busy` (a project with voice off does not move the bed). With
-    NHJ_REMOTE_URL the bed lives on the daemon, so nothing is written here: a local write would
-    land on the wrong host, and sending an `err` event instead would also make the daemon speak
-    and light the displays for a failure that is silent today. Marker verdicts do reach the
-    daemon (its worker notes them); this one does not yet."""
+    NHJ_REMOTE_URL the bed lives on the daemon: a local write would land on the wrong host,
+    and sending an `err` event would also make the daemon speak and light the displays.
+    The hook calls the music-only MCP tool instead (no speech, no displays). A failed
+    remote call is silent: an accent must never fail the hook.
+    """
     try:
         import os
 
         from nhj import gate, inference_muzak
-        from nhj.hook import source_label
-        if os.environ.get("NHJ_REMOTE_URL", "").strip():
+        from nhj.hook import _fire_remote_accent, source_label
+        if not gate.voice_allowed(source_label(payload.get("cwd", ""))):
             return
-        if gate.voice_allowed(source_label(payload.get("cwd", ""))):
-            inference_muzak.note_accent("err")
+        remote = os.environ.get("NHJ_REMOTE_URL", "").strip()
+        if remote:
+            _fire_remote_accent(remote, "err")
+            return
+        inference_muzak.note_accent("err")
     except Exception:
         pass                                    # a music accent must never fail the hook
 

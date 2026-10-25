@@ -157,6 +157,33 @@ def test_mcp_network_call_needs_the_secret(monkeypatch):
     assert mcp_server.nhj_vibe(intent="ok", message="local").startswith("[nhj:ok]")
 
 
+def test_mcp_music_accent_needs_the_secret_on_the_network(monkeypatch):
+    """nhj_music_accent shares the LAN secret with nhj_vibe. stdio stays local."""
+    from nhj import inference_muzak, mcp_server
+
+    monkeypatch.setenv("NHJ_SHARED_SECRET", "s3cret")
+    monkeypatch.setenv("NHJ_TRANSPORT", "streamable-http")
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    noted = []
+    monkeypatch.setattr(inference_muzak, "note_accent", lambda intent: noted.append(intent))
+    monkeypatch.setattr(
+        "fastmcp.server.dependencies.get_http_headers", lambda **k: {})
+    assert mcp_server.nhj_music_accent(intent="err").startswith("[nhj:error]")
+    assert noted == []
+
+    monkeypatch.setattr(
+        "fastmcp.server.dependencies.get_http_headers",
+        lambda **k: {"x-nhj-token": "s3cret"})
+    assert mcp_server.nhj_music_accent(intent="err").startswith("[nhj:err]")
+    assert noted == ["err"]
+
+    monkeypatch.setenv("NHJ_TRANSPORT", "stdio")
+    monkeypatch.setattr(
+        "fastmcp.server.dependencies.get_http_headers", lambda **k: {})
+    assert mcp_server.nhj_music_accent(intent="ok").startswith("[nhj:ok]")
+    assert noted == ["err", "ok"]
+
+
 def _queue_text(res) -> str:
     root = res.state_dir(create=False)
     blobs = []

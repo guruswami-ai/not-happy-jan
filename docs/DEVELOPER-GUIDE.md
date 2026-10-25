@@ -54,7 +54,7 @@ Two side-channels run alongside this main path:
 | `prompt_hook.py` | Claude Code **`UserPromptSubmit` hook**. Marks the session busy (muzak) and runs the secret guard. |
 | `queue_manager.py` | **File-backed queue + worker lifecycle.** Atomic produce (`add`), atomic claim (`claim_next`/`ack`/`nack`), crashed-worker recovery, poison quarantine, single-worker election under `flock`. |
 | `worker.py` | **The consumer.** Drains the queue, resolves the character for each task, dispatches through the adapter chain, honours the live `mute` flag, self-exits after 30 s idle. |
-| `mcp_server.py` | **MCP surface.** Exposes the single `nhj_vibe` tool (validate → enqueue → return). stdio for local sessions, sse/streamable-http for a LAN daemon. |
+| `mcp_server.py` | **MCP surface.** Exposes `nhj_vibe` (validate → enqueue → return) and `nhj_music_accent` (LAN music-only accent, same secret). stdio for local sessions, sse/streamable-http for a LAN daemon. |
 
 ### Personality & content
 
