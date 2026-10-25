@@ -106,6 +106,7 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_SERVER_IDLE` | int | `600` | — | startup | Idle seconds before the on-demand supervisor reaps a server |
 | `NHJ_SHARED_SECRET` | str | — | — | live | Shared secret for the TTS server and the network MCP. Blank means no check |
 | `NHJ_STATE_FILE` | path | — | — | live | Override the live state.json location |
+| `NHJ_TEST_NO_MIXER` | bool | — | — | live | If set, start_controller does not spawn (the test suite sets this so worker subprocesses cannot leave a mixer) |
 | `NHJ_TRANSPORT` | enum | `stdio` | — | startup | MCP server transport: stdio/streamable-http |
 | `NHJ_TTS_HOST` | str | `127.0.0.1` | — | startup | TTS server bind address |
 | `NHJ_TTS_MODEL` | str | — | — | startup | TTS model or cache directory the server loads |
@@ -186,7 +187,7 @@ ULANZI_HTTP_HOSTS=awtrix_96895c.local       # mDNS name; one display or many
 
 `NHJ_HOST` defaults to loopback. `nhj install-mcp` and `nhj install-mcp-service` warn when `--listen` is anything else: that listener can queue speech and display updates for anyone who can reach it. Set `NHJ_SHARED_SECRET`. The TTS client sends it as `X-NHJ-Token`. The Stop hook and the notification hook send `Authorization: Bearer` on `NHJ_REMOTE_URL`. `nhj install-mcp` writes that same header into the Claude network entry when the variable is set, including a loopback listener that has a secret. Re-run the command after you set it. A tool result that starts with `[nhj:error]` is not counted as fired. The stdio MCP transport is local and does not use the header. TTS text and instruct are each limited to 500 characters so one request cannot hold the speech server.
 
-`hook.log`, `worker.log`, `tts.log`, `llm.log` and `*-server.log` rotate at 1 MB, keeping three older files. The TTS process reopens its own log, including the LaunchAgent file `tts.log`. `llm.log` is rotated when `nhj.llm_server` starts, before llama.cpp inherits the descriptor. A later rename does not retarget that child, so a long run still waits for the next start. The hook log records intent and message length. The message text, and the tail of the assistant turn, are written only when `NHJ_DEBUG` is set.
+`hook.log`, `worker.log`, `tts.log`, `llm.log` and `*-server.log` rotate at 1 MB, keeping three older files. The TTS process reopens its own log, including the LaunchAgent file `tts.log`. The worker reopens `worker.log` when the inherited descriptor is a different inode (the parent rotates by rename). `llm.log` is rotated when `nhj.llm_server` starts, before llama.cpp inherits the descriptor. A later rename does not retarget that child, so a long run still waits for the next start. The hook log records intent and message length. The message text, and the tail of the assistant turn, are written only when `NHJ_DEBUG` is set.
 
 ## Inference muzak
 
