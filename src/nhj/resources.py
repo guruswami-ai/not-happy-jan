@@ -332,6 +332,41 @@ def rotate_attached_log(name: str) -> None:
         return
 
 
+def reopen_stdio_log(path: str | Path) -> None:
+    """Point stdout/stderr at *path* when this process still holds an old inode.
+
+    The worker inherits ``worker.log`` from the spawner. ``append_log`` in the
+    parent (or this process) may rename that file; the inherited descriptor
+    stays on the old inode. A tty, pipe or socket is left alone.
+
+    Also rotates and reopens when the named file is already over the cap.
+    """
+    path = Path(path)
+    try:
+        if not stat.S_ISREG(os.fstat(2).st_mode):
+            return
+    except OSError:
+        return
+    try:
+        err = os.fstat(2)
+        st = path.stat()
+        if (err.st_dev, err.st_ino) == (st.st_dev, st.st_ino) and st.st_size < _LOG_MAX_BYTES:
+            return
+    except OSError:
+        pass
+    try:
+        with _log_lock(path):
+            rotate_log(path)
+            fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+            try:
+                os.dup2(fd, 1)
+                os.dup2(fd, 2)
+            finally:
+                os.close(fd)
+    except OSError:
+        return
+
+
 def debug(msg: str) -> None:
     """Emit a diagnostic line to stderr when NHJ_DEBUG is set; no-op otherwise.
 
