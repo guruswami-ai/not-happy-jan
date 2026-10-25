@@ -19,8 +19,9 @@ Config (.env):
 
 Stdlib only (urllib) — no extra deps. Any failure returns None so the caller falls
 back to the static phrase bank: dynamic is always safe to enable. A spoken line
-that drops or changes a number from the status is retried once at a lower
-temperature, then abandoned the same way.
+that drops a number is repaired by appending the figure; a line that changes a
+number is retried once at the same temperature with a nudge to mention it. The
+guard still refuses any line that would speak the wrong figure.
 """
 from __future__ import annotations
 
@@ -114,6 +115,42 @@ def keeps_facts(status: str, line: str) -> bool:
 def display_facts_ok(status: str, line: str) -> bool:
     """True when the display line introduces no number that was not in *status*."""
     return facts(line) <= facts(status)
+
+
+_FACT_CLAUSE = re.compile(r"(?:finished in |failed with )(.+)$", re.IGNORECASE)
+
+
+def fact_clause(status: str) -> str:
+    """The numeric tail of an `nhj run` status (`12 minutes`, `status 3`)."""
+    m = _FACT_CLAUSE.search(status or "")
+    return (m.group(1).strip() if m else "") or (status or "")
+
+
+def repair_line(status: str, line: str) -> str | None:
+    """Append the missing figures when *line* introduced none extra.
+
+    A line that already contains a number the status did not have is left
+    alone: appending the right figure would still speak the wrong one.
+    """
+    if not (line or "").strip():
+        return None
+    extra = facts(line) - facts(status)
+    missing = facts(status) - facts(line)
+    if extra or not missing:
+        return None
+    clause = fact_clause(status)
+    if missing - facts(clause):
+        clause = " ".join(sorted(missing))
+    repaired = f"{line.rstrip(' .,;:!')}, {clause}"
+    return repaired if keeps_facts(status, repaired) else None
+
+
+def _nudge_user(status: str, line: str | None) -> str:
+    missing = facts(status) - facts(line or "")
+    if not missing:
+        return f"Status update: {status}"
+    mention = ", ".join(sorted(missing))
+    return f'Status update: {status} (mention "{mention}")'
 
 
 def _retry_temp(temp: float) -> float:
@@ -226,15 +263,28 @@ def generate(character, intent: str, message: str, level: int,
         temp, top_p, timeout = 0.85, 0.95, 8.0
 
     status = message.strip() if message else _INTENT_DEFAULT.get(intent, "an update")
-    messages = [
-        {"role": "system", "content": _persona(character, level, swearing, band_instruct, chaos)},
-        {"role": "user", "content": f"Status update: {status}"},
-    ]
+    system = {"role": "system", "content": _persona(character, level, swearing, band_instruct, chaos)}
 
-    def fetch(temperature: float) -> str | None:
-        return _chat(messages, temperature=temperature, top_p=top_p, max_tokens=60, timeout=timeout)
+    def fetch(user: str) -> str | None:
+        return _chat(
+            [system, {"role": "user", "content": user}],
+            temperature=temp, top_p=top_p, max_tokens=60, timeout=timeout,
+        )
 
-    return _guarded(status, [temp, _retry_temp(temp)], fetch, keeps_facts)
+    first = fetch(f"Status update: {status}")
+    if first is None:
+        return None
+    if keeps_facts(status, first):
+        return first or None
+    repaired = repair_line(status, first)
+    if repaired:
+        return repaired
+    second = fetch(_nudge_user(status, first))
+    if second is None:
+        return None
+    if keeps_facts(status, second):
+        return second or None
+    return repair_line(status, second)
 
 
 def _display_persona(character, level: int, swearing: bool) -> str:

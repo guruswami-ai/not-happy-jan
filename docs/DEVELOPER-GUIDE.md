@@ -61,7 +61,7 @@ Two side-channels run alongside this main path:
 | Module | Responsibility |
 |---|---|
 | `characters.py` | The **Jan → Bazza → Karren ladder**. Loads `character.yaml`, picks a phrase band from the intensity dial, builds a `Delivery` (text + TTS params). Intent→rung routing + explicit-character override. |
-| `boganify.py` | Optional **dynamic line generation** — rephrase the status in-character via any OpenAI-compatible LLM (`NHJ_DYNAMIC`). A spoken line that drops or changes a number from the status is retried once at a lower temperature, then abandoned. Any failure returns `None` → caller falls back to the static bank. |
+| `boganify.py` | Optional **dynamic line generation** — rephrase the status in-character via any OpenAI-compatible LLM (`NHJ_DYNAMIC`). A spoken line that drops a number is repaired by appending the figure; a line that changes a number is retried once at the same temperature with a nudge. Any failure returns `None` → caller falls back to the static bank. |
 | `censor.py` | Swear bleeping (`quack`/`beep`/`honk`/`off`). Applied to every line at the end of `Character.delivery()`. |
 | `garble.py` | Jan's *incompetence* dial — umms, mishears, trailing-off, and peak-chaos "oblivious" lines. |
 | `scenes.py` | Easter-egg hold vignettes (pub, party, durry) with ambient beds; fires rarely on a go-on-hold transition. |

@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
 from nhj.adapters import load_adapters
 from nhj.characters import character_by_name, resolve_character
-from nhj.queue_manager import QueueManager
+from nhj.queue_manager import QueueManager, _log_path
 from nhj.state import get_flag
 
 
@@ -102,6 +102,7 @@ def main() -> None:
     idle = 0
     try:
         while idle < 30:
+            resources.reopen_stdio_log(_log_path())
             claimed = qm.claim_next()
             if not claimed:
                 idle += 1
