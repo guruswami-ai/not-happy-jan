@@ -90,8 +90,11 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_MUZAK_VOLUME` | float | `0.5` | — | live | Music bed level (0-1) |
 | `NHJ_OPENMIC_PROB` | float | `0.05` | — | live | Probability of the open-mic scene |
 | `NHJ_ORCHESTRATION` | enum | — | `orchestration.mode` | live | Multi-session policy: quiet-while-busy/always-speak |
+| `NHJ_OS_TTS_VOICE` | str | — | — | live | CPU tier: espeak voice / say -v name (TTS_ENGINE=os) |
 | `NHJ_OUTPUT_DEVICE` | str | — | `playback.output_device` | live | Pinned audio output device (name or index) |
 | `NHJ_PHONE_FX` | bool | — | — | live | Telephone bandpass/compression colour on voice clips |
+| `NHJ_PIPER_MODEL` | path | — | — | live | CPU tier: Piper .onnx voice file (TTS_ENGINE=piper) |
+| `NHJ_PIPER_SPEAKER` | int | — | — | live | CPU tier: speaker id for multi-speaker Piper models |
 | `NHJ_PORT` | int | `8765` | — | startup | MCP HTTP port |
 | `NHJ_PUTDOWN` | bool | `1` | — | live | Handset putdown clunk on/off |
 | `NHJ_RAVE_DISPLAY_INTERVAL` | float | `8` | — | live | Seconds between rave display party-tile cycles |
@@ -101,6 +104,7 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_SCENES_PROB` | float | `0.08` | — | live | Probability a scene vignette plays per event |
 | `NHJ_SERVERS` | enum | — | — | startup | TTS/LLM supervision: on-demand (spawn+reap) vs always-on service |
 | `NHJ_SERVER_IDLE` | int | `600` | — | startup | Idle seconds before the on-demand supervisor reaps a server |
+| `NHJ_SHARED_SECRET` | str | — | — | live | Shared secret for the TTS server and the network MCP. Blank means no check |
 | `NHJ_STATE_FILE` | path | — | — | import | Override the live state.json location |
 | `NHJ_TRANSPORT` | enum | `stdio` | — | startup | MCP server transport: stdio/streamable-http |
 | `NHJ_TTS_HOST` | str | `127.0.0.1` | — | startup | TTS server bind address |
@@ -141,6 +145,8 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 # Choose TTS backend
 TTS_ENGINE=qwen          # local Qwen3-TTS (Apple Silicon, default)
 # TTS_ENGINE=audiocpp    # audio.cpp / Breeze-TTS zero-shot server (Linux/CUDA); see linux.md
+# TTS_ENGINE=os          # CPU system voice: espeak-ng (Linux) / say (macOS); NHJ_OS_TTS_VOICE picks a voice
+# TTS_ENGINE=piper       # CPU Piper CLI; NHJ_PIPER_MODEL=/path/to/voice.onnx
 # NHJ_AUDIOCPP_URL=http://127.0.0.1:8092
 # NHJ_OUTPUT_DEVICE=analog-stereo   # mixer output (index or name part); `nhj audio-devices`
 # NHJ_ORCHESTRATION=quiet-while-busy  # or always-speak; see orchestration.md
@@ -175,6 +181,12 @@ ULANZI_HTTP_HOSTS=awtrix_96895c.local       # mDNS name; one display or many
 > `NHJ_DYNAMIC` is on, else a curated ocker/plain phrase). Add an MQTT broker later
 > for many displays, Home Assistant, or cross-network reach.
 > Full guide: **[awtrix-display-setup.md](awtrix-display-setup.md)**.
+
+## Network listeners and logs
+
+`NHJ_HOST` defaults to loopback. `nhj install-mcp` and `nhj install-mcp-service` warn when `--listen` is anything else: that listener can queue speech and display updates for anyone who can reach it. Set `NHJ_SHARED_SECRET`. The TTS client sends it as `X-NHJ-Token`. The Stop hook and the notification hook send `Authorization: Bearer` on `NHJ_REMOTE_URL`. `nhj install-mcp` writes that same header into the Claude network entry when the variable is set, including a loopback listener that has a secret. Re-run the command after you set it. A tool result that starts with `[nhj:error]` is not counted as fired. The stdio MCP transport is local and does not use the header. TTS text is limited to 500 characters so one request cannot hold the speech server.
+
+`hook.log`, `worker.log`, `tts.log`, `llm.log` and `*-server.log` rotate at 1 MB, keeping three older files. The TTS process reopens its own log, including the LaunchAgent file `tts.log`. `llm.log` is rotated when `nhj.llm_server` starts, before llama.cpp inherits the descriptor. A later rename does not retarget that child, so a long run still waits for the next start. The hook log records intent and message length. The message text, and the tail of the assistant turn, are written only when `NHJ_DEBUG` is set.
 
 ## Inference muzak
 
@@ -236,7 +248,7 @@ Override any root with `NHJ_CONFIG_DIR` / `NHJ_CACHE_DIR` / `NHJ_STATE_DIR` / `N
 
 ## Requirements & minimum specs
 
-For the three ways to run NHJ — silent, pre-recorded samples, or the full live experience — and the RAM/disk each needs, see **[Minimum specs](minimum-specs.md)**.
+For the three ways to run NHJ — silent, pre-recorded samples, or the full live experience — and the RAM/disk each needs, see **[Minimum specs](minimum-specs.md)**. Installing from pip directly: the base package is the lean hooks/text core — add extras for sound (`[audio]`), the haptic mouse (`[haptic]`), AWTRIX-over-MQTT (`[displays]`), or the local TTS server (`[server]`); `install.sh` composes these per profile for you.
 
 | Tier | What you need | Notes |
 |---|---|---|

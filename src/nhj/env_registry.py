@@ -81,8 +81,9 @@ _ENTRIES = [
     _e("NHJ_TTS_MODEL_TIER", "enum", None, None, "live", "Qwen model tier override (fast/full; else per-line default)"),
     _e("NHJ_AUDIOCPP_URL", "url", None, "audiocpp.url", "live", "audio.cpp (Breeze-TTS) server base URL"),
     _e("NHJ_AUDIOCPP_VOICES", "path", None, "audiocpp.voices_dir", "live", "Server voices dir holding <name>.txt transcripts"),
-    # NHJ_OS_TTS_VOICE / NHJ_PIPER_MODEL / NHJ_PIPER_SPEAKER arrive with PR #68;
-    # the completeness test requires their entries in whichever change lands second.
+    _e("NHJ_OS_TTS_VOICE", "str", None, None, "live", "CPU tier: espeak voice / say -v name (TTS_ENGINE=os)"),
+    _e("NHJ_PIPER_MODEL", "path", None, None, "live", "CPU tier: Piper .onnx voice file (TTS_ENGINE=piper)"),
+    _e("NHJ_PIPER_SPEAKER", "int", None, None, "live", "CPU tier: speaker id for multi-speaker Piper models"),
     _e("NHJ_PHONE_FX", "bool", "", None, "live", "Telephone bandpass/compression colour on voice clips"),
     _e("NHJ_VOICE_TARGET_DBFS", "float", "-19.5", None, "live", "Peak target for voice loudness normalisation (dBFS)"),
     _e("NHJ_OUTPUT_DEVICE", "str", "", "playback.output_device", "live", "Pinned audio output device (name or index)"),
@@ -121,6 +122,8 @@ _ENTRIES = [
     _e("NHJ_TRANSPORT", "enum", "stdio", None, "startup", "MCP server transport: stdio/streamable-http"),
     _e("NHJ_HOST", "str", "127.0.0.1", None, "startup", "MCP HTTP bind address (LAN exposure is opt-in)"),
     _e("NHJ_PORT", "int", "8765", None, "startup", "MCP HTTP port"),
+    _e("NHJ_SHARED_SECRET", "str", "", None, "live",
+       "Shared secret for the TTS server and the network MCP. Blank means no check"),
     _e("NHJ_TTS_HOST", "str", "127.0.0.1", None, "startup", "TTS server bind address"),
     _e("NHJ_TTS_PORT", "int", "9992", None, "startup", "TTS server port"),
     _e("NHJ_TTS_MODEL", "str", None, None, "startup", "TTS model or cache directory the server loads"),

@@ -24,8 +24,11 @@ Override roots with ``NHJ_DATA_DIR`` / ``NHJ_CONFIG_DIR`` / ``NHJ_STATE_DIR`` /
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import os
 import platform
+import stat
 from pathlib import Path
 
 APP_NAME = "not-happy-jan"
@@ -170,6 +173,162 @@ def legacy_state_file(name: str) -> Path:
 
 def log_file(name: str) -> str:
     return str(log_dir(create=False) / name)
+
+
+# hook.log, worker.log and the model-server logs. Three older files, then drop.
+_LOG_MAX_BYTES = 1_000_000
+_LOG_BACKUPS = 3
+
+
+def rotate_log(path: Path, max_bytes: int | None = None, backups: int | None = None) -> None:
+    """If *path* is at least max_bytes, shift it to path.1 .. path.{backups}.
+
+    path.{backups} is removed. A missing file, or any OSError, is ignored so
+    logging can never break the caller. The caller should hold the log lock
+    when another process might be writing the same file.
+    """
+    if max_bytes is None:
+        max_bytes = _LOG_MAX_BYTES
+    if backups is None:
+        backups = _LOG_BACKUPS
+    try:
+        if backups < 1 or not path.is_file() or path.stat().st_size < max_bytes:
+            return
+        path.with_name(f"{path.name}.{backups}").unlink(missing_ok=True)
+        for i in range(backups - 1, 0, -1):
+            src = path.with_name(f"{path.name}.{i}")
+            if src.exists():
+                os.replace(src, path.with_name(f"{path.name}.{i + 1}"))
+        os.replace(path, path.with_name(f"{path.name}.1"))
+    except OSError:
+        return
+
+
+@contextlib.contextmanager
+def _log_lock(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_name(f"{path.name}.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def append_log(path: str | Path, line: str) -> None:
+    """Append one line, rotating first when the file is already at the cap."""
+    path = Path(path)
+    text = line if line.endswith("\n") else line + "\n"
+    try:
+        with _log_lock(path):
+            rotate_log(path)
+            with open(path, "a") as handle:
+                handle.write(text)
+    except OSError:
+        # A full disk or a permissions error must not break the caller.
+        return
+
+
+def _stderr_raw_path() -> str:
+    """Path currently attached to stderr, or "" when it cannot be named.
+
+    Linux exposes it through ``/proc/self/fd/2``. macOS does not, and
+    ``readlink("/dev/fd/2")`` fails there; ``F_GETPATH`` is the call that
+    returns the path a LaunchAgent opened.
+    """
+    proc = "/proc/self/fd/2"
+    if os.path.exists(proc):
+        try:
+            raw = os.readlink(proc)
+        except OSError:
+            raw = ""
+        if raw:
+            return raw
+    getpath = getattr(fcntl, "F_GETPATH", None)
+    if getpath is not None:
+        try:
+            raw = fcntl.fcntl(2, getpath, bytes(1024))
+        except (OSError, OverflowError, TypeError):
+            raw = b""
+        if isinstance(raw, bytes):
+            text = raw.split(b"\0", 1)[0].decode(errors="surrogateescape")
+        else:
+            text = str(raw).split("\0", 1)[0]
+        if text:
+            return text
+    try:
+        return os.readlink("/dev/fd/2")
+    except OSError:
+        return ""
+
+
+def _attached_log(name: str) -> Path | None:
+    """Regular file on stderr, when it is this server's log under ``log_dir``.
+
+    The on-demand supervisor opens ``{name}-server.log``. A LaunchAgent opens
+    ``{name}.log`` before the process starts. A pipe, a socket, a tty,
+    ``/dev/null``, or any other file is left alone.
+    """
+    try:
+        if not stat.S_ISREG(os.fstat(2).st_mode):
+            return None
+    except OSError:
+        return None
+    raw = _stderr_raw_path()
+    if not raw or raw.startswith(("pipe:", "socket:", "anon_inode:")):
+        return None
+    if raw.endswith(" (deleted)") or not Path(raw).is_absolute():
+        return None
+    try:
+        path = Path(raw).resolve()
+        path.relative_to(log_dir(create=False).resolve())
+    except (OSError, ValueError):
+        return None
+    if path.name not in {f"{name}.log", f"{name}-server.log"} or not path.is_file():
+        return None
+    return path
+
+
+def rotate_attached_log(name: str) -> None:
+    """Reopen stdout and stderr when the attached log is already over the cap.
+
+    Renaming the path leaves the existing descriptor on the old inode, so this
+    rotates that file and points both streams at the new one. ``name`` selects
+    ``{name}.log`` (LaunchAgent) or ``{name}-server.log`` (supervisor).
+
+    llama.cpp holds its own descriptor. Calling this in the parent before the
+    child starts retargets the child. A later rename does not.
+    """
+    path = _attached_log(name)
+    if path is None:
+        return
+    try:
+        err = os.fstat(2)
+        st = path.stat()
+    except OSError:
+        return
+    if (err.st_dev, err.st_ino) != (st.st_dev, st.st_ino) or err.st_size < _LOG_MAX_BYTES:
+        return
+    try:
+        with _log_lock(path):
+            # Recheck inside the lock. Another writer may have rotated already.
+            try:
+                err = os.fstat(2)
+                st = path.stat()
+            except OSError:
+                return
+            if (err.st_dev, err.st_ino) != (st.st_dev, st.st_ino) or err.st_size < _LOG_MAX_BYTES:
+                return
+            rotate_log(path)
+            # Owner-only. NHJ_DEBUG logs can contain the spoken text.
+            fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+            try:
+                os.dup2(fd, 1)
+                os.dup2(fd, 2)
+            finally:
+                os.close(fd)
+    except OSError:
+        return
 
 
 def debug(msg: str) -> None:

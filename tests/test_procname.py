@@ -52,14 +52,22 @@ def test_llm_supervisor_spawns_child_and_mirrors_exit(monkeypatch):
         def send_signal(self, s):
             seen["sig"] = s
 
+    order = []
+
     def fake_popen(cmd, **k):
+        order.append("popen")
         seen["cmd"] = cmd
         return FakeChild()
 
+    def fake_rotate(name):
+        order.append(name)
+
     monkeypatch.setattr(llm.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr("nhj.resources.rotate_attached_log", fake_rotate)
     monkeypatch.setattr(llm.signal, "signal", lambda *a, **k: None)
     monkeypatch.setattr(llm.sys, "argv", ["nhj.llm_server", "/bin/llama-server", "-m", "x.gguf", "--port", "9991"])
     with pytest.raises(SystemExit) as e:
         llm.main()
+    assert order == ["llm", "popen"]
     assert seen["cmd"] == ["/bin/llama-server", "-m", "x.gguf", "--port", "9991"]
     assert e.value.code == 0
