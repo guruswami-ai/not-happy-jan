@@ -29,15 +29,17 @@ make build || nhj vibe err -m "The build failed"   # one-off, no wrapping (alrea
 
 The message above is deliberately short and factual. With dynamic lines on (`NHJ_DYNAMIC=1`, the bundled `ocker-bogan-nano` model), the character rephrases it as one short spoken line; with them off, the message is spoken as written. That model was trained on exactly this shape: a system prompt naming the character, ockerism level (1-11) and competence, then a `Status update: <short status>` line, replying with one short in-character line. It is a **rephraser of a short status, not a summariser of long text**, which is why NHJ builds the status itself instead of handing the model your command output.
 
-Real replies on this setup, two samples each:
+Real replies on this setup, two samples each, **before** the fact guard (#87):
 
-| Status | Replies |
+| Status | Replies (unguarded) |
 |---|---|
 | `backup finished in 12 minutes` (Jan) | "Backup's done, mate. Took a bit of time, but we're good to go." / "Backup done in a fair while, mate." |
 | `make failed with status 3` (Karren) | "Crikey, the make failed again. Hard luck." / "Bloody hell, this is a right royal pain in the arse..." |
 | `nightly backup was interrupted` (Bazza) | "Blimey, the backup got cut short, mate. Gotta get that sorted." |
 
-Be aware that the rephrasing is stylistic and **does not reliably keep numbers or facts**: it dropped a duration, invented "again", and described a 1 hour 5 minute run as "in a hurry". If exact figures matter, leave dynamic lines off for scripts (the message is then spoken verbatim) or rely on the Vestaboard and display text.
+`pytest finished in 1 hour 5 minutes` came back as "the tests done in a hurry, mate."
+
+**After the guard.** Spoken lines must keep every digit and number-word from the status (`12`, `3`, `1` and `5`); display headlines may drop a number but must not change it. A miss retries once at temperature 0.3, then NHJ falls back to the static phrase bank (still spoken). Measured against those same six replies: both backup samples and both make samples are rejected; the interrupted samples have no numbers, so they still pass; "in a hurry" is rejected. The fallback is the existing static bank, so the event is still spoken. Leave dynamic lines off if you need the status spoken verbatim.
 
 ## Not yet
 
