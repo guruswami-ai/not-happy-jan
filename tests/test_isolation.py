@@ -22,8 +22,8 @@ def test_mutable_dirs_are_throwaway_not_the_real_install():
     assert not str(resources.state_dir(create=False)).startswith(str(_real_state_dir()))
 
 
-def test_import_time_constants_point_at_the_throwaway_dirs():
-    # These are computed when the module is imported, which is why conftest sets the env at import time.
+def test_lazy_path_constants_point_at_the_throwaway_dirs():
+    # These compatibility attributes resolve at access time from the session env conftest sets.
     root = str(Path(os.environ["NHJ_STATE_DIR"]).parent)
     assert str(hook._SEEN).startswith(root)
     assert str(queue_manager._LOG).startswith(root)
@@ -73,24 +73,51 @@ def test_lazy_config_attributes_are_reset_between_tests():
     assert "CFG" not in vars(config)
 
 
-def test_import_time_env_is_cleared_before_nhj_is_imported(tmp_path):
-    """config.CFG is built when nhj.config is imported, so clearing NHJ_CONFIG_FILE per test would be too
-    late. Load conftest in a fresh interpreter that has the variable set, then import nhj."""
+def test_importing_nhj_modules_loads_neither_config_nor_dotenv(tmp_path):
+    """Import guard (#61): with a malformed selected config and a hostile .env
+    already selected, importing the public/entry modules must load neither."""
     import subprocess
     import sys
 
-    evil = tmp_path / "evil.yaml"
-    evil.write_text("claky:\n  url: http://host-config-leaked.invalid\n")
-    conftest = Path(__file__).with_name("conftest.py")
+    bad_config = tmp_path / "bad.yaml"
+    bad_config.write_text("routing: [unclosed\n")
+    evil_env = tmp_path / ".env"
+    evil_env.write_text("NHJ_GUARD_LEAK=leaked\nNHJ_CONFIG_FILE=/host/config.yaml\n")
+    modules = ",".join([
+        "nhj.config", "nhj.resources", "nhj.state", "nhj.event", "nhj.queue_manager",
+        "nhj.worker", "nhj.hook", "nhj.prompt_hook", "nhj.notify_hook",
+        "nhj.inference_muzak", "nhj.duck_player", "nhj.cli", "nhj.mcp_server",
+        "nhj.tts_server", "nhj.llm_server", "nhj.serverctl", "nhj.adapters.audio",
+        "nhj.adapters.claky", "nhj.characters", "nhj.scenes",
+    ])
     code = (
-        "import runpy, sys; runpy.run_path(sys.argv[1]); "
-        "from nhj import config; print(config.section('claky').get('url') or '')"
+        "import importlib, os, sys; from pathlib import Path; "
+        "from nhj import resources; resources.env_file = lambda: Path(sys.argv[1]); "
+        "[importlib.import_module(name) for name in sys.argv[2].split(',')]; "
+        "from nhj import config; "
+        "print(config._CFG is None, 'CFG' in vars(config), resources._ENV_LOADED); "
+        "print(os.getenv('NHJ_GUARD_LEAK', '<unset>'), "
+        "os.getenv('NHJ_CONFIG_FILE') == sys.argv[3], "
+        "os.getenv('NHJ_VOICE_TARGET_DBFS'))"
     )
-    env = {**os.environ, "NHJ_CONFIG_FILE": str(evil), "NHJ_VOICE_TARGET_DBFS": "-1"}
-    out = subprocess.run([sys.executable, "-c", code, str(conftest)], env=env, capture_output=True,
-                         text=True, timeout=60)
+    env = {
+        **os.environ,
+        "NHJ_CONFIG_FILE": str(bad_config),
+        "NHJ_VOICE_TARGET_DBFS": "not-a-float",
+    }
+    env.pop("NHJ_GUARD_LEAK", None)
+    out = subprocess.run(
+        [sys.executable, "-c", code, str(evil_env), modules, str(bad_config)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     assert out.returncode == 0, out.stderr
-    assert "host-config-leaked" not in out.stdout
+    assert out.stdout.splitlines() == [
+        "True False False",
+        "<unset> True not-a-float",
+    ]
 
 
 def test_dotenv_cannot_reintroduce_host_variables(tmp_path, monkeypatch):
@@ -111,7 +138,7 @@ def test_dotenv_cannot_reintroduce_host_variables(tmp_path, monkeypatch):
 
 
 def test_worker_import_with_a_host_dotenv_does_not_leak_config(tmp_path):
-    """The exact reported path: nhj.worker loads the checkout .env BEFORE nhj.config is imported."""
+    """Regression for the old reported path: importing nhj.worker must not load the checkout .env."""
     import subprocess
     import sys
 
