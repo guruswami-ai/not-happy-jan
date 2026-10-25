@@ -1,9 +1,9 @@
-# Not-Happy-Jan — Specification (DRAFT v0)
+# Not-Happy-Jan — Specification
 
-**Status:** DRAFT derived from current behaviour during the
-[AUDIT-2026-10-24](docs/audit/AUDIT-2026-10-24.md). Items marked `OPEN:` are decisions for the
-maintainer; everything else describes what the code does today and becomes normative
-once this file is accepted. From acceptance on: behaviour changes land as a SPEC
+**Status:** NORMATIVE. Accepted by the maintainer on 2026-10-26 ("accept all"
+on the ten decisions gathered for #47; see issue #88). Derived from current
+behaviour during the [AUDIT-2026-10-24](docs/audit/AUDIT-2026-10-24.md).
+This file lives at the repository root. Behaviour changes land as a SPEC
 edit + tests first, then code.
 
 Normative words: MUST / SHOULD / MAY as in RFC 2119.
@@ -17,13 +17,16 @@ bell) for AI coding agents, 100% on the user's machine. It MUST never block, fai
 or noticeably slow the coding agent it observes.
 
 - **Supported platforms:** macOS (Apple Silicon) full; Linux (x86_64, XDG) full
-  minus MLX TTS (audio.cpp backend instead). `OPEN:` Windows — currently cannot
-  import (`fcntl`); declare out-of-scope or schedule the port.
+  minus MLX TTS (audio.cpp backend instead). Windows is explicitly
+  out of scope for v1 (the code cannot import there today: unconditional
+  `fcntl`, POSIX services and paths); revisit only with real demand.
 - **Python:** ≥3.10. **Install:** user-context only, no sudo, fully reversible
   (`nhj uninstall`).
 - **Privacy:** inference MUST be local by default. The only network listeners are
-  127.0.0.1 by default; LAN exposure is explicit opt-in (`OPEN:` add shared-secret
-  auth for LAN mode — audit S1).
+  127.0.0.1 by default; LAN exposure is explicit opt-in. LAN mode uses the
+  optional `NHJ_SHARED_SECRET`: when it is set, network callers MUST present
+  it; when it is blank there is no check, which is trusted-network only and
+  MUST be documented as such. No secret is required for loopback.
 
 ## 2. The vibe event (canonical contract)
 
@@ -35,7 +38,7 @@ reported, never silently forwarded.
 | Field | Type | Default | Rule |
 |---|---|---|---|
 | `intent` | enum | — (required) | `ok err warn attn celebrate step` |
-| `message` | string | `""` | free text; `""` → random in-character bank phrase. `OPEN:` max length (propose 500; TTS truncation rule) |
+| `message` | string | `""` | free text, at most 500 characters; `""` → random in-character bank phrase. Over-length is rejected with `VibeValidationError`, never truncated so partial text is spoken. Hooks cap marker messages at 500 characters before validation so an agent turn never fails because of NHJ. |
 | `vibe_level` | int | 5 | 1–10 |
 | `pretext` | string | `""` | spoken prefix |
 | `verbosity` | enum | `medium` | `low medium high`; `low` → message suppressed at worker |
@@ -62,7 +65,9 @@ Rules (today's `hook.py` behaviour, now normative):
 - Only in the **final assistant message** of a turn; multiple markers fire in order.
 - Fire-once per (session, final-message digest).
 - A marker immediately wrapped in backticks on either side does not fire. Markers
-  elsewhere in code spans/blocks DO fire (`OPEN:` keep, or parse fences properly).
+  elsewhere in code spans/blocks DO fire. This adjacent-backtick-only rule is
+  retained for v1; proper fence parsing is scheduled only if false fires are
+  reported.
 - Unknown `who` = prose, ignored. Unknown option keys are logged, not fatal.
 - `[Character:intent]` overrides intent routing; inline `character=` loses to the
   explicit who.
@@ -149,8 +154,9 @@ this today — audit B1/B2; Phase 0 fixes them.)
   election; PID recorded before the lock is released.
 - Ack only after dispatch completes. Crash before ack → reclaimable: worker dead
   (PID liveness) or lease expired → requeue, max 3 retries → `.poison`.
-- `OPEN:` lease 30 s < worst-case dispatch (~2 min cold). Choose one: heartbeat
-  the claim during dispatch, or lease ≥180 s (audit B5).
+- The claim carries a 30 s lease renewed by a 10 s heartbeat during dispatch,
+  up to a 180 s dispatch budget. Past that budget the heartbeat stops, so a
+  hung claim's lease can expire and the event can be reclaimed (audit B5).
 
 ## 7. Dispatch: routing, gating, adapters
 
@@ -173,12 +179,15 @@ Worker drains the queue (30 s idle self-exit) and per event:
 
 In order: (1) pre-rendered bank clip (bare markers), (2) message cache
 (sha256 voice+band+text, LRU ≤300), (3) live synthesis — `TTS_ENGINE`
-`qwen` (POST `::9992/tts/generate`, 30 s), `audiocpp` (60 s), or `none`.
+`qwen` (POST `::9992/tts/generate`, 30 s), `audiocpp` (60 s), the CPU tier
+(`os` system voice or `piper` local model), or `none`. The CPU tier is the
+no-GPU option between the cache and model synthesis; Kokoro MAY be added as
+an optional engine later and does not block v1.
 Dynamic mode (`NHJ_DYNAMIC=1`) rephrases via any OpenAI-compatible endpoint
 (8 s timeout) before synthesis; any failure falls back to the static phrase bank.
 Censor is applied to all rendered text per current mode. Speed applies once at
 playback (§2). All playback goes through the single mixer; no other audio path
-may exist. `OPEN:` insert CPU tier (Piper/Kokoro/OS voice) between (2) and (3).
+may exist.
 
 ### 7.2 Hold music
 
@@ -193,14 +202,17 @@ levels are normative in `docs/AUDIO-STANDARD.md`. Controller exits after 600 s i
   skipped. There is no state in which NHJ makes the agent wait for inference.
 - **Never silently:** every swallowed exception MUST emit a `resources.debug`
   line; adapter load failures MUST be visible via `nhj status`. (Phase 2 sweep.)
-- **Logs:** `hook.log`, `worker.log`, `<server>-server.log`. `OPEN:` rotation
-  policy (propose 1 MB × 3 each) and content policy (propose: log intent +
-  message *length*, not message text; audit S2).
+- **Logs:** `hook.log`, `worker.log`, `<server>-server.log`. Each rotates at
+  1 MB with 3 backups. Log lines carry intent, source and message *length*
+  by default — not message text — except under `NHJ_DEBUG` (audit S2).
 - **Secret guard (opt-in):** regex shape-detection on the user prompt; MUST only
   ever surface a category label — the matched value MUST NOT be stored, logged,
   or transmitted (`secret_scan.py` contract, tested).
 
-## 9. Resource budgets (normative targets; `OPEN:` confirm numbers)
+## 9. Resource budgets (normative targets)
+
+Confirmed for v1 as targets; measurement hardening may follow without
+blocking acceptance of this specification.
 
 | Budget | Target |
 |---|---|
@@ -218,7 +230,9 @@ levels are normative in `docs/AUDIO-STANDARD.md`. Controller exits after 600 s i
 - Wheel ships bundled config/hooks/characters/clips bank (`pyproject.toml`
   force-include); media (voice refs, music) installs to the user data dir, never
   the package. A wheel install MUST work with no source checkout (CI smoke test).
-- `OPEN:` dependency split (audit R4): core lean; `[audio] av/sounddevice/scipy`,
-  `[haptic] hidapi`, `[displays] paho-mqtt`, `[server] fastapi/uvicorn/soundfile
-  (+mlx-audio on macOS arm64)`. Dev tooling pinned (`ruff` explicit `select`,
-  audit T2). CI MUST cover every platform claimed in §1 (audit T3).
+- Dependency split (audit R4): the core install is lean; heavy wheels live in
+  extras — `[audio] av/sounddevice/numpy/scipy`, `[haptic] hidapi`,
+  `[displays] paho-mqtt`, `[server] fastapi/uvicorn/soundfile` (plus
+  `mlx-audio` on macOS arm64 only). The dev extra carries the wheels the test
+  suite imports. Dev tooling is pinned (`ruff` explicit `select`, audit T2).
+  CI MUST cover every platform claimed in §1 (audit T3).
