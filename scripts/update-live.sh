@@ -37,9 +37,9 @@ fi
 # Dependencies can change between commits; the install is editable, so code is picked up already.
 if [ -x "$LIVE/.venv/bin/python" ]; then
   if command -v uv >/dev/null 2>&1; then
-    uv pip install -q --python "$LIVE/.venv/bin/python" -e "$LIVE[server]"
+    uv pip install -q --python "$LIVE/.venv/bin/python" -e "$LIVE[server,audio,haptic,displays]"
   else
-    "$LIVE/.venv/bin/python" -m pip install -q -e "$LIVE[server]"
+    "$LIVE/.venv/bin/python" -m pip install -q -e "$LIVE[server,audio,haptic,displays]"
   fi
 else
   echo "note: no $LIVE/.venv; skipped the dependency install" >&2
