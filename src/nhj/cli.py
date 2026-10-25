@@ -1687,6 +1687,33 @@ def music_demo(
     app.print(f"[green]✓[/green] {out}  ({len(audio) / 48000:.1f} s)   plan: " + " → ".join(f"bar {b}: {name}" for b, name in labels))
 
 
+@cli.command("run", context_settings={"allow_interspersed_args": False, "ignore_unknown_options": True})
+def run_cmd(
+    command: list[str] = typer.Argument(..., help="the command to run, e.g. `nhj run -- make build`"),
+    label: str = typer.Option("", "--label", "-l", help="name to speak (default: the command's basename, never its arguments)"),
+    min_seconds: float = typer.Option(10.0, "--min-seconds", "-m",
+                                      help="announce a success only if it took at least this long (failures always speak)"),
+    only_failures: bool = typer.Option(False, "--only-failures", help="stay silent unless the command fails"),
+    character: str = typer.Option("", "--character", "-c", help="explicit character (jan|bazza|karren)"),
+):
+    """Run a command and announce how it ended; its exit status passes through unchanged.
+
+    Prints nothing itself. Success -> `ok` ("make finished in 12 seconds"), failure -> `err`
+    ("make failed with status 3"), interruption -> `warn`. Arguments and output are never spoken.
+    """
+    from nhj import runwrap
+    name = runwrap.clean_label(label) if label else runwrap.clean_label(runwrap.default_label(command))
+    returncode, seconds = runwrap.run_command(command)
+    try:
+        outcome = runwrap.decide(returncode, seconds, name, min_seconds, only_failures)
+        if outcome:
+            source, _ = _hook_identity("", {})
+            runwrap.announce(outcome, source, character)
+    except Exception:
+        pass                                   # NHJ's own failure never replaces the command's status
+    raise typer.Exit(runwrap.exit_status(returncode))
+
+
 def main():
     cli()
 
