@@ -219,7 +219,7 @@ class Character:
 def _cfg() -> dict:
     # The merged defaults + user config.yaml override, so routing/dials honour overrides.
     from nhj import config
-    return config.CFG
+    return config.get()
 
 
 def _dial_for(name: str, cfg_chars: dict, key: str, fallback: int) -> int:
