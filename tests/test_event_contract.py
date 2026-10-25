@@ -143,6 +143,32 @@ def test_remote_dispatch_sends_the_shared_secret(monkeypatch):
     assert seen["auth"] == "s3cret"
 
 
+def test_remote_accent_calls_the_music_only_tool(monkeypatch):
+    """StopFailure on a remote bed uses nhj_music_accent, not nhj_vibe."""
+    pytest.importorskip("fastmcp")
+    from nhj import hook
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, url):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def call_tool(self, name, args):
+            captured["name"] = name
+            captured["args"] = args
+            return "[nhj:err] noted"
+
+    monkeypatch.setattr("fastmcp.Client", FakeClient)
+    hook._fire_remote_accent("http://x", "err")
+    assert captured == {"name": "nhj_music_accent", "args": {"intent": "err"}}
+
+
 def test_remote_error_text_is_not_reported_as_fired(monkeypatch, capsys):
     """[nhj:error] is ordinary tool text. The hook must not mark that marker fired."""
     pytest.importorskip("fastmcp")

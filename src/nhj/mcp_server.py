@@ -1,7 +1,7 @@
 """Not-Happy-Jan MCP server.
 
-Exposes `nhj_vibe` — a single tool that queues a multi-sensory feedback
-event and returns immediately (non-blocking).
+Exposes `nhj_vibe` (queue a multi-sensory event) and `nhj_music_accent`
+(music-only accent on the daemon's bed). Both return immediately.
 
 Transport is selected by env:
   NHJ_TRANSPORT  stdio (default) | sse | streamable-http
@@ -10,6 +10,7 @@ Transport is selected by env:
 
 stdio is correct for local Claude Code sessions. sse/streamable-http is
 correct for a persistent daemon serving remote Claude sessions over LAN.
+The network tools share ``NHJ_SHARED_SECRET``.
 """
 from __future__ import annotations
 
@@ -90,6 +91,22 @@ def nhj_vibe(
     qm.add(**ev.to_kwargs())
     qm.start_worker_if_needed()
     return f"[nhj:{ev.intent}] queued"
+
+
+@mcp.tool()
+def nhj_music_accent(intent: str = "err") -> str:
+    """Request a generative-music accent on the daemon's bed. No speech, no displays.
+
+    Args:
+        intent: Event type — err (breakdown) | ok | celebrate (release). Other
+                intents are ignored. Same mapping as a local ``note_accent``.
+    """
+    denied = _unauthorised()
+    if denied:
+        return denied
+    from nhj import inference_muzak
+    inference_muzak.note_accent(intent)
+    return f"[nhj:{intent}] noted"
 
 
 def run() -> None:

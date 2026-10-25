@@ -525,14 +525,46 @@ def test_stop_failure_respects_the_per_project_voice_gate(monkeypatch):
 
 
 def test_stop_failure_writes_nothing_locally_when_a_remote_daemon_owns_the_bed(monkeypatch):
-    """With NHJ_REMOTE_URL the bed is on the daemon: no wrong-host write, and no err event that would also speak."""
+    """With NHJ_REMOTE_URL the bed is on the daemon: music-only tool, no local write, no err vibe."""
     from nhj import hook
     monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
     monkeypatch.setenv("NHJ_REMOTE_URL", "http://daemon.invalid/mcp")
     sent = []
-    monkeypatch.setattr(hook, "_fire_remote", lambda url, ev: sent.append(ev) or True)
+    vibes = []
+    monkeypatch.setattr(hook, "_fire_remote_accent", lambda url, intent: sent.append((url, intent)))
+    monkeypatch.setattr(hook, "_fire_remote", lambda url, ev: vibes.append(ev) or True)
+    _stop_failure(monkeypatch)
+    assert "music_accent" not in _state()
+    assert sent == [("http://daemon.invalid/mcp", "err")]
+    assert vibes == []
+
+
+def test_stop_failure_remote_respects_the_per_project_voice_gate(monkeypatch):
+    """A voice-off project must not call the remote music tool."""
+    from nhj import gate, hook
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    monkeypatch.setenv("NHJ_REMOTE_URL", "http://daemon.invalid/mcp")
+    monkeypatch.setattr(gate, "voice_allowed", lambda source: False)
+    sent = []
+    monkeypatch.setattr(hook, "_fire_remote_accent", lambda url, intent: sent.append((url, intent)))
     _stop_failure(monkeypatch)
     assert "music_accent" not in _state() and sent == []
+
+
+def test_stop_failure_remote_failure_is_silent(monkeypatch, capsys):
+    """A failed remote accent must not fail the hook, write locally, or print."""
+    pytest.importorskip("fastmcp")
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    monkeypatch.setenv("NHJ_REMOTE_URL", "http://daemon.invalid/mcp")
+
+    class BoomClient:
+        def __init__(self, url, auth=None):
+            raise RuntimeError("nope")
+
+    monkeypatch.setattr("fastmcp.Client", BoomClient)
+    _stop_failure(monkeypatch)
+    assert "music_accent" not in _state()
+    assert capsys.readouterr().err == ""
 
 
 def test_controller_starts_its_accent_cursor_at_zero():
