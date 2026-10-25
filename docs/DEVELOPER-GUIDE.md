@@ -202,7 +202,9 @@ Override roots with `NHJ_DATA_DIR` / `NHJ_CONFIG_DIR` / `NHJ_STATE_DIR` / `NHJ_C
 Entry points call `resources.load_env()` once before reading environment-backed settings;
 importing library modules does not load `.env`. Long-lived config consumers (worker, MCP
 server, mixer controller) then call `config.get()` once at startup so an invalid config
-fails immediately rather than on every later lookup.
+fails immediately rather than on every later lookup. Environment-dependent paths in the
+hook, queue, mixer and audio adapter are likewise resolved at point of use; their historical
+private constants remain lazy compatibility attributes for existing callers and test seams.
 
 ---
 

@@ -52,7 +52,25 @@ _CLAIM_LEASE_SECONDS = 30
 _HEARTBEAT_SECONDS = 10   # well under the lease, so one late beat still counts
 _DISPATCH_BUDGET_SECONDS = 180  # past a cold start, the LLM, and one TTS call
 _CLAIM_ERROR_BACKOFF_SECONDS = 5
-_LOG = resources.log_file("worker.log")
+_LAZY_ATTRS = ("_LOG",)
+
+# Compatibility declaration only; module __getattr__ resolves it on access.
+_LOG: str
+
+
+def _log_path() -> str:
+    override = globals().get("_LOG")
+    return override if override is not None else resources.log_file("worker.log")
+
+
+def __getattr__(name: str) -> object:
+    if name == "_LOG":
+        return _log_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
 
 _seq = itertools.count()  # process-local, thread-safe monotonic counter for unique names
 
@@ -83,7 +101,7 @@ def _pid_alive(pid: int) -> bool:
 
 def _log(msg: str) -> None:
     try:
-        resources.append_log(_LOG, f"[{datetime.datetime.now().isoformat()}] {msg}")
+        resources.append_log(_log_path(), f"[{datetime.datetime.now().isoformat()}] {msg}")
     except OSError:
         # A log that cannot be written must not break the queue.
         return
@@ -376,7 +394,7 @@ class QueueManager:
         """Spawn the detached worker process and return its PID. (Seam for tests.)"""
         lf = None
         try:
-            lf = open(_LOG, "ab")
+            lf = open(_log_path(), "ab")
             lf.write(f"\n=== spawn {datetime.datetime.now().isoformat()} ===\n".encode())
             stdout = stderr = lf
         except OSError:

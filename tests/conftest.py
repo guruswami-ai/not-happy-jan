@@ -24,6 +24,7 @@ from __future__ import annotations
 import atexit
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -114,6 +115,21 @@ def _reset_process_bootstrap_state() -> None:
         return
     for name in getattr(config, "_LAZY_ATTRS", ("CFG", "INTENTS", "ADAPTER_ORDER")):
         vars(config).pop(name, None)
+    # Lazy path/env attributes are not cached on ordinary access, but
+    # monkeypatch restores the pre-patch value into module globals; drop any
+    # such pinned value so the next test resolves paths from its own env.
+    for module_name, attrs in {
+        "nhj.hook": ("_LOG", "_SEEN"),
+        "nhj.queue_manager": ("_LOG",),
+        "nhj.duck_player": ("_EVENTS",),
+        "nhj.inference_muzak": ("_REPO_ROOT",),
+        "nhj.adapters.audio": (
+            "_VOICES_ROOT", "_AUDIO_ROOT", "_CLIPS_ROOT", "_TMP_ROOT", "_VOICE_TARGET_DBFS"),
+    }.items():
+        module = sys.modules.get(module_name)
+        if module is not None:
+            for name in attrs:
+                vars(module).pop(name, None)
     resources._ENV_LOADED = False
 
 

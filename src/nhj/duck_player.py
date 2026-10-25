@@ -35,7 +35,25 @@ CH = 2              # stereo
 BLOCK = 1024        # ~21ms per callback
 _STATE_TICK_S = 0.25   # music.json cadence. The play-event spool stays on the 50 ms wake.
 _BUF_MAX = 48       # bounded music decode buffer (~1s) → frozen position when full/paused
-_EVENTS = resources.audio_events_dir(create=False)   # play-event spool (cross-process)
+_LAZY_ATTRS = ("_EVENTS",)
+
+# Compatibility declaration only; module __getattr__ resolves it on access.
+_EVENTS: Path
+
+
+def _events_dir() -> Path:
+    override = globals().get("_EVENTS")
+    return override if override is not None else resources.audio_events_dir(create=False)
+
+
+def __getattr__(name: str) -> object:
+    if name == "_EVENTS":
+        return _events_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
 
 
 # ---- decode helpers ---------------------------------------------------------
@@ -479,7 +497,7 @@ class Mixer:
     def pump_events(self) -> None:
         """Ingest cross-process play-events (worker/adapter → mixer)."""
         try:
-            files = sorted(_EVENTS.glob("*.json"))
+            files = sorted(_events_dir().glob("*.json"))
         except Exception:
             return
         for f in files:
@@ -579,15 +597,15 @@ def run_duck_controller() -> int:
     music_dir = gen[1] if gen else None
     last_accent = 0.0                                        # feed() drops accents older than the TTL, so none is replayed stale;
                                                              # one written while this controller starts (fast StopFailure) is kept
-    _EVENTS.mkdir(parents=True, exist_ok=True)
+    _events_dir().mkdir(parents=True, exist_ok=True)
 
-    fx_dir = M._REPO_ROOT / "audio" / "sfx"
+    fx_dir = M._repo_root() / "audio" / "sfx"
     on_tone = fx_dir / "call_on_hold.wav"                    # *click* going ON hold
     off_tone = fx_dir / "call_off_hold.wav"                  # *click* coming OFF hold (own tone)
     transfer = fx_dir / "transfer.wav"                       # legacy beep (fallback if no tone)
     handset_dir = fx_dir / "handset"                         # pickup/putdown clunks (shared pool)
     failed_xfer = fx_dir / "failed_transfer.wav"             # Jan fumbles the transfer (rare gag)
-    intro_dir = M._REPO_ROOT / "audio" / "voice" / "intros"
+    intro_dir = M._repo_root() / "audio" / "voice" / "intros"
 
     def _on(var: str, default: str = "1") -> bool:
         return os.getenv(var, default).strip().lower() not in ("0", "off", "false", "no")
