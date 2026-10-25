@@ -1686,6 +1686,74 @@ def music_demo(
     app.print(f"[green]✓[/green] {out}  ({len(audio) / 48000:.1f} s)   plan: " + " → ".join(f"bar {b}: {name}" for b, name in labels))
 
 
+@cli.command("say", context_settings={"allow_interspersed_args": False})
+def say_cmd(
+    text: list[str] = typer.Argument(..., help='the words to speak, or "-" to read them from stdin'),
+    severity: str = typer.Option("info", "--severity", "-s",
+                                 help="success | info | warning | error | attention | celebrate (or ok|step|warn|err|attn)"),
+    character: str = typer.Option("", "--character", "-c", help="explicit character (jan|bazza|karren)"),
+    rewrite: bool = typer.Option(False, "--rewrite", help="let the character rephrase it (default: speak exactly this text)"),
+    wait: bool = typer.Option(False, "--wait", help="block until the worker has dispatched it (default: return at once)"),
+    timeout: float = typer.Option(30.0, "--timeout", help="seconds to wait with --wait; then status 124"),
+    strict: bool = typer.Option(False, "--strict", help="status 10 when it cannot be spoken (muted, voice off, no engine)"),
+    max_chars: int = typer.Option(240, "--max-chars", help="refuse longer text (at most 500)"),
+):
+    """Speak exactly this text, in a character's voice. For scripts, cron and CI.
+
+    The words are only ever the ones you give (arguments, or stdin with "-"); the character picks the
+    voice and delivery, not the words. Statuses: 0 delivered, 2 usage/bounds, 10 undeliverable
+    (--strict, or rejected), 124 --wait timed out. Muted, headless or voice-off calls print the text
+    to stderr instead, so the message is never lost.
+    """
+    import sys
+    from nhj import event, resources, say
+    try:
+        resources.load_env()                           # TTS_ENGINE etc. from the checkout's .env
+    except Exception:
+        pass
+    try:
+        intent = say.intent_for(severity)
+        words = say.read_text(text, sys.stdin, max_chars)
+    except say.SayError as e:
+        print(f"nhj say: {e}", file=sys.stderr)
+        raise typer.Exit(say.EXIT_USAGE)
+    source, _ = _hook_identity("", {})
+    try:
+        ev = event.validate(intent, message=words, character=character, source=source, literal=not rewrite)
+    except event.VibeValidationError as e:
+        print(f"nhj say: {e}", file=sys.stderr)
+        raise typer.Exit(say.EXIT_USAGE)
+    def _cached() -> bool:                            # literal text already cached -> playable with no engine
+        try:
+            from nhj.adapters import audio
+            from nhj.characters import character_by_name, resolve_character
+            ch = character_by_name(character, intent) if character else resolve_character(intent)
+            return audio.literal_clip_cached(ch, intent, words)
+        except Exception:
+            return False
+    speak = say.can_speak(source, None if rewrite else _cached)
+    if not speak.ok:
+        print(words, file=sys.stderr)                 # muted / voice off / no engine: the text still reaches you
+    from nhj.queue_manager import QueueManager
+    try:
+        qm = QueueManager()
+        name = qm.add(**ev.to_kwargs())
+        qm.start_worker_if_needed()
+    except Exception as e:
+        print(f"nhj say: could not queue the message ({type(e).__name__})", file=sys.stderr)
+        raise typer.Exit(say.EXIT_UNDELIVERED)
+    if wait:
+        outcome = say.wait_processed(qm.queue_dir, name, timeout)
+        if outcome == "timeout":
+            raise typer.Exit(say.EXIT_TIMEOUT)
+        if outcome == "rejected":
+            print("nhj say: the worker rejected the message", file=sys.stderr)
+            raise typer.Exit(say.EXIT_UNDELIVERED)
+    if strict and not speak.ok:
+        print(f"nhj say: not spoken: {speak.reason}", file=sys.stderr)
+        raise typer.Exit(say.EXIT_UNDELIVERED)
+
+
 @cli.command("run", context_settings={"allow_interspersed_args": False, "ignore_unknown_options": True})
 def run_cmd(
     command: list[str] = typer.Argument(..., help="the command to run, e.g. `nhj run -- make build`"),

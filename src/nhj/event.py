@@ -16,6 +16,9 @@ Fields (all optional except ``intent``):
   character      explicit character ("" → route by intent)
   source         who is speaking: "project" or "host:project" ("" → unknown); set by the hook /
                  remote agent so displays and voices can say WHICH session the event came from
+  literal        speak ``message`` exactly as given (``nhj say``): no dynamic LLM rewrite, phrase
+                 templates, garbling or preamble, and not downgraded to a chime. Default False. It is
+                 left out of ``to_kwargs()`` when False so older daemons never see an unknown option.
 """
 from __future__ import annotations
 
@@ -45,10 +48,17 @@ class VibeEvent:
     voice_variant: str = ""
     character: str = ""
     source: str = ""
+    literal: bool = False
 
     def to_kwargs(self) -> dict:
-        """Field dict — the exact keyword args for QueueManager.add and the MCP tool."""
-        return asdict(self)
+        """Field dict — the exact keyword args for QueueManager.add and the MCP tool.
+
+        ``literal`` is included only when True: every existing caller and any older remote daemon
+        keeps seeing exactly the fields it knew."""
+        d = asdict(self)
+        if not d["literal"]:
+            del d["literal"]
+        return d
 
 
 def _as_int(name: str, v, lo: int, hi: int) -> int:
@@ -74,6 +84,17 @@ def _as_float(name: str, v, lo: float, hi: float) -> float:
     return f
 
 
+def _as_bool(name: str, v) -> bool:
+    if isinstance(v, bool):
+        return v
+    text = str(v).strip().lower()
+    if text in ("1", "true", "yes", "on"):
+        return True
+    if text in ("", "0", "false", "no", "off", "none"):
+        return False
+    raise VibeValidationError(f"{name} must be true or false, got {v!r}")
+
+
 def _as_enum(name: str, v, allowed: tuple[str, ...]) -> str:
     s = str(v).strip().lower()
     if s not in allowed:
@@ -82,7 +103,8 @@ def _as_enum(name: str, v, allowed: tuple[str, ...]) -> str:
 
 
 def validate(intent, *, message="", vibe_level=5, pretext="", verbosity="medium",
-             emotion="neutral", speed=1.0, voice_variant="", character="", source="") -> VibeEvent:
+             emotion="neutral", speed=1.0, voice_variant="", character="", source="",
+             literal=False) -> VibeEvent:
     """Build a validated VibeEvent. Raises :class:`VibeValidationError` on a bad value.
 
     Coerces strings (inline marker options arrive as strings) and clamps enums to
@@ -99,6 +121,7 @@ def validate(intent, *, message="", vibe_level=5, pretext="", verbosity="medium"
         voice_variant=str(voice_variant or ""),
         character=str(character or "").strip().lower(),
         source=str(source or "").strip()[:60],
+        literal=_as_bool("literal", literal),
     )
 
 

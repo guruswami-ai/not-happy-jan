@@ -41,6 +41,40 @@ Real replies on this setup, two samples each, **before** the fact guard (#87):
 
 **After the guard.** Spoken lines must keep every digit and number-word from the status (`12`, `3`, `1` and `5`); display headlines may drop a number but must not change it. A line that only *drops* a figure is repaired by appending it (`Backup's done, mate` becomes `Backup's done, mate, 12 minutes`). A line that *changes* a figure is retried once at the same temperature with a nudge to mention the missing one. The guard still refuses any line that would speak the wrong number, and NHJ then falls back to the static phrase bank (still spoken). Measured on `ocker-bogan-nano`, six `nhj run` statuses × 8 samples: fallback went from 19/48 (40 %, retry at 0.3) to 0/48 with repair plus nudge, with 0 wrong-number lines either way. Leave dynamic lines off if you need the status spoken verbatim.
 
+## `nhj say`: speak exactly this text
+
+```sh
+nhj say "Deploy complete"                              # info
+nhj say --severity error --character karren "The build failed on node 3"
+make build || nhj say -s error "The build failed"
+echo "backup finished" | nhj say -                     # "-" reads the words from stdin
+nhj say --wait --timeout 20 "Tests passed"             # block until the worker has dispatched it
+```
+
+The words are the ones you give and nothing else: the arguments, or stdin only when the single argument is `-`. Command output, other arguments and the environment are never spoken. The character picks the **voice and delivery, never the words**: a `say` event is *literal*, so it skips the dynamic LLM rewrite, the phrase templates, garbling, the quiet-while-busy chime and the "N other tasks finished" digest, and it appears unedited on the display matrix. The user's `censor` setting still applies, because that is an output policy, not characterisation. `--rewrite` opts back in to the character's own rendering.
+
+| Option | Meaning |
+|---|---|
+| `--severity, -s` | `success`, `info` (default), `warning`, `error`, `attention`, `celebrate`; they map onto the event intents `ok`, `step`, `warn`, `err`, `attn`, `celebrate`, which are also accepted |
+| `--character, -c` | `jan`, `bazza` or `karren` (default: chosen by severity) |
+| `--rewrite` | let the character rephrase it instead of speaking it exactly |
+| `--wait`, `--timeout S` | wait (default 30 s) until the worker has finished with the event; the last words may still be playing |
+| `--strict` | fail (status 10) when it cannot be spoken at all |
+| `--max-chars N` | refuse longer text; default 240, never more than 500 (the speech server's own limit, and a literal line has no fallback) |
+
+Text is cleaned (control characters become spaces, whitespace collapsed) and **refused, never truncated**, when it is over the limit. stdin is read through a bounded window (2000 characters including blanks) and the whole input is refused if that fills up, so nothing after it can be silently dropped. The words are never written to NHJ's logs (the queue file holds them until the worker has used them).
+
+**If it cannot be spoken** (NHJ is muted, voice is off for this project, or no speech engine is configured), the text is printed to **stderr** instead, so a muted or headless run does not lose the message. Whether anything else still happens depends on why: if NHJ is **muted** (`nhj mute`), the worker drops the event on every channel, so stderr is all you get; if **voice is off for the project** or **no speech engine** is configured, the event is still queued and reaches the displays and the board. A literal `say` never falls back to a generic bundled clip or plays the "you still there?" cue first, because those would be words you did not give; if the exact text cannot be synthesised (and is not already cached), it is simply not spoken.
+
+| Status | Meaning |
+|---|---|
+| `0` | delivered: queued (and, with `--wait`, dispatched). A muted call that printed the text also exits 0 |
+| `2` | usage or bounds error (bad severity, empty or over-long text); nothing was queued |
+| `10` | could not be delivered: the queue failed, the worker rejected the event, or `--strict` and it cannot be spoken |
+| `124` | `--wait` timed out (like `timeout(1)`) |
+
+Shell quoting is yours: `nhj say "$(cat secrets)"` will queue whatever the shell expands, and arguments are visible in `ps` while the command runs; use `-` and a pipe for anything sensitive.
+
 ## Not yet
 
-`nhj say "text"` (direct speech with `--severity`, `--wait`, bounded text and status codes) is the second phase of #16. `nhj summarize --speak` would need a deterministic reduction of the output to a short status line first, for the reasons above.
+`nhj summarize --speak` would need a deterministic reduction of the output to a short status line first, for the reasons above.
