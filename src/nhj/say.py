@@ -19,6 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_MAX_CHARS = 240
+#: Most raw characters read from stdin (blanks and control characters included). Wider than the
+#: text limit so padding is harmless, but bounded; if it fills up we refuse rather than guess what follows.
+RAW_STDIN_LIMIT = 2000
 HARD_MAX_CHARS = 500        # the TTS server refuses longer text (tts_server._TTS_MAX_CHARS); a literal line has no fallback
 EXIT_OK, EXIT_USAGE, EXIT_UNDELIVERED, EXIT_TIMEOUT = 0, 2, 10, 124
 
@@ -52,13 +55,18 @@ def clean(text: str) -> str:
 def read_text(args: list[str], stdin, max_chars: int) -> str:
     """The text to speak: the arguments joined by spaces, or stdin when the only argument is `-`.
 
-    stdin is read in a bounded way (never more than the hard cap plus one character), so a runaway
-    pipe cannot make `say` buffer megabytes. Over-long text is refused, never silently truncated.
+    stdin is read in a bounded way (never more than RAW_STDIN_LIMIT + 1 characters), so a runaway
+    pipe cannot make `say` buffer megabytes. If that window fills up the input is refused, because
+    cleaning could otherwise hide meaningful text beyond it; over-long text is refused, never silently
+    truncated.
     """
     if not 1 <= max_chars <= HARD_MAX_CHARS:
         raise SayError(f"--max-chars must be 1-{HARD_MAX_CHARS}")
     if args == ["-"]:
-        raw = stdin.read(HARD_MAX_CHARS + 1)
+        raw = stdin.read(RAW_STDIN_LIMIT + 1)
+        if len(raw) > RAW_STDIN_LIMIT:
+            raise SayError(f"input is longer than {RAW_STDIN_LIMIT} characters before cleaning; "
+                           f"nothing was spoken (the limit is {max_chars} characters of text)")
     else:
         raw = " ".join(args)
     text = clean(raw)
@@ -76,8 +84,11 @@ class Speakable:
     reason: str = ""
 
 
-def can_speak(source: str) -> Speakable:
-    """Whether this call can produce speech at all (the text is printed to stderr when it cannot)."""
+def can_speak(source: str, cached=None) -> Speakable:
+    """Whether this call can produce speech at all (the text is printed to stderr when it cannot).
+
+    *cached* is an optional zero-argument probe: with no speech engine, an exact cached clip of the
+    text can still be played, so the call counts as speakable."""
     try:
         from nhj.state import get_flag
         if get_flag("mute", False):
@@ -88,6 +99,8 @@ def can_speak(source: str) -> Speakable:
     except Exception:
         pass
     if os.getenv("TTS_ENGINE", "qwen").strip().lower() == "none":
+        if cached is not None and cached():
+            return Speakable(True)                    # an exact cached clip needs no engine
         return Speakable(False, "no speech engine is configured (TTS_ENGINE=none)")
     return Speakable(True)
 

@@ -1723,7 +1723,15 @@ def say_cmd(
     except event.VibeValidationError as e:
         print(f"nhj say: {e}", file=sys.stderr)
         raise typer.Exit(say.EXIT_USAGE)
-    speak = say.can_speak(source)
+    def _cached() -> bool:                            # literal text already cached -> playable with no engine
+        try:
+            from nhj.adapters import audio
+            from nhj.characters import character_by_name, resolve_character
+            ch = character_by_name(character, intent) if character else resolve_character(intent)
+            return audio.literal_clip_cached(ch, intent, words)
+        except Exception:
+            return False
+    speak = say.can_speak(source, None if rewrite else _cached)
     if not speak.ok:
         print(words, file=sys.stderr)                 # muted / voice off / no engine: the text still reaches you
     from nhj.queue_manager import QueueManager

@@ -174,10 +174,20 @@ def test_stdin_is_read_only_for_a_lone_dash_and_is_bounded():
             self.asked = n
             return "y" * n
     endless = Endless()
-    with pytest.raises(say.SayError, match="limit"):
+    with pytest.raises(say.SayError, match="before cleaning"):
         say.read_text(["-"], endless, 240)
-    assert endless.asked == say.HARD_MAX_CHARS + 1                  # never asked for more than cap + 1
+    assert endless.asked == say.RAW_STDIN_LIMIT + 1                 # never asked for more than the bound + 1
     assert say.read_text(["not", "-"], io.StringIO("ignored"), 240) == "not -"   # "-" only means stdin on its own
+
+
+def test_padding_before_more_text_is_kept_not_silently_dropped():
+    """Codex review on #100: a short message, a long run of blanks, then more words used to be cut off after
+    the first window and accepted as just the first message."""
+    raw = "hi" + " " * 600 + "and the important part"
+    assert say.read_text(["-"], io.StringIO(raw), 240) == "hi and the important part"
+    too_wide = "hi" + " " * (say.RAW_STDIN_LIMIT + 50) + "and the important part"
+    with pytest.raises(say.SayError, match="before cleaning"):          # refused, never truncated
+        say.read_text(["-"], io.StringIO(too_wide), 240)
 
 
 def test_wait_processed_outcomes(tmp_path):
@@ -362,3 +372,40 @@ def test_say_never_accepts_more_than_the_speech_server_does():
     src = (Path(say.__file__).parent / "tts_server.py").read_text()
     cap = int(re.search(r"^_TTS_MAX_CHARS\s*=\s*(\d+)", src, re.M).group(1))
     assert say.HARD_MAX_CHARS <= cap
+
+
+# ---- codex review on #100: a cached exact clip is speakable with no engine --------------------
+def test_literal_clip_cached_uses_the_same_key_as_fire(monkeypatch):
+    seen = []
+    monkeypatch.setattr(audio, "cache_hit", lambda voice, text, variant, tier: (seen.append((voice, text, variant, tier)) or "/c.wav"))
+    ch = resolve_character("ok")
+    assert audio.literal_clip_cached(ch, "ok", "Deploy 42 is done.") is True
+    d = ch.delivery("ok", "Deploy 42 is done.", literal=True)
+    assert seen == [(d.voice, "Deploy 42 is done.", d.band, d.model_tier)]
+    from nhj.state import set_setting
+    set_setting("voice_override", "whisper")                          # the global override changes the key, as in fire()
+    seen.clear()
+    audio.literal_clip_cached(ch, "ok", "Deploy 42 is done.")
+    assert seen[0][0] == "whisper" and seen[0][2] == f"whisper:{d.band}"
+    monkeypatch.setattr(audio, "cache_hit", lambda *a, **k: None)
+    assert audio.literal_clip_cached(ch, "ok", "never spoken before") is False
+
+
+def test_no_engine_but_an_exact_cached_clip_is_speakable():
+    import os
+    os.environ["TTS_ENGINE"] = "none"
+    try:
+        assert say.can_speak("proj", cached=lambda: True).ok is True
+        assert say.can_speak("proj", cached=lambda: False).ok is False
+        assert say.can_speak("proj").ok is False
+    finally:
+        os.environ.pop("TTS_ENGINE", None)
+
+
+def test_strict_succeeds_silently_when_the_exact_text_is_cached(queue, monkeypatch, capsys):
+    monkeypatch.setenv("TTS_ENGINE", "none")
+    monkeypatch.setattr(audio, "cache_hit", lambda *a, **k: "/cached/exact.wav")
+    r = _say("--strict", "Deploy", "42", "is", "done")
+    assert r.exit_code == 0 and "Deploy 42" not in r.output           # speakable: nothing echoed to stderr
+    monkeypatch.setattr(audio, "cache_hit", lambda *a, **k: None)
+    assert _say("--strict", "something", "new").exit_code == 10        # not cached, no engine: still undeliverable

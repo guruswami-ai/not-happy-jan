@@ -62,7 +62,7 @@ The words are the ones you give and nothing else: the arguments, or stdin only w
 | `--strict` | fail (status 10) when it cannot be spoken at all |
 | `--max-chars N` | refuse longer text; default 240, never more than 500 (the speech server's own limit, and a literal line has no fallback) |
 
-Text is cleaned (control characters become spaces, whitespace collapsed) and **refused, never truncated**, when it is over the limit. The words are never written to NHJ's logs (the queue file holds them until the worker has used them).
+Text is cleaned (control characters become spaces, whitespace collapsed) and **refused, never truncated**, when it is over the limit. stdin is read through a bounded window (2000 characters including blanks) and the whole input is refused if that fills up, so nothing after it can be silently dropped. The words are never written to NHJ's logs (the queue file holds them until the worker has used them).
 
 **If it cannot be spoken** (NHJ is muted, voice is off for this project, or no speech engine is configured), the text is printed to **stderr** instead, so a muted or headless run does not lose the message. Whether anything else still happens depends on why: if NHJ is **muted** (`nhj mute`), the worker drops the event on every channel, so stderr is all you get; if **voice is off for the project** or **no speech engine** is configured, the event is still queued and reaches the displays and the board. A literal `say` never falls back to a generic bundled clip or plays the "you still there?" cue first, because those would be words you did not give; if the exact text cannot be synthesised (and is not already cached), it is simply not spoken.
 

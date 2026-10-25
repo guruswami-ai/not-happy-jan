@@ -477,6 +477,31 @@ def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "",
 # ---------------------------------------------------------------------------
 # Adapter
 # ---------------------------------------------------------------------------
+def _apply_voice_override(voice: str, variant: str) -> tuple[str, str]:
+    """Mode can override the voice globally (e.g. special-forces -> a whisper voice/sample).
+    Empty/unset = use the character's own voice."""
+    try:
+        from nhj.state import get_setting
+        ov = (get_setting("voice_override", "") or "").strip()
+        if ov:
+            return ov, f"{ov}:{variant}"
+    except Exception:
+        pass
+    return voice, variant
+
+
+def literal_clip_cached(character: "Character", intent: str, message: str) -> bool:
+    """True when the exact text of a literal `say` already has a cached clip, i.e. it can be played
+    with no speech engine at all. Uses the same key as `AudioAdapter.fire`."""
+    try:
+        d = character.delivery(intent, message, literal=True)
+        voice, variant = _apply_voice_override(d.voice, d.band)
+        model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
+        return bool(d.text) and cache_hit(voice, d.text, variant, model_tier) is not None
+    except Exception:
+        return False
+
+
 class AudioAdapter(NotificationAdapter):
     channel = "voice"   # gated per project (nhj.gate); silent adapters are not
 
@@ -527,15 +552,7 @@ class AudioAdapter(NotificationAdapter):
             if digest_n:
                 tts_text = f"{tts_text} {orchestration.digest_sentence(digest_n)}"
 
-        # Mode can override the voice globally (e.g. special-forces -> a whisper
-        # voice/sample). Empty/unset = use the character's own voice.
-        try:
-            from nhj.state import get_setting
-            ov = (get_setting("voice_override", "") or "").strip()
-            if ov:
-                voice, variant = ov, f"{ov}:{variant}"
-        except Exception:
-            pass
+        voice, variant = _apply_voice_override(voice, variant)
 
         # Tier 1: bank clip (bare markers only) · Tier 2: message cache (per band)
         path = pick_bank_clip(voice, intent) if not message else None
