@@ -125,7 +125,7 @@ def note_accent(intent: str) -> None:
             return
         _write_accent(accent)
     except Exception:
-        pass
+        pass            # a music accent is best-effort: it must never fail the hook or worker that called it
 
 
 def _alive(pid) -> bool:

@@ -499,15 +499,40 @@ def test_the_stop_hook_itself_no_longer_writes_accents(monkeypatch):
     assert "note_accent" not in inspect.getsource(hook)
 
 
-def test_stop_failure_is_always_an_err_accent(monkeypatch):
+def _stop_failure(monkeypatch, cwd="/tmp/proj"):
     from io import StringIO
 
     from nhj import inference_muzak, prompt_hook
-    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
     monkeypatch.setattr(inference_muzak, "mark_idle", lambda sid: None)
-    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps({"hook_event_name": "StopFailure", "session_id": "s1"})))
+    payload = {"hook_event_name": "StopFailure", "session_id": "s1", "cwd": cwd}
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(payload)))
     assert prompt_hook.main() == 0
+
+
+def test_stop_failure_is_an_err_accent_when_voice_is_allowed(monkeypatch):
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    _stop_failure(monkeypatch)
     assert _state()["music_accent"] == "err"
+
+
+def test_stop_failure_respects_the_per_project_voice_gate(monkeypatch):
+    """Grok review on #75: `nhj voice off` must keep a project from moving the bed, StopFailure included."""
+    from nhj import gate
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    monkeypatch.setattr(gate, "voice_allowed", lambda source: False)
+    _stop_failure(monkeypatch)
+    assert "music_accent" not in _state()
+
+
+def test_stop_failure_writes_nothing_locally_when_a_remote_daemon_owns_the_bed(monkeypatch):
+    """With NHJ_REMOTE_URL the bed is on the daemon: no wrong-host write, and no err event that would also speak."""
+    from nhj import hook
+    monkeypatch.setenv("NHJ_MUSIC_MODE", "generative")
+    monkeypatch.setenv("NHJ_REMOTE_URL", "http://daemon.invalid/mcp")
+    sent = []
+    monkeypatch.setattr(hook, "_fire_remote", lambda url, ev: sent.append(ev) or True)
+    _stop_failure(monkeypatch)
+    assert "music_accent" not in _state() and sent == []
 
 
 def test_controller_starts_its_accent_cursor_at_zero():
