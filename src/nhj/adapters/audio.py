@@ -41,13 +41,65 @@ from nhj.adapters.base import NotificationAdapter
 if TYPE_CHECKING:
     from nhj.characters import Character
 
-from nhj import resources
+from nhj import env_registry, resources
 
-_VOICES_ROOT = resources.voices_dir()            # downloaded ref clips
-_AUDIO_ROOT  = resources.audio_dir()             # downloaded music/sfx/voice/ambient
-_CLIPS_ROOT  = resources.cache_dir(create=False) / "clips"
-_TMP_ROOT    = resources.audio_tmp_dir(create=False)
-_MAX_CACHE   = 300
+_LAZY_ATTRS = ("_VOICES_ROOT", "_AUDIO_ROOT", "_CLIPS_ROOT", "_TMP_ROOT", "_VOICE_TARGET_DBFS")
+
+# Compatibility declarations only; module __getattr__ resolves these on access.
+_VOICES_ROOT: Path
+_AUDIO_ROOT: Path
+_CLIPS_ROOT: Path
+_TMP_ROOT: Path
+_VOICE_TARGET_DBFS: float
+
+_MAX_CACHE = 300
+
+
+def _voices_root() -> Path:
+    override = globals().get("_VOICES_ROOT")
+    return override if override is not None else resources.voices_dir()
+
+
+def _audio_root() -> Path:
+    override = globals().get("_AUDIO_ROOT")
+    return override if override is not None else resources.audio_dir()
+
+
+def _clips_root() -> Path:
+    override = globals().get("_CLIPS_ROOT")
+    return override if override is not None else resources.cache_dir(create=False) / "clips"
+
+
+def _tmp_root() -> Path:
+    override = globals().get("_TMP_ROOT")
+    return override if override is not None else resources.audio_tmp_dir(create=False)
+
+
+def _voice_target_dbfs() -> float:
+    override = globals().get("_VOICE_TARGET_DBFS")
+    if override is not None:
+        return float(override)
+    entry = env_registry.lookup("NHJ_VOICE_TARGET_DBFS")
+    default = entry.default if entry and entry.default else "-19.5"
+    return float(os.getenv("NHJ_VOICE_TARGET_DBFS", default))
+
+
+def __getattr__(name: str) -> object:
+    if name == "_VOICES_ROOT":
+        return _voices_root()
+    if name == "_AUDIO_ROOT":
+        return _audio_root()
+    if name == "_CLIPS_ROOT":
+        return _clips_root()
+    if name == "_TMP_ROOT":
+        return _tmp_root()
+    if name == "_VOICE_TARGET_DBFS":
+        return _voice_target_dbfs()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
 
 
 # ---------------------------------------------------------------------------
@@ -72,9 +124,10 @@ def _effective_speed(user_speed: float, band_speed: float) -> float:
 
 
 def _write_temp_wav(data: bytes) -> str:
-    _TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    tmp_root = _tmp_root()
+    tmp_root.mkdir(parents=True, exist_ok=True)
     # pid+random too: two synths finishing in the same millisecond must not overwrite
-    p = _TMP_ROOT / f"{int(time.time() * 1000):013d}-{os.getpid()}-{uuid.uuid4().hex[:8]}.wav"
+    p = tmp_root / f"{int(time.time() * 1000):013d}-{os.getpid()}-{uuid.uuid4().hex[:8]}.wav"
     p.write_bytes(data)
     return str(p)
 
@@ -84,7 +137,6 @@ def _write_temp_wav(data: bytes) -> str:
 # LUFS for this voice) so live and banked lines sit consistently in the mix. Timbre-safe
 # (pure gain) with a peak ceiling; returns the original bytes on any error so levelling can
 # never break playback.
-_VOICE_TARGET_DBFS = float(os.getenv("NHJ_VOICE_TARGET_DBFS", "-19.5"))
 _VOICE_PEAK_CEIL_DBFS = -1.5
 
 
@@ -102,7 +154,7 @@ def _normalize_voice_wav(wav: bytes) -> bytes:
         rms = float(np.sqrt(np.mean(np.square(mono.astype(np.float64)))))
         if rms < 10 ** (-50 / 20):                     # near-silent → leave it
             return wav
-        gain = 10 ** ((_VOICE_TARGET_DBFS - 20 * np.log10(rms)) / 20)
+        gain = 10 ** ((_voice_target_dbfs() - 20 * np.log10(rms)) / 20)
         out = data * gain
         peak = float(np.max(np.abs(out))) if out.size else 0.0
         ceil = 10 ** (_VOICE_PEAK_CEIL_DBFS / 20)
@@ -122,7 +174,7 @@ def pick_bank_clip(voice: str, intent: str) -> Optional[str]:
     # Cache first (the user's own `nhj build-bank`), then the bank shipped inside the
     # package (resources.bundled('clips')) — so a bare-marker install speaks in-character
     # with no model and no download. First location with clips wins.
-    for root in (_CLIPS_ROOT, resources.bundled("clips")):
+    for root in (_clips_root(), resources.bundled("clips")):
         d = root / voice / intent
         if d.is_dir():
             candidates = sorted(d.glob("*.wav"))
@@ -137,7 +189,7 @@ def bank_clip_count(voice: str) -> int:
     with no model and no live reference — the minimal-install contract. Deduped by
     (intent, filename) so a user-built clip shadowing a bundled one isn't double-counted."""
     names: set[tuple[str, str]] = set()
-    for root in (_CLIPS_ROOT, resources.bundled("clips")):
+    for root in (_clips_root(), resources.bundled("clips")):
         base = root / voice
         if base.is_dir():
             for wav in base.glob("*/*.wav"):
@@ -175,7 +227,7 @@ def _cache_path(voice: str, text: str, variant: str = "", model_tier: str = "") 
     # separately per dial level and per synthesis backend/settings.
     digest = hashlib.sha256(
         f"{voice}::{variant}::{_cache_backend_id(model_tier)}::{text}".encode()).hexdigest()[:32]
-    return _CLIPS_ROOT / "cache" / f"{digest}.wav"
+    return _clips_root() / "cache" / f"{digest}.wav"
 
 
 def _riff_size_ok(p: Path) -> bool:
@@ -213,7 +265,7 @@ def pick_return_clip() -> Optional[str]:
     """The 'you still there?' reconnect clip, as a path (for the mixer)."""
     if os.getenv("NHJ_MUZAK_RETURN", "1").strip().lower() in ("0", "off", "false", "no"):
         return None
-    d = _AUDIO_ROOT / "voice" / "returns"
+    d = _audio_root() / "voice" / "returns"
     clips = sorted(d.glob("*.wav")) if d.is_dir() else []
     return str(random.choice(clips)) if clips else None
 
@@ -347,8 +399,9 @@ def _run_synth_cli(cmd: list, out: Path, stdin_text: str = "", timeout: float = 
 
 
 def _synth_out_path(suffix: str) -> Path:
-    _TMP_ROOT.mkdir(parents=True, exist_ok=True)
-    return _TMP_ROOT / f"synth-{os.getpid()}-{uuid.uuid4().hex[:8]}{suffix}"
+    tmp_root = _tmp_root()
+    tmp_root.mkdir(parents=True, exist_ok=True)
+    return tmp_root / f"synth-{os.getpid()}-{uuid.uuid4().hex[:8]}{suffix}"
 
 
 def synth_os(text: str, voice: str = "jan", timeout: float = 30.0) -> Optional[bytes]:

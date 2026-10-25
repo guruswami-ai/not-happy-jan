@@ -40,9 +40,27 @@ if __name__ == "__main__":
     resources.load_env()
 
 # data_dir() = repo root in a checkout, else the platform data dir (macOS Application
-# Support, XDG ~/.local/share elsewhere). `_REPO_ROOT / "audio"` is the music/sfx/voice
-# tree in both layouts (duck_player reads it via M._REPO_ROOT).
-_REPO_ROOT = resources.data_dir()
+# Support, XDG ~/.local/share elsewhere). `_repo_root() / "audio"` is the
+# music/sfx/voice tree in both layouts (duck_player reads it via M._repo_root()).
+_LAZY_ATTRS = ("_REPO_ROOT",)
+
+# Compatibility declaration only; module __getattr__ resolves it on access.
+_REPO_ROOT: Path
+
+
+def _repo_root() -> Path:
+    override = globals().get("_REPO_ROOT")
+    return override if override is not None else resources.data_dir()
+
+
+def __getattr__(name: str) -> object:
+    if name == "_REPO_ROOT":
+        return _repo_root()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
 
 _AUDIO_EXT = {".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".aiff", ".caf"}
 _BUSY_TTL = 1800.0    # a busy entry older than this = a crashed session → evict
@@ -146,7 +164,7 @@ def _music_dirs() -> list[Path]:
     for chunk in os.getenv("NHJ_MUZAK_DIR", "").split(":"):
         if chunk.strip():
             dirs.append(Path(chunk).expanduser())
-    dirs.append(_REPO_ROOT / "audio" / "music")  # bundled fallback
+    dirs.append(_repo_root() / "audio" / "music")  # bundled fallback
     return dirs
 
 
