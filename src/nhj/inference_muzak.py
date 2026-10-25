@@ -249,6 +249,8 @@ def is_running() -> bool:
 def start_controller() -> bool:
     """Launch the detached mixer daemon if not running. True if (now) running. Starts even
     with no music tracks — the mixer still plays voice/fx through the one stream."""
+    if os.getenv("NHJ_TEST_NO_MIXER"):
+        return True                            # test suite: do not spawn a mixer into the hermetic spool
     if is_running():
         return True
     subprocess.Popen([sys.executable, "-m", "nhj.inference_muzak"],

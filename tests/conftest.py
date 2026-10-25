@@ -20,12 +20,18 @@ Two layers:
 2. Before **each test** the contents of those directories are wiped and the host-specific environment
    variables below are removed, so every test starts from the same empty install. A test that needs a
    value sets it itself with ``monkeypatch``.
+3. ``NHJ_TEST_NO_MIXER=1`` is set for the session and ``start_controller`` is stubbed (#80).
+   A leftover mixer would poll this session's spool dir and eat play-events. Worker
+   subprocesses inherit the env var so they do not spawn either. A session-finish check
+   fails if a mixer process appeared during the run.
 """
 from __future__ import annotations
 
 import atexit
 import os
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -44,6 +50,7 @@ _DIRS = {
 for _name, _path in _DIRS.items():
     _path.mkdir()
     os.environ[_name] = str(_path)          # unconditional: never inherit a real directory
+os.environ["NHJ_TEST_NO_MIXER"] = "1"       # worker subprocesses inherit this (#80)
 
 # A fake home: Path.home() feeds the legacy config dir (~/.config/nhj), ~/.env (the Vestaboard token
 # fallback) and, on macOS, the default ~/Library paths.
@@ -90,6 +97,12 @@ def _scrubbing_load_dotenv(*args, **kwargs):
 
 dotenv.load_dotenv = _scrubbing_load_dotenv
 
+# Tests patch ``subprocess.Popen`` / ``check_output``. Bind the real Popen so the mixer
+# reap (#80) does not call the stub (check_output uses Popen at call time).
+_Popen = subprocess.Popen
+_PIPE = subprocess.PIPE
+_DEVNULL = subprocess.DEVNULL
+
 
 def _empty(directory: Path) -> None:
     for child in directory.iterdir():
@@ -131,6 +144,82 @@ def _reset_process_bootstrap_state() -> None:
     resources._ENV_LOADED = False
 
 
+def _is_mixer_cmd(cmd: str) -> bool:
+    cmd = cmd.strip()
+    return "-m nhj.inference_muzak" in cmd or cmd == "NHJ muzak"
+
+
+def _mixer_pids() -> set[int]:
+    """Pids of muzak controllers: ``python -m nhj.inference_muzak`` or the setproctitle name."""
+    procfs = Path("/proc")
+    if procfs.is_dir():
+        pids: set[int] = set()
+        for entry in procfs.iterdir():
+            if not entry.name.isdigit():
+                continue
+            pid = int(entry.name)
+            if pid == os.getpid():
+                continue
+            try:
+                raw = (entry / "cmdline").read_bytes()
+                comm = (entry / "comm").read_text().strip()
+            except OSError:
+                continue
+            cmd = raw.replace(b"\0", b" ").decode("utf-8", "replace")
+            if _is_mixer_cmd(cmd) or comm == "NHJ muzak":
+                pids.add(pid)
+        return pids
+    try:
+        proc = _Popen(
+            ["ps", "-ax", "-o", "pid=,command="],
+            stdout=_PIPE, stderr=_DEVNULL, text=True,
+        )
+        out, _ = proc.communicate()
+    except OSError:
+        return set()
+    pids = set()
+    for line in (out or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid_s, _, cmd = line.partition(" ")
+        try:
+            pid = int(pid_s)
+        except ValueError:
+            continue
+        if pid != os.getpid() and _is_mixer_cmd(cmd):
+            pids.add(pid)
+    return pids
+
+
+_PREEXISTING_MIXERS: set[int] = set()
+
+
+def _kill_suite_mixers() -> set[int]:
+    """Stop mixers the suite started. Leaves mixers that were already running (the live one)."""
+    leaked = _mixer_pids() - _PREEXISTING_MIXERS
+    if not leaked:
+        return leaked
+    for pid in leaked:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    return leaked & _mixer_pids()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _fail_if_the_suite_left_a_mixer():
+    global _PREEXISTING_MIXERS
+    _PREEXISTING_MIXERS = _mixer_pids()
+    yield
+    leftover = _kill_suite_mixers()
+    assert not leftover, (
+        f"the suite left mixer process(es) {sorted(leftover)}; "
+        "start_controller is stubbed — a test spawned one for real and did not stop it (#80)"
+    )
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_install(monkeypatch):
     for directory in _DIRS.values():
@@ -138,4 +227,7 @@ def _hermetic_install(monkeypatch):
     for var in _HOST_ENV:
         monkeypatch.delenv(var, raising=False)
     _reset_process_bootstrap_state()
+    # Do not spawn a real mixer into the session-wide spool dir (#80).
+    from nhj import inference_muzak
+    monkeypatch.setattr(inference_muzak, "start_controller", lambda: True)
     yield
