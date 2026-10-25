@@ -123,7 +123,7 @@ class GenReq(BaseModel):
     text: str = Field(max_length=_TTS_MAX_CHARS)
     voice: str = "jan"
     model_tier: str = "fast"
-    instruct: str = ""
+    instruct: str = Field("", max_length=_TTS_MAX_CHARS)
     speed: float = 1.0
     temperature: Optional[float] = None
 
