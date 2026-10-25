@@ -23,11 +23,30 @@ from nhj import resources
 
 load_dotenv(resources.env_file())
 
-signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-
 from nhj.queue_manager import QueueManager
 
 mcp = FastMCP("Not-Happy-Jan")
+
+
+def _unauthorised() -> str | None:
+    """Block a network MCP call that does not carry NHJ_SHARED_SECRET.
+
+    stdio is a local process and is not asked for a header. A blank secret
+    keeps today's behaviour: loopback is the safety default, and the install
+    commands warn before a non-loopback bind.
+    """
+    from nhj.lan_auth import allows, secret
+
+    if not secret():
+        return None
+    if os.getenv("NHJ_TRANSPORT", "stdio").lower().strip() == "stdio":
+        return None
+    from fastmcp.server.dependencies import get_http_headers
+
+    headers = get_http_headers(include={"authorization", "x-nhj-token"})
+    if allows(headers):
+        return None
+    return "[nhj:error] unauthorised"
 
 
 @mcp.tool()
@@ -57,6 +76,9 @@ def nhj_vibe(
         character:     Explicit character override (e.g. "jan"); "" routes by intent.
         source:        Which session is speaking, e.g. "hog11:reachy" (shown on displays).
     """
+    denied = _unauthorised()
+    if denied:
+        return denied
     from nhj import event
     try:
         ev = event.validate(intent, message=message, vibe_level=vibe_level, pretext=pretext,
@@ -72,14 +94,23 @@ def nhj_vibe(
 
 def run() -> None:
     from nhj.procname import set_title
+    # The tool spawns the queue worker and does not wait for it. Ignore
+    # SIGCHLD while serving so those children are reaped. Restored on the way
+    # out: importing this module, or a run() that returns, must not leave the
+    # caller's signal disposition changed.
+    previous = signal.getsignal(signal.SIGCHLD)
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
     set_title("NHJ MCP")
-    transport = os.getenv("NHJ_TRANSPORT", "stdio").lower().strip()
-    if transport == "stdio":
-        mcp.run()
-        return
-    host = os.getenv("NHJ_HOST", "127.0.0.1")
-    port = int(os.getenv("NHJ_PORT", "8765"))
-    mcp.run(transport=transport, host=host, port=port)
+    try:
+        transport = os.getenv("NHJ_TRANSPORT", "stdio").lower().strip()
+        if transport == "stdio":
+            mcp.run()
+            return
+        host = os.getenv("NHJ_HOST", "127.0.0.1")
+        port = int(os.getenv("NHJ_PORT", "8765"))
+        mcp.run(transport=transport, host=host, port=port)
+    finally:
+        signal.signal(signal.SIGCHLD, previous)
 
 
 if __name__ == "__main__":
