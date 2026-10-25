@@ -4,53 +4,19 @@
   <img src="NHJ_icon.png" alt="The three-tier Not-Happy-Jan cast: Karren the manager raging up top, Bazza in stressed middle-management, Jan on reception with a headset, ringed by feedback devices" width="300">
 </p>
 
-**Multi-sensory feedback for AI coding agents.** When your coding agent finishes a task,
-someone picks up the phone and tells you — cheerfully if it went well, *furiously* if it
-didn't. Hold music while it works, a cast of cloned voices when it's done, and a buzz on
-your mouse or a flash on a pixel display to match — all **100% on your own machine**.
+**Multi-sensory feedback for AI coding agents: hold music while your agent works, then a local voice — cheerful on success, furious on failure — plus a buzz or flash on devices you already own.**
 
 > *"Not happy, Jan — the issue is…"*
 
-*Built on the agent-feedback idea from **[AgentVibes](https://github.com/paulpreibisch/AgentVibes)** — and taken way too far.*
+📖 **[Read the docs](https://guruswami-ai.github.io/not-happy-jan/)** · 🎬 **[Watch the demo](https://guruswami-ai.github.io/not-happy-jan/watch-the-demo/)** · 🚀 **[Quick start](docs/quickstart.md)**
 
-📖 **[Read the docs](https://guruswami-ai.github.io/not-happy-jan/)** · 🎬 **[Watch the demo](https://guruswami-ai.github.io/not-happy-jan/watch-the-demo/)** (videos coming soon)
-
-<!-- READY TO PUBLISH: drop docs/assets/video/demo-thumbnail.webp + replace VIDEO_ID, then uncomment.
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=VIDEO_ID">
-    <img src="docs/assets/video/demo-thumbnail.webp" alt="Watch Not-Happy-Jan narrate a Claude Code session" width="640">
+  <a href="https://guruswami-ai.github.io/not-happy-jan/watch-the-demo/">
+    <img src="docs/assets/video/demo-thumbnail.webp" alt="Watch Not-Happy-Jan narrate a coding-agent session, with hold music and character voices" width="520">
   </a>
 </p>
--->
 
-> ⚠️ **Public alpha** — an early, for-fun release that *will* have rough edges.
-> [Open an issue](https://github.com/guruswami-ai/not-happy-jan/issues/new/choose) or
-> [start a discussion](https://github.com/guruswami-ai/not-happy-jan/discussions). The
-> **minimal install speaks instantly** with the bundled voice bank (no downloads); the
-> full live experience wants a one-off ~5 GB of local models: Apple Silicon (MLX) or a
-> Linux/NVIDIA box ([Linux guide](docs/linux.md)).
-
-## What you'll experience
-
-- 🎷 **Hold music** plays while the agent is busy and pauses the instant it's done — a zero-attention "still working / finished" signal.
-- 👩 **Jan** handles routine "all done". 🧑‍💼 **Bazza** escalates warnings. 📣 **Karren** takes over when it breaks — she is *NOT. HAPPY. JAN.*
-- 🎚️ **Tune each character** — boganism, competence, chaos — just by asking Claude in plain language.
-- 📟 **Fan out across devices** you already have — a haptic mouse, $60 pixel clocks, a LaMetric, a Vestaboard, a physical bell — or nothing but your speakers.
-- 🧭 **Many agents at once.** Alerts say *which* session spoke, workers' completions chime while the orchestrator you are waiting on keeps the music, and voice can be switched on per project → **[Multi-agent orchestration](docs/orchestration.md)**.
-- 🔌 **Not just Claude Code** — opencode, Qwen Code, Grok Build, Codex, Gemini, Kimi and others → **[Other agent CLIs](docs/other-clis.md)**.
-
-→ Meet the cast and the one-word modes: **[Characters & dials](docs/characters.md)** · **[Modes](docs/modes.md)**
-
-<p align="center">
-  <img src="docs/assets/diagrams/flow.svg" width="440"
-    alt="Four steps: your agent finishes and emits a status marker; an NHJ hook or MCP catches it; the right character answers — Jan, Bazza, or Karren, chosen by severity; it reaches your senses across voice, haptic, display, and bell. Hold music plays while busy and pauses when answered.">
-</p>
-
-<p align="center">
-  <img src="docs/assets/awtrix-demo.webp" width="480"
-    alt="A Ulanzi AWTRIX LED matrix scrolling an in-character Not-Happy-Jan message in green pixels with a tick icon — a vibe landing on the display channel.">
-  <br><em>…and on a $60 pixel display.</em>
-</p>
+> ⚠️ **Public alpha** — early and for fun, with rough edges. [Open an issue](https://github.com/guruswami-ai/not-happy-jan/issues/new/choose) or [start a discussion](https://github.com/guruswami-ai/not-happy-jan/discussions).
 
 ## Install
 
@@ -58,71 +24,53 @@ your mouse or a flash on a pixel display to match — all **100% on your own mac
 curl -fsSL https://raw.githubusercontent.com/guruswami-ai/not-happy-jan/main/install.sh | bash
 ```
 
-One command, non-interactive, **no `sudo`**. The default installs the full local
-experience — cloned voices, the dynamic `ocker-bogan-nano` brain, and hold music — with
-**on-demand model loading**, so there's no resident RAM cost at idle.
+One non-interactive command, **no `sudo`**. Requirements: Python 3.10+, about 8 GB RAM (16 GB recommended) and, for the default profile, about 5 GB disk. The full live-voice experience runs on **Apple Silicon** or **Linux with an NVIDIA GPU**; the minimal profile speaks from the bundled voice bank on any supported Mac or Linux box.
 
-| Profile | Command | What you get |
+| Profile | Use it when | Command |
 |---|---|---|
-| **Default** | `bash install.sh` | Full experience: Qwen3-TTS + `ocker-bogan-nano` LLM + hold music, on-demand; Claude hooks + MCP wired |
-| **Full** | `bash install.sh --full` | …plus persistent warm TTS/LLM/MCP services (macOS) for sub-second responses |
-| **Minimal** | `bash install.sh --minimal` | Hooks + MCP + the **bundled voice bank** — the cast speaks pre-recorded lines, no downloads (CI / low-RAM) |
+| **Default** | Full cloned voices, dynamic lines and hold music, loaded on demand | `bash install.sh` |
+| **Full** | You want warm local services for sub-second replies (macOS) | `bash install.sh --full` |
+| **Minimal** | CI, low RAM, or no model downloads | `bash install.sh --minimal` |
 
-The MCP server always binds to `127.0.0.1`; LAN access is an explicit opt-in
-(`--full --listen 0.0.0.0`). **Uninstall** is one reversible, user-only command:
+→ Compare them in **[Requirements & tiers](docs/minimum-specs.md)** and **[Install profiles](docs/install-profiles.md)**. Linux or NVIDIA host? Start with the **[Linux guide](docs/linux.md)**. Nothing plays? The **[Quick start](docs/quickstart.md)** has the first checks (`nhj voices`, `nhj devices`, `nhj status`).
 
-```bash
-nhj uninstall          # stops services, removes runtime/config/models/hooks; --yes to skip the prompt
-```
-
-**Requirements:** Python 3.10+, ~8 GB RAM (16 recommended), ~5 GB disk. **macOS (Apple Silicon)** runs the
-local Qwen3-TTS voice on MLX; **Linux** runs live zero-shot voices through an
-[audio.cpp](https://github.com/0xshug0/audio.cpp) server (CUDA) with `systemd --user` services: see the
-**[Linux guide](docs/linux.md)**. Every platform also works with the bundled voice bank or `TTS_ENGINE=none`.
-
-→ **[Requirements & tiers](docs/minimum-specs.md)** · **[Install profiles](docs/install-profiles.md)** · **[Dynamic voices](docs/dynamic-voices.md)**
-
-## Quick start
+## 60-second quick start
 
 ```bash
-nhj test ok                       # fire a "done" across every configured channel
-nhj voices                        # the cast + what each voice can speak with
-nhj set jan.ockerism 11           # tune any dial live (or just ask Claude)
-nhj mode rave                     # one-word vibe switch; nhj status to see current
+nhj test ok                       # hear/feel/see a “done” on every configured channel
+nhj voices                        # meet Jan, Bazza and Karren
+nhj set jan.ockerism 11           # tune a character live — or just ask your agent
+nhj mode rave                     # try a one-word mode; `nhj status` shows where you are
 ```
 
-→ Full walkthrough: **[Quick start](docs/quickstart.md)**
+## What you'll experience
+
+- 🎷 **Hold music while the agent works**, pausing when it finishes — a zero-attention working/done signal.
+- 👩 **Jan** says “all done”, 🧑‍💼 **Bazza** escalates warnings, and 📣 **Karren** takes over when it breaks.
+- 📟 **More than speakers:** alerts can fan out to a haptic mouse, pixel clocks, a LaMetric, a Vestaboard or a physical bell.
+- 🧭 **Many agents, still legible:** alerts name the session, several coding CLIs are supported, and voice can be enabled per project.
+
+<p align="center">
+  <img src="docs/assets/diagrams/flow.svg" width="440" alt="Four steps: your agent finishes and emits a status marker; an NHJ hook or MCP catches it; Jan, Bazza or Karren answers by severity; the alert reaches voice, haptic, display and bell channels.">
+</p>
 
 ## Documentation
 
-**[📖 guruswami-ai.github.io/not-happy-jan](https://guruswami-ai.github.io/not-happy-jan/)** — the full task-oriented docs site. By audience:
+Start at the **[docs site](https://guruswami-ai.github.io/not-happy-jan/)**, or jump by intent:
 
-- **New here** → [What is NHJ?](docs/what-is-nhj.md) — the full story in plain language
-- **Trying it / choosing a profile** → [Requirements & tiers](docs/minimum-specs.md) · [Install profiles](docs/install-profiles.md) · [Quick start](docs/quickstart.md)
-- **Living in it** → [Characters & dials](docs/characters.md) · [Modes](docs/modes.md) · [Audio & hold music](docs/AUDIO-STANDARD.md)
-- **Linux / non-Mac hosts** → [Linux guide](docs/linux.md) · **Other CLIs** → [Other agent CLIs](docs/other-clis.md) · **Several agents** → [Orchestration](docs/orchestration.md) · **Hold music that follows your agents (experimental)** → [Generative music](docs/generative-music.md) · **Scripts and cron** → [`nhj run`](docs/scripts.md)
-- **Wiring up devices & agents** → [Integration](docs/integration.md) · [AWTRIX display](docs/awtrix-display-setup.md) · [Haptic mouse](docs/haptic-mouse-setup.md) · [Devices](docs/devices/README.md)
-- **Customizing** → [Dynamic voices](docs/dynamic-voices.md) · [Configuration](docs/configuration.md)
-- **Building on it** → [Architecture](docs/ARCHITECTURE.md) · [Developer guide](docs/DEVELOPER-GUIDE.md) · [Contributing](CONTRIBUTING.md)
+- **New here:** [What is NHJ?](docs/what-is-nhj.md) · [Quick start](docs/quickstart.md) · [Watch the demo](docs/watch-the-demo.md)
+- **Choosing or installing:** [Requirements & tiers](docs/minimum-specs.md) · [Install profiles](docs/install-profiles.md) · [Linux guide](docs/linux.md)
+- **Living in it:** [Characters & dials](docs/characters.md) · [Modes](docs/modes.md) · [Audio & hold music](docs/AUDIO-STANDARD.md) · [Generative music](docs/generative-music.md)
+- **Wiring agents and devices:** [Integration](docs/integration.md) · [Other agent CLIs](docs/other-clis.md) · [Multi-agent orchestration](docs/orchestration.md) · [Devices](docs/devices/README.md) · [AWTRIX display](docs/awtrix-display-setup.md) · [Haptic mouse](docs/haptic-mouse-setup.md)
+- **Scripts and customising:** [`nhj run` for scripts & cron](docs/scripts.md) · [Dynamic voices](docs/dynamic-voices.md) · [Configuration](docs/configuration.md)
+- **Building on it:** [Architecture](docs/ARCHITECTURE.md) · [Developer guide](docs/DEVELOPER-GUIDE.md) · [Contributing](CONTRIBUTING.md)
 
 ## Security & privacy
 
-Inference runs **on-device** — the cloned-voice references never leave your machine.
-Local services bind to `127.0.0.1` by default; LAN access is a deliberate opt-in. A
-**secret guard** scans prompts for leaked credentials. Install/uninstall are user-context
-only (no `sudo`) and fully reversible. Report vulnerabilities via [SECURITY.md](SECURITY.md).
+Inference runs **on your machine**; cloned-voice references do not leave it. Local services bind to `127.0.0.1` by default, LAN access is opt-in, a secret guard can scan prompts for leaked credentials, and install/uninstall are reversible user-only operations. See **[SECURITY.md](SECURITY.md)**.
 
 ## Credits & license
 
-The core idea — narrating your coding agent's status via `[vibes:]` markers — comes from
-**[AgentVibes](https://github.com/paulpreibisch/AgentVibes)** (TTS for Claude Code) by Paul
-Preibisch, an actively-developed project with its own evolving character system. Not-Happy-Jan
-is an independent, unapologetically over-engineered take on that idea. TTS powered by
-[Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit) via
-[mlx-audio](https://github.com/ml-explore/mlx-audio).
+Built on the agent-feedback idea from **[AgentVibes](https://github.com/paulpreibisch/AgentVibes)** by Paul Preibisch — and taken way too far. Live voices use [Qwen3-TTS](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit) via [mlx-audio](https://github.com/ml-explore/mlx-audio) on Apple Silicon, or [audio.cpp](https://github.com/0xshug0/audio.cpp) on Linux/NVIDIA.
 
-Code is [MIT](LICENSE). Downloadable **media and voice assets are licensed separately**
-with mixed provenance — mostly AI-generated (CC0) or procedurally synthesised, hold music
-under a licensed Suno plan. See **[Media provenance](docs/media-provenance.md)**; do not
-assume the code license grants rights to media, and use only voice references you own or
-have documented consent to use.
+Code is [MIT](LICENSE). Media and voice assets are licensed separately with mixed provenance; see **[Media provenance](docs/media-provenance.md)** and only use voice references you own or have documented consent to use.
