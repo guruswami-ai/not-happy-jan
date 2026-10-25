@@ -554,3 +554,19 @@ def test_music_cli_explains_a_missing_audio_extra(monkeypatch):
         r = CliRunner().invoke(cli.cli, args)
         assert r.exit_code == 1, args
         assert "audio extra" in r.output and "Traceback" not in r.output, args
+
+
+def test_feed_works_with_a_muzak_double_that_has_no_accent_ttl():
+    """tests/test_mixer_poll.py (#78) drives feed() with a minimal fake muzak module; the TTL must have a default."""
+    import time
+
+    class M:
+        _MANUAL = "__manual__"
+        _read = staticmethod(lambda: {})
+        _fresh_busy = staticmethod(lambda d: {"a": 1})
+
+    d = Director()
+    now = time.time()
+    st = {"music_accent": "err", "music_accent_ts": now}
+    assert runtime.feed(M, d, 0.0, 1.0, 0.0, state=st) == now
+    assert d.at_bar(0).label == "breakdown"
