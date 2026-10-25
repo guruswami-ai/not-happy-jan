@@ -144,12 +144,14 @@ if ! [ -f "$VENV_PYTHON" ]; then
   fi
 fi
 
-# --minimal stays lean: no [server] extra (fastapi/uvicorn/soundfile/mlx-audio),
-# so low-RAM and non-Apple-Silicon hosts get hooks + MCP without the TTS stack.
+# --minimal stays lean: no [server] extra (fastapi/uvicorn/soundfile/mlx-audio)
+# and no device extras, so low-RAM and non-Apple-Silicon hosts get hooks + MCP
+# without the TTS stack. It does install [audio] so the bundled voice bank and
+# the mixer still play. default/full compose every extra (pre-split behavior).
 if [[ "$PROFILE" == "minimal" ]]; then
-  PKG_SPEC="$ROOT"
+  PKG_SPEC="$ROOT[audio]"
 else
-  PKG_SPEC="$ROOT[server]"
+  PKG_SPEC="$ROOT[server,audio,haptic,displays]"
 fi
 
 echo "Installing NHJ runtime..."
