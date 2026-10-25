@@ -28,8 +28,33 @@ if __name__ == "__main__":
     # the idempotent bootstrap for direct callers.
     resources.load_env()
 
-_LOG = resources.log_file("hook.log")
-_SEEN = resources.state_file("hook-seen.json")   # per-session fire-once ledger
+_LAZY_ATTRS = ("_LOG", "_SEEN")
+
+# Compatibility declarations only; module __getattr__ resolves these on access.
+_LOG: str
+_SEEN: Path
+
+
+def _log_path() -> str:
+    override = globals().get("_LOG")
+    return override if override is not None else resources.log_file("hook.log")
+
+
+def _seen_path() -> Path:
+    override = globals().get("_SEEN")
+    return override if override is not None else resources.state_file("hook-seen.json")
+
+
+def __getattr__(name: str) -> object:
+    if name == "_LOG":
+        return _log_path()
+    if name == "_SEEN":
+        return _seen_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
 VALID       = {"ok", "err", "warn", "attn", "celebrate", "step"}
 # Two marker forms (case-insensitive):
 #   [vibes:ok]                 — intent only, auto-routes to a character by intent
@@ -68,7 +93,7 @@ def _log(msg: str) -> None:
     try:
         import datetime
         resources.append_log(
-            _LOG, f"[{datetime.datetime.now().isoformat(timespec='milliseconds')}] {msg}")
+            _log_path(), f"[{datetime.datetime.now().isoformat(timespec='milliseconds')}] {msg}")
     except OSError:
         pass
 
@@ -87,7 +112,7 @@ _SEEN_CAP = 50
 
 def _seen_get(sid: str) -> str:
     try:
-        e = json.loads(_SEEN.read_text()).get(sid)
+        e = json.loads(_seen_path().read_text()).get(sid)
     except Exception:
         return ""
     if isinstance(e, dict):
@@ -101,23 +126,24 @@ def _seen_update(mutate) -> None:
     Same shape as ``state.update``: exclusive flock, unique temp file, atomic rename.
     Two Stop hooks (or a Stop racing the prompt hook) otherwise clobber the file.
     """
-    _SEEN.parent.mkdir(parents=True, exist_ok=True)
-    lock = _SEEN.with_suffix(".json.lock")
+    seen = _seen_path()
+    seen.parent.mkdir(parents=True, exist_ok=True)
+    lock = seen.with_suffix(".json.lock")
     lock.touch()
     with open(lock, "r+") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
         try:
             try:
-                loaded = json.loads(_SEEN.read_text())
+                loaded = json.loads(seen.read_text())
             except Exception:
                 loaded = {}
             if not isinstance(loaded, dict):
                 loaded = {}
             mutate(loaded)
             token = f".{os.getpid()}.{os.urandom(4).hex()}.json.tmp"
-            tmp = _SEEN.with_suffix(token)
+            tmp = seen.with_suffix(token)
             tmp.write_text(json.dumps(loaded))
-            tmp.replace(_SEEN)
+            tmp.replace(seen)
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
