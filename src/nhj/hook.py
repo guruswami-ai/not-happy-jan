@@ -21,6 +21,20 @@ from pathlib import Path
 
 from nhj import resources
 
+
+def _load_env() -> None:
+    """A hook is started by the agent, not a shell, so read ``.env`` here.
+
+    ``NHJ_SHARED_SECRET`` and ``NHJ_REMOTE_URL`` often live only in that file.
+    Loading once at import matches the MCP server and the TTS server.
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv(resources.env_file())
+
+
+_load_env()
+
 _LOG = resources.log_file("hook.log")
 _SEEN = resources.state_file("hook-seen.json")   # per-session fire-once ledger
 VALID       = {"ok", "err", "warn", "attn", "celebrate", "step"}
@@ -60,11 +74,18 @@ def source_label(cwd: str, remote: bool = False) -> str:
 def _log(msg: str) -> None:
     try:
         import datetime
-        Path(_LOG).parent.mkdir(parents=True, exist_ok=True)
-        with open(_LOG, "a") as f:
-            f.write(f"[{datetime.datetime.now().isoformat(timespec='milliseconds')}] {msg}\n")
+        resources.append_log(
+            _LOG, f"[{datetime.datetime.now().isoformat(timespec='milliseconds')}] {msg}")
     except OSError:
         pass
+
+
+def _log_fire(prefix: str, who: str, intent: str, message: str) -> None:
+    """Intent and length by default. The message text is kept only under NHJ_DEBUG."""
+    if os.environ.get("NHJ_DEBUG"):
+        _log(f"{prefix} who={who} intent={intent} msg={message!r}")
+    else:
+        _log(f"{prefix} who={who} intent={intent} chars={len(message)}")
 
 
 _SEEN_TTL = 86400.0   # drop ledger entries from sessions older than a day
@@ -260,15 +281,48 @@ def _remote_timeout() -> float:
     return v if v > 0 else _REMOTE_TIMEOUT
 
 
+def _tool_text(result) -> str:
+    """Text of a FastMCP tool result. ``None`` (the test doubles) is empty, not an error."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result
+    data = getattr(result, "data", None)
+    if isinstance(data, str) and data:
+        return data
+    if isinstance(data, dict):
+        inner = data.get("result")
+        if isinstance(inner, str) and inner:
+            return inner
+    parts: list[str] = []
+    for block in getattr(result, "content", None) or []:
+        text = block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+        if isinstance(text, str):
+            parts.append(text)
+    return "".join(parts)
+
+
 def _fire_remote(url: str, ev) -> bool:
     try:
         import asyncio
         from fastmcp import Client
+        from nhj.lan_auth import secret
+
+        token = secret()
+        # Omit auth when the secret is blank. The test doubles only accept ``url``,
+        # and a blank secret means the server is not checking.
+        auth = {"auth": token} if token else {}
 
         async def _call():
-            async with Client(url) as c:
-                # Full option set (incl. character) — identical to the local path.
-                await c.call_tool("nhj_vibe", ev.to_kwargs())
+            async with Client(url, **auth) as c:
+                # Full option set (incl. character), identical to the local path.
+                result = await c.call_tool("nhj_vibe", ev.to_kwargs())
+            text = _tool_text(result)
+            # The server returns a denial as ordinary tool text, not an MCP error.
+            # Counting that as fired hides the alert the secret is meant to protect.
+            if getattr(result, "is_error", False) or text.startswith("[nhj:error]"):
+                raise RuntimeError(text or "remote tool error")
+
         # A hung LAN daemon must not hang the hook to the agent's 30s hook timeout.
         asyncio.run(asyncio.wait_for(_call(), timeout=_remote_timeout()))
         return True
@@ -331,7 +385,10 @@ def main() -> int:
 
     waited = time.monotonic() - started
     changed = bool(sig) and sig != baseline
-    _log(f"scan waited={waited:.2f}s changed={changed} len={len(text)} tail={text[-50:]!r}")
+    if os.environ.get("NHJ_DEBUG"):
+        _log(f"scan waited={waited:.2f}s changed={changed} len={len(text)} tail={text[-50:]!r}")
+    else:
+        _log(f"scan waited={waited:.2f}s changed={changed} len={len(text)}")
     if not changed:
         _log("hook complete fired=0 (final message not flushed in time)")
         return 0
@@ -372,10 +429,10 @@ def main() -> int:
         sent = _fire_remote(remote_url, ev) if remote_url else _fire_local(ev)
         if sent:
             fired += 1
-            _log(f"fired who={who} intent={intent} msg={message[:60]!r}")
+            _log_fire("fired", who, intent, message)
         else:
             target = "remote" if remote_url else "local"
-            _log(f"failed target={target} who={who} intent={intent} msg={message[:60]!r}")
+            _log_fire(f"failed target={target}", who, intent, message)
 
     _log(f"hook complete fired={fired}")
     return 0

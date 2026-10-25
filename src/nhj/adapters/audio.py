@@ -15,6 +15,8 @@ TTS_ENGINE in .env:
   qwen     → local NHJ Qwen3-TTS server (default, Apple Silicon)
   audiocpp → an audio.cpp server (Breeze-TTS zero-shot cloning, CUDA/Linux) — see
              synth_audiocpp and the ``audiocpp:`` config block
+  os       → CPU system voice, no model: espeak-ng/espeak (Linux) or say (macOS)
+  piper    → CPU Piper CLI with a local .onnx voice (NHJ_PIPER_MODEL)
   none     → suppress TTS
 """
 from __future__ import annotations
@@ -23,6 +25,9 @@ import base64
 import hashlib
 import os
 import random
+import shutil
+import struct
+import subprocess
 import sys
 import time
 import uuid
@@ -140,15 +145,68 @@ def bank_clip_count(voice: str) -> int:
     return len(names)
 
 
-def _cache_path(voice: str, text: str, variant: str = "") -> Path:
-    # variant (intensity band) keeps the same novel line cached separately per dial level
-    digest = hashlib.sha256(f"{voice}::{variant}::{text}".encode()).hexdigest()[:32]
+def _cache_backend_id(model_tier: str = "") -> str:
+    """What will synthesize a cache miss right now.
+
+    The string uses the same URL, voice directory and tier the synth call uses.
+    A config URL alone would replay another server's clip, and the intensity band
+    is not the model tier.
+    """
+    engine = os.getenv("TTS_ENGINE", "qwen").lower()
+    if engine == "audiocpp":
+        acfg = _audiocpp_cfg()
+        url = os.getenv("NHJ_AUDIOCPP_URL") or acfg.get("url") or "http://127.0.0.1:8092"
+        voices = os.getenv("NHJ_AUDIOCPP_VOICES") or acfg.get("voices_dir") or "~/s2s/voices"
+        return f"audiocpp:{url}:{voices}"
+    if engine == "os":
+        return f"os:{sys.platform}:{(os.getenv('NHJ_OS_TTS_VOICE') or '').strip()}"
+    if engine == "piper":
+        return (f"piper:{os.getenv('NHJ_PIPER_MODEL', '')}:"
+                f"{(os.getenv('NHJ_PIPER_SPEAKER') or '').strip()}")
+    if engine == "none":
+        return "none"
+    url = os.getenv("NHJ_TTS_URL") or "http://localhost:9992"
+    tier = (os.getenv("NHJ_TTS_MODEL_TIER") or model_tier or "").strip()
+    return f"qwen:{url}:{tier}"
+
+
+def _cache_path(voice: str, text: str, variant: str = "", model_tier: str = "") -> Path:
+    # variant (intensity band) + backend identity keep the same novel line cached
+    # separately per dial level and per synthesis backend/settings.
+    digest = hashlib.sha256(
+        f"{voice}::{variant}::{_cache_backend_id(model_tier)}::{text}".encode()).hexdigest()[:32]
     return _CLIPS_ROOT / "cache" / f"{digest}.wav"
 
 
-def cache_hit(voice: str, text: str, variant: str = "") -> Optional[str]:
-    p = _cache_path(voice, text, variant)
-    return str(p) if p.is_file() and p.stat().st_size >= 100 else None
+def _riff_size_ok(p: Path) -> bool:
+    """True when the file's RIFF header declares exactly its actual size.
+
+    A clip truncated before the atomic-write fix (#56) can sit in the cache
+    indefinitely; size >= 100 alone would serve it forever (#59)."""
+    try:
+        with p.open("rb") as f:
+            head = f.read(8)
+        if len(head) < 8 or head[:4] != b"RIFF":
+            return False
+        return struct.unpack("<I", head[4:8])[0] == p.stat().st_size - 8
+    except OSError:
+        return False
+
+
+def cache_hit(voice: str, text: str, variant: str = "", model_tier: str = "") -> Optional[str]:
+    p = _cache_path(voice, text, variant, model_tier)
+    try:
+        if not p.is_file() or p.stat().st_size < 100:
+            return None
+    except OSError:
+        return None
+    if _riff_size_ok(p):
+        return str(p)
+    try:                       # truncated/foreign entry: drop it, treat as a miss
+        p.unlink()
+    except OSError:
+        pass
+    return None
 
 
 def pick_return_clip() -> Optional[str]:
@@ -178,8 +236,11 @@ def synth_qwen(text: str, base_url: str, voice: str = "jan",
         payload["speed"] = speed
     if temperature is not None:
         payload["temperature"] = temperature
+    from nhj.lan_auth import HEADER, secret
+    headers = {HEADER: secret()} if secret() else None
     try:
-        r = requests.post(f"{base_url.rstrip('/')}/tts/generate", json=payload, timeout=timeout)
+        r = requests.post(f"{base_url.rstrip('/')}/tts/generate", json=payload,
+                          headers=headers, timeout=timeout)
         r.raise_for_status()
         body = r.json()
         if body.get("status") != "ok" or not body.get("audio_b64"):
@@ -234,14 +295,106 @@ def synth_audiocpp(text: str, base_url: str, voice: str, voices_dir: str,
         return None
 
 
-def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> None:
+# ---------------------------------------------------------------------------
+# Tier 3 (CPU) — system voice / Piper CLI: speaks arbitrary text with no model
+# server and no GPU, so a minimal install is not limited to banked lines (#49).
+# Delivery shaping these engines cannot express (instruct, temperature) is
+# dropped; speed still applies once at playback, like every other tier.
+# ---------------------------------------------------------------------------
+_ESPEAK_PITCH = {"jan": 50, "bazza": 35, "karren": 65, "jan-whispering": 50}
+
+
+def _os_command(text: str, voice: str, platform: Optional[str] = None) -> tuple[Optional[list], str]:
+    """Argv + output suffix for the OS voice, or (None, suffix) if no binary exists.
+
+    The output path is the literal ``{out}`` placeholder; the caller substitutes it.
+    NHJ_OS_TTS_VOICE overrides the voice for both engines; on espeak the cast is
+    otherwise told apart by pitch (espeak -p is 0-99, 50 = neutral)."""
+    platform = sys.platform if platform is None else platform
+    wanted = (os.getenv("NHJ_OS_TTS_VOICE") or "").strip()
+    if platform == "darwin":
+        exe = shutil.which("say")
+        if not exe:
+            return None, ".aiff"
+        cmd = [exe, "-o", "{out}"]
+        if wanted:
+            cmd += ["-v", wanted]
+        return cmd + [text], ".aiff"
+    exe = shutil.which("espeak-ng") or shutil.which("espeak")
+    if not exe:
+        return None, ".wav"
+    cmd = [exe, "-w", "{out}", "-p", str(_ESPEAK_PITCH.get(voice, 50))]
+    if wanted:
+        cmd += ["-v", wanted]
+    return cmd + [text], ".wav"
+
+
+def _run_synth_cli(cmd: list, out: Path, stdin_text: str = "", timeout: float = 30.0,
+                   label: str = "cpu-tts") -> Optional[bytes]:
+    try:
+        subprocess.run(cmd, input=stdin_text.encode() if stdin_text else None,
+                       capture_output=True, timeout=timeout, check=True)
+        data = out.read_bytes()
+    except Exception as e:
+        print(f"[nhj] {label} error: {e}", file=sys.stderr)
+        return None
+    finally:
+        out.unlink(missing_ok=True)
+    if len(data) < 44 or data[:4] not in (b"RIFF", b"FORM"):   # WAV or AIFF (say)
+        print(f"[nhj] {label}: empty/invalid audio ({len(data)} B)", file=sys.stderr)
+        return None
+    return data
+
+
+def _synth_out_path(suffix: str) -> Path:
+    _TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    return _TMP_ROOT / f"synth-{os.getpid()}-{uuid.uuid4().hex[:8]}{suffix}"
+
+
+def synth_os(text: str, voice: str = "jan", timeout: float = 30.0) -> Optional[bytes]:
+    """System-voice synthesis (espeak-ng/espeak on Linux, say on macOS)."""
+    if not text.strip():
+        return None
+    cmd, suffix = _os_command(text, voice)
+    if cmd is None:
+        print("[nhj] os TTS: no espeak-ng/espeak/say binary found", file=sys.stderr)
+        return None
+    out = _synth_out_path(suffix)
+    return _run_synth_cli([str(out) if a == "{out}" else a for a in cmd], out,
+                          timeout=timeout, label="os TTS")
+
+
+def synth_piper(text: str, model: str, timeout: float = 60.0) -> Optional[bytes]:
+    """Piper CLI synthesis: piper --model <voice.onnx> --output_file <wav>, text on stdin."""
+    if not text.strip() or not model:
+        if not model:
+            print("[nhj] piper: NHJ_PIPER_MODEL is not set", file=sys.stderr)
+        return None
+    model_path = Path(model).expanduser()
+    if not model_path.is_file():
+        print(f"[nhj] piper: no model at {model_path}", file=sys.stderr)
+        return None
+    exe = shutil.which("piper")
+    if not exe:
+        print("[nhj] piper: piper binary not found on PATH", file=sys.stderr)
+        return None
+    out = _synth_out_path(".wav")
+    cmd = [exe, "--model", str(model_path), "--output_file", str(out)]
+    speaker = (os.getenv("NHJ_PIPER_SPEAKER") or "").strip()
+    if speaker:
+        cmd += ["--speaker", speaker]
+    return _run_synth_cli(cmd, out, stdin_text=text, timeout=timeout, label="piper")
+
+
+def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "",
+                    model_tier: str = "") -> None:
     """Write the cache WAV via a temp file and replace.
 
     A crash mid-write must not leave a truncated file at the cache path.
     ``cache_hit`` treats any file of 100 bytes or more as playable, so a partial
     WAV there would be spoken on the next turn.
     """
-    cache = _cache_path(voice, text, variant)
+    cache = _cache_path(voice, text, variant, model_tier)
     cache.parent.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_name(f".{cache.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
     try:
@@ -250,7 +403,14 @@ def _save_and_cache(voice: str, text: str, wav: bytes, variant: str = "") -> Non
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
-    try:  # LRU prune
+    try:  # sweep orphan temp files a hard kill mid-write leaked (#59), then LRU prune
+        cutoff = time.time() - 3600
+        for orphan in cache.parent.glob(".*.tmp"):
+            try:
+                if orphan.stat().st_mtime < cutoff:
+                    orphan.unlink()
+            except OSError:
+                pass
         entries = sorted(cache.parent.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
         for old in entries[_MAX_CACHE:]:
             try:
@@ -322,8 +482,9 @@ class AudioAdapter(NotificationAdapter):
 
         # Tier 1: bank clip (bare markers only) · Tier 2: message cache (per band)
         path = pick_bank_clip(voice, intent) if not message else None
+        model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
         if path is None and tts_text:
-            path = cache_hit(voice, tts_text, variant)
+            path = cache_hit(voice, tts_text, variant, model_tier)
             digest_delivered = bool(digest_n and path)        # a cached clip of the same sentence
 
         # Speed is applied ONCE, at playback (below) — never at synthesis. The deployed
@@ -338,7 +499,12 @@ class AudioAdapter(NotificationAdapter):
 
         ephemeral = False
         if path is None and tts_enabled:                      # Tier 3: live synth (unsped)
-            if os.getenv("TTS_ENGINE", "qwen").lower() == "audiocpp":
+            engine = os.getenv("TTS_ENGINE", "qwen").lower()
+            if engine == "os":
+                wav = synth_os(tts_text or intent, voice=voice)
+            elif engine == "piper":
+                wav = synth_piper(tts_text or intent, os.getenv("NHJ_PIPER_MODEL", ""))
+            elif engine == "audiocpp":
                 acfg = _audiocpp_cfg()
                 wav = synth_audiocpp(
                     tts_text or intent,
@@ -347,7 +513,6 @@ class AudioAdapter(NotificationAdapter):
                     os.getenv("NHJ_AUDIOCPP_VOICES") or acfg.get("voices_dir", "~/s2s/voices"))
             else:
                 base_url   = os.getenv("NHJ_TTS_URL", "http://localhost:9992")
-                model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
                 try:                                          # on-demand: warm the TTS server up first
                     from nhj import servers
                     servers.ensure("tts")
@@ -359,7 +524,7 @@ class AudioAdapter(NotificationAdapter):
             if wav:
                 wav = _normalize_voice_wav(wav)           # level live TTS to match the banks
                 if tts_text:
-                    _save_and_cache(voice, tts_text, wav, variant)
+                    _save_and_cache(voice, tts_text, wav, variant, model_tier)
                 path = _write_temp_wav(wav)
                 ephemeral = True
                 digest_delivered = bool(digest_n)

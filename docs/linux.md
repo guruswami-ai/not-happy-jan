@@ -9,12 +9,25 @@ cross-platform, how to get live voices on a Linux/NVIDIA box, and the traps wort
 |---|---|---|
 | Hooks, queue, worker, MCP ingest, `nhj` CLI | yes | yes |
 | Mixer (PyAV + sounddevice), hold music, bundled voice bank | yes | yes (PipeWire/PulseAudio/ALSA) |
-| Live voice | Qwen3-TTS on MLX (`TTS_ENGINE=qwen`) | **audio.cpp / Breeze-TTS** zero-shot cloning on CUDA (`TTS_ENGINE=audiocpp`) |
+| Live voice | Qwen3-TTS on MLX (`TTS_ENGINE=qwen`); system voice (`TTS_ENGINE=os`, `say`) | **audio.cpp / Breeze-TTS** zero-shot cloning on CUDA (`TTS_ENGINE=audiocpp`); CPU voices with no GPU: system voice (`TTS_ENGINE=os`, espeak-ng) or Piper (`TTS_ENGINE=piper`) |
 | Dynamic lines (ocker-bogan-nano) | llama.cpp (Homebrew) | llama.cpp native, or the Docker image (CPU or GPU) |
 | Persistent services | LaunchAgents | `systemd --user` |
 | Displays, Vestaboard, haptic mouse | yes | yes (network devices; haptic needs HID access) |
 
 `TTS_ENGINE=none` runs everything except live synthesis; the bundled clip bank still speaks.
+
+**No GPU?** Two CPU engines speak arbitrary message text (not just banked lines):
+
+- `TTS_ENGINE=os` — the system voice: `espeak-ng` (or `espeak`) on Linux, `say` on macOS.
+  Install with your package manager (e.g. `sudo apt install espeak-ng`). The cast is told
+  apart by espeak pitch; set `NHJ_OS_TTS_VOICE` to pick a specific espeak voice or `say -v` name.
+- `TTS_ENGINE=piper` — the [Piper](https://github.com/rhasspy/piper) CLI with one local
+  `.onnx` voice: download a voice, set `NHJ_PIPER_MODEL=/path/to/voice.onnx` (and
+  `NHJ_PIPER_SPEAKER` for multi-speaker models). Neural quality, still CPU-only.
+
+Both feed the same cache/mixer path as the other engines; if the binary is missing NHJ
+falls back to the bundled bank and logs why. Character delivery shaping these engines
+cannot express (instruct/temperature) is dropped; speed still applies at playback.
 
 ## Quick start
 

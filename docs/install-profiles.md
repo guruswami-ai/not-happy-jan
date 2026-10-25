@@ -86,7 +86,7 @@ loading them on demand.
 | Claude marker block | written to `~/.claude/CLAUDE.md` |
 | MCP server (stdio) | registered in `~/.claude/settings.json` |
 
-**No models are downloaded. No media is fetched.** NHJ runs with `TTS_ENGINE=none` (set in `.env`) — but it is **not silent**: the bundled voice bank ships in the package, so Jan, Bazza and Karren still speak pre-recorded in-character lines for each feedback state, and the hooks, `[vibes:]` markers, and any hardware adapters (haptic, pixel displays) all fire. `TTS_ENGINE=none` disables only **live** synthesis — to get freshly-generated lines and the dynamic bogan brain, use the default install. (Run `nhj mute` for true silence.)
+**No models are downloaded. No media is fetched.** NHJ runs with `TTS_ENGINE=none` (set in `.env`) — but it is **not silent**: the bundled voice bank ships in the package, so Jan, Bazza and Karren still speak pre-recorded in-character lines for each feedback state, and the hooks, `[vibes:]` markers, and HTTP hardware adapters all fire. Minimal installs the `[audio]` extra (mixer + bank playback) but not `[haptic]`/`[displays]`, so the haptic mouse and AWTRIX-over-MQTT need the default/full install — or `pip install 'not-happy-jan[haptic,displays]'` into the runtime venv. A bare `pip install not-happy-jan` is hooks/text-only core; add `[audio]` for sound. `TTS_ENGINE=none` disables only **live** synthesis — to get freshly-generated lines and the dynamic bogan brain, use the default install. (Run `nhj mute` for true silence.)
 
 This is the right profile for:
 

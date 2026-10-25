@@ -1362,8 +1362,10 @@ def install_mcp_service(
     )
     if listen not in ("127.0.0.1", "::1", "localhost"):
         app.print(
-            f"[yellow]Warning:[/yellow] MCP is network-accessible on {listen}; "
-            "configure authentication/firewall controls before use."
+            f"[yellow]Warning:[/yellow] MCP is open on the network at {listen}. "
+            "Anyone who can reach it can queue speech and display updates. "
+            "Set NHJ_SHARED_SECRET. Clients send it as Authorization: Bearer "
+            "or the X-NHJ-Token header."
         )
 
 
@@ -1440,6 +1442,22 @@ def remove_opencode(
         app.print(f"[dim]NHJ MCP server not found in {config.name}[/dim]")
 
 
+def _network_mcp_headers() -> dict[str, str] | None:
+    """Bearer header for a Claude network MCP entry, when the secret is set.
+
+    The command is often run from a shell that has not sourced ``.env``. Load
+    it here so a secret that lives only in that file is written into the entry.
+    """
+    from dotenv import load_dotenv
+    from nhj.lan_auth import secret
+
+    load_dotenv(resources.env_file())
+    token = secret()
+    if not token:
+        return None
+    return {"Authorization": f"Bearer {token}"}
+
+
 @cli.command("install-mcp")
 def install_mcp(
     settings: Path = typer.Option(
@@ -1500,15 +1518,29 @@ def install_mcp(
             url_path = f"{url}/sse"
         else:
             url_path = f"{url}/mcp"
-        mcp_servers[_MCP_SERVER_NAME] = {
-            "transport": t,
-            "url": url_path,
-        }
+        headers = _network_mcp_headers()
+        entry: dict = {"transport": t, "url": url_path}
+        if headers:
+            entry["headers"] = headers
+        mcp_servers[_MCP_SERVER_NAME] = entry
         app.print(f"[green]✓[/green] MCP server registered ({t}, {listen}:{port}):")
         app.print(f"  [dim]url:[/dim] {url_path}")
+        if headers:
+            app.print("  [dim]auth:[/dim] Authorization: Bearer written")
         if listen not in ("127.0.0.1", "::1", "localhost"):
-            app.print(f"  [yellow]⚠[/yellow]  MCP server is accessible on the network ({listen}). "
-                      f"Ensure your firewall is configured appropriately.")
+            if headers:
+                app.print(
+                    f"  [yellow]Warning:[/yellow] MCP is open on the network at {listen}. "
+                    "This entry carries NHJ_SHARED_SECRET as Authorization: Bearer."
+                )
+            else:
+                app.print(
+                    f"  [yellow]Warning:[/yellow] MCP is open on the network at {listen}. "
+                    "Anyone who can reach it can queue speech and display updates. "
+                    "Set NHJ_SHARED_SECRET and re-run install-mcp so this entry gets "
+                    "Authorization: Bearer. The Stop hook sends the same header on "
+                    "NHJ_REMOTE_URL. X-NHJ-Token is also accepted."
+                )
 
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(cfg, indent=2))
@@ -1557,9 +1589,20 @@ music_cli = typer.Typer(help="Generative hold music (opt-in: music.mode: generat
 cli.add_typer(music_cli, name="music")
 
 
+def _need_audio_extra() -> None:
+    """The music package needs numpy/scipy ([audio] extra); say so instead of a traceback."""
+    try:
+        import numpy  # noqa: F401
+        import scipy  # noqa: F401
+    except ImportError:
+        app.print("[red]generative music needs the audio extra:[/red] pip install 'not-happy-jan[audio]'")
+        raise typer.Exit(1)
+
+
 @music_cli.command("build-pack")
 def music_build_pack(dest: str = typer.Option("", "--dest", help="default: the data dir's music_packs/default")):
     """Render the bundled synth's stem pack (a few seconds of CPU)."""
+    _need_audio_extra()
     from nhj.music import runtime, synth
     path = Path(dest).expanduser() if dest else runtime.default_pack_dir()
     synth.build_default_pack(path)
@@ -1569,6 +1612,7 @@ def music_build_pack(dest: str = typer.Option("", "--dest", help="default: the d
 @music_cli.command("status")
 def music_status():
     """Mode, pack and continuation settings as the controller will see them."""
+    _need_audio_extra()
     from nhj.music import runtime
     from nhj.music.pack import PackError, load_pack
     cfg = runtime.settings()
@@ -1586,6 +1630,7 @@ def music_status():
 @music_cli.command("accent")
 def music_accent(intent: str = typer.Argument("err", help="err (4-bar breakdown) | ok (1-bar release)")):
     """Ask the running controller for a musical accent."""
+    _need_audio_extra()
     from nhj import inference_muzak
     from nhj.music import runtime
     runtime.note_accent(inference_muzak, intent)
@@ -1598,6 +1643,7 @@ def music_demo(
     continuation: bool = typer.Option(False, "--continuation", help="prime continuation sections (needs music.continuation configured)"),
 ):
     """Render a scripted timeline offline: 1, 2, 3, 4 sessions busy, a long turn, an error, recovery."""
+    _need_audio_extra()
     import wave
     import numpy as np
     from nhj.music import runtime, synth
