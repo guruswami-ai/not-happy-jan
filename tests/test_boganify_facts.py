@@ -30,7 +30,8 @@ class _Resp:
         return False
 
 
-def _stub(monkeypatch, replies: list[str], temps: list[float] | None = None):
+def _stub(monkeypatch, replies: list[str], temps: list[float] | None = None,
+          users: list[str] | None = None):
     """BYO endpoint so we never touch the live LLM; feed canned /chat/completions replies."""
     monkeypatch.setenv("NHJ_DYNAMIC", "1")
     monkeypatch.setenv("NHJ_DYNAMIC_BASE_URL", "http://dynamic.test/v1")
@@ -41,6 +42,8 @@ def _stub(monkeypatch, replies: list[str], temps: list[float] | None = None):
         body = json.loads(req.data.decode())
         if temps is not None:
             temps.append(body["temperature"])
+        if users is not None:
+            users.append(body["messages"][-1]["content"])
         try:
             text = next(it)
         except StopIteration as e:
@@ -80,6 +83,23 @@ def test_display_may_drop_numbers_but_must_not_change_them():
     assert not boganify.display_facts_ok(status, "13 MIN")
 
 
+def test_fact_clause_takes_the_numeric_tail():
+    assert boganify.fact_clause("backup finished in 12 minutes") == "12 minutes"
+    assert boganify.fact_clause("make failed with status 3") == "status 3"
+    assert boganify.fact_clause("pytest finished in 1 hour 5 minutes") == "1 hour 5 minutes"
+    assert boganify.fact_clause("nightly backup was interrupted") == "nightly backup was interrupted"
+
+
+def test_repair_line_appends_a_dropped_figure_and_skips_a_changed_one():
+    status = "backup finished in 12 minutes"
+    assert boganify.repair_line(status, "Backup's done, mate.") == "Backup's done, mate, 12 minutes"
+    assert boganify.repair_line(status, "took 13 minutes") is None
+    assert boganify.repair_line(status, "Backup finished in twelve minutes, mate.") is None
+    assert boganify.repair_line("make failed with status 3", "the make failed again") == (
+        "the make failed again, status 3"
+    )
+
+
 # ---- generate() with a stub endpoint ------------------------------------------------------------
 def test_a_line_that_keeps_the_number_is_accepted(monkeypatch):
     _stub(monkeypatch, ["Make died with status 3, mate."])
@@ -87,26 +107,42 @@ def test_a_line_that_keeps_the_number_is_accepted(monkeypatch):
     assert out == "Make died with status 3, mate."
 
 
-def test_a_line_that_drops_or_changes_the_number_falls_back(monkeypatch):
+def test_a_dropped_number_is_repaired_without_a_second_call(monkeypatch):
+    temps: list[float] = []
+    _stub(monkeypatch, ["Backup's done, mate."], temps)
+    out = boganify.generate(_Char(), "ok", "backup finished in 12 minutes", 4)
+    assert out == "Backup's done, mate, 12 minutes"
+    assert temps == [0.85]
+
+
+def test_a_changed_number_retries_at_the_same_temp_with_a_nudge(monkeypatch):
+    temps: list[float] = []
+    users: list[str] = []
+    _stub(monkeypatch, [
+        "failed with status 4",
+        "Make died with status 3, mate.",
+    ], temps, users)
+    out = boganify.generate(_Char(), "err", "make failed with status 3", 4)
+    assert out == "Make died with status 3, mate."
+    assert temps == [0.85, 0.85]
+    assert users[1] == 'Status update: make failed with status 3 (mention "3")'
+
+
+def test_a_nudge_that_still_drops_the_number_is_repaired(monkeypatch):
+    _stub(monkeypatch, ["failed with status 4", "the make failed again"])
+    out = boganify.generate(_Char(), "err", "make failed with status 3", 4)
+    assert out == "the make failed again, status 3"
+
+
+def test_a_nudge_that_still_changes_the_number_falls_back(monkeypatch):
     temps: list[float] = []
     _stub(monkeypatch, [
-        "the make failed again",
-        "Crikey, this is a right royal pain",
+        "failed with status 4",
+        "Crikey, this is a right royal pain, status 5",
     ], temps)
     out = boganify.generate(_Char(), "err", "make failed with status 3", 4)
     assert out is None
-    assert temps == [0.85, 0.3]
-
-
-def test_retry_at_lower_temperature_can_keep_the_number(monkeypatch):
-    temps: list[float] = []
-    _stub(monkeypatch, [
-        "Backup's done, mate.",
-        "Backup finished in twelve minutes, mate.",
-    ], temps)
-    out = boganify.generate(_Char(), "ok", "backup finished in 12 minutes", 4)
-    assert out == "Backup finished in twelve minutes, mate."
-    assert temps == [0.85, 0.3]
+    assert temps == [0.85, 0.85]
 
 
 def test_no_numbers_in_the_status_leaves_the_line_alone(monkeypatch):
@@ -115,9 +151,11 @@ def test_no_numbers_in_the_status_leaves_the_line_alone(monkeypatch):
     assert out == "Blimey, the backup got cut short, mate."
 
 
-def test_hour_and_minute_counts_must_both_survive(monkeypatch):
-    _stub(monkeypatch, ["the tests done in a hurry, mate.", "still in a rush"])
-    assert boganify.generate(_Char(), "ok", "pytest finished in 1 hour 5 minutes", 4) is None
+def test_hour_and_minute_counts_are_repaired_onto_the_line(monkeypatch):
+    _stub(monkeypatch, ["the tests done in a hurry, mate."])
+    assert boganify.generate(_Char(), "ok", "pytest finished in 1 hour 5 minutes", 4) == (
+        "the tests done in a hurry, mate, 1 hour 5 minutes"
+    )
 
 
 def test_http_failure_does_not_retry(monkeypatch):
@@ -170,10 +208,11 @@ def test_display_rejects_a_changed_number_then_falls_back(monkeypatch):
 
 # ---- caller still speaks; NHJ_DYNAMIC off is untouched ------------------------------------------
 def test_delivery_still_speaks_the_static_line_when_the_guard_rejects(monkeypatch):
-    _stub(monkeypatch, ["the make failed again", "still no number"])
+    _stub(monkeypatch, ["failed with status 4", "failed with status 5"])
     text = Character.load("jan").delivery("err", "make failed with status 3").text
     assert text
-    assert text != "the make failed again"
+    assert "status 4" not in text.lower()
+    assert "status 5" not in text.lower()
 
 
 def test_dynamic_off_does_not_call_the_model(monkeypatch):
