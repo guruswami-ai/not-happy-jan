@@ -292,6 +292,7 @@ class Mixer:
         self._music_gain = 1.0
         self.duck_external = False                           # set by control loop (cross-proc flag)
         self._fx: list[_Clip] = []                           # concurrent one-shots
+        self._accent_q: list[list] = []                      # [frames until it starts, clip]: not sounding yet, so not ducking yet
         self._ambient: list[_Clip] = []                      # concurrent beds (low; duck under voice)
         self._ambient_loop: _Clip | None = None              # looping mode bed (call-centre etc.)
         self._ambient_gated = False                          # True → loop sounds only while voice is active
@@ -334,6 +335,7 @@ class Mixer:
                 out = _tel_apply(self._tel_sos, self._tel_zi, out)
 
         with self._lock:
+            self._start_due_accents(frames)
             speaking = bool(self._fx) or self._voice_cur is not None or bool(self._voiceq)
         # sidechain duck while anything sounds; otherwise ride the long-session floor (the
         # controller eases music_floor down over a long inference, back to 1.0 when idle)
@@ -443,11 +445,30 @@ class Mixer:
         The generator renders about a second ahead of playback, so the hit waits for the audio
         already buffered: it then lands on the bar line the listener hears, not the one rendered.
         """
-        lead = sum(len(c) for c in list(self.buf)) / SR
-        pad = np.zeros((int(lead * SR), CH), dtype=np.float32)
-        clip = _Clip(np.concatenate([pad, np.ascontiguousarray(data, dtype=np.float32)]), gain)
+        lead = sum(len(c) for c in list(self.buf))
+        clip = _Clip(np.ascontiguousarray(data, dtype=np.float32), gain)
         with self._lock:
-            self._fx.append(clip)
+            self._accent_q.append([lead, clip])
+
+    def _start_due_accents(self, frames: int) -> None:
+        """Move accents whose start falls in this block onto the fx bus (caller holds the lock).
+
+        Only a *sounding* fx clip ducks the bed, so the wait for the bar line must not sit on
+        the bus as leading silence: that would pull the music down up to a second early.
+        """
+        if not self._accent_q:
+            return
+        waiting = []
+        for item in self._accent_q:
+            lead, clip = item
+            if lead < frames:
+                if lead:
+                    clip.data = np.concatenate([np.zeros((lead, CH), dtype=np.float32), clip.data])   # sample-accurate start
+                self._fx.append(clip)
+            else:
+                item[0] = lead - frames
+                waiting.append(item)
+        self._accent_q = waiting
 
     def play(self, path: str, bus: str = "voice", gain: float = 1.0,
              rate: float = 1.0, effect: str = "", pre: float = 0.0) -> None:

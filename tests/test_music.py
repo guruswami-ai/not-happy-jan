@@ -728,18 +728,57 @@ def test_render_timeline_lays_the_stinger_on_the_accent_bar_line():
     assert np.array_equal(loud[:start], quiet[:start])                          # nothing before the hit
 
 
-def test_mixer_places_the_accent_on_the_unducked_fx_bus_after_the_buffered_music():
+def _mixer_with_music(chunks):
+    """A Mixer whose bed is playing: constant music queued ahead of the callback."""
     from nhj import duck_player
     mixer = duck_player.Mixer([])
+    mixer._paused_evt.clear()
+    for _ in range(chunks):
+        mixer.buf.append(np.full((2048, 2), 0.5, np.float32))
+    return mixer
+
+
+def _run_blocks(mixer, n, frames=1024):
+    gains = []
+    for _ in range(n):
+        mixer._callback(np.zeros((frames, 2), np.float32), frames, None, None)
+        gains.append(round(float(mixer._music_gain), 3))
+    return gains
+
+
+def test_mixer_queues_the_accent_for_the_end_of_the_buffered_music_not_on_the_bus():
+    mixer = _mixer_with_music(3)                            # 6144 frames still queued ahead of playback
     try:
-        for _ in range(3):
-            mixer.buf.append(np.zeros((duck_player.SR // 2, 2), np.float32))    # 1.5 s still queued ahead of playback
-        hit = np.ones((100, 2), np.float32)
-        mixer._play_accent(hit, 0.5)
-        (clip,) = mixer._fx
-        assert clip.gain == 0.5
-        assert len(clip.data) == int(1.5 * duck_player.SR) + 100               # waits for the buffered music
-        assert not clip.data[: int(1.5 * duck_player.SR)].any() and clip.data[-1].all()
+        mixer._play_accent(np.ones((100, 2), np.float32), 0.5)
+        assert mixer._fx == []                              # not sounding, so it must not count as "speaking"
+        ((lead, clip),) = mixer._accent_q
+        assert lead == 6144 and clip.gain == 0.5 and len(clip.data) == 100
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_a_waiting_accent_does_not_duck_the_bed_until_it_actually_sounds():
+    mixer = _mixer_with_music(3)
+    try:
+        mixer._play_accent(np.ones((4096, 2), np.float32), 0.5)
+        gains = _run_blocks(mixer, 8)
+        assert gains[:6] == [1.0] * 6                       # the whole buffered lead: bed untouched (was ducked early)
+        assert gains[6] == pytest.approx(mixer._duck_floor)  # ducks when the hit starts
+        assert not mixer._accent_q and len(mixer._fx) == 1
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_an_accent_starting_mid_block_starts_on_the_exact_sample():
+    from nhj import duck_player
+    mixer = duck_player.Mixer([])                           # music paused: only the stinger is audible
+    try:
+        mixer._accent_q.append([1500, duck_player._Clip(np.ones((10, 2), np.float32), 1.0)])
+        first, second = np.zeros((1024, 2), np.float32), np.zeros((1024, 2), np.float32)
+        mixer._callback(first, 1024, None, None)
+        mixer._callback(second, 1024, None, None)           # 1500 - 1024 = 476 frames into this block
+        assert not first.any()
+        assert not second[:476].any() and second[476].all() and second[485].all() and not second[486:].any()
     finally:
         mixer.stop() if hasattr(mixer, "stop") else None
 
