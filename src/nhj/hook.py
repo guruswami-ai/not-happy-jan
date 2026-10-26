@@ -451,10 +451,14 @@ def main() -> int:
             sentences = re.split(r"(?<=[.!?])\s+", preceding)
             message = (sentences[-1].strip() if sentences else "")[:200]
 
+        # Cap marker text before validation: an over-long agent message must
+        # not make the whole marker (or the agent turn) fail because of NHJ.
+        from nhj import event
+        message = message[:event.MAX_MESSAGE_CHARS]
+
         # Validate at the boundary — same model the MCP tool uses. Bad options never
         # crash the session: log and skip this marker.
         try:
-            from nhj import event
             ev, unknown = event.from_inline(intent, options, message, who_char)
         except Exception as e:
             _log(f"skip [{who}:{intent}] — invalid options: {e}")
