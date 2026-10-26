@@ -279,6 +279,8 @@ class Mixer:
         self._paused_evt.set()                               # music starts silent
         # `source(buf, paused)` builds an alternative music producer (generative stems, #63)
         self._decoder = source(self.buf, self._paused_evt) if source else _Decoder(playlist, self.buf, self._paused_evt)
+        if hasattr(self._decoder, "on_accent"):                # generative source: stingers ride the fx bus
+            self._decoder.on_accent = self._play_accent
         try:
             self.master = float(os.getenv("NHJ_MUZAK_VOLUME", "0.5"))
         except ValueError:
@@ -434,6 +436,18 @@ class Mixer:
         """True while any voice/fx clip is queued or playing (e.g. the on-hold intro +
         click). Used to hold the music bed paused until that sequence finishes."""
         return bool(self._fx) or self._voice_cur is not None or bool(self._voiceq)
+
+    def _play_accent(self, data: np.ndarray, gain: float) -> None:
+        """A one-shot over the bed, on the fx bus (not music-ducked, so it is heard under the voice).
+
+        The generator renders about a second ahead of playback, so the hit waits for the audio
+        already buffered: it then lands on the bar line the listener hears, not the one rendered.
+        """
+        lead = sum(len(c) for c in list(self.buf)) / SR
+        pad = np.zeros((int(lead * SR), CH), dtype=np.float32)
+        clip = _Clip(np.concatenate([pad, np.ascontiguousarray(data, dtype=np.float32)]), gain)
+        with self._lock:
+            self._fx.append(clip)
 
     def play(self, path: str, bus: str = "voice", gain: float = 1.0,
              rate: float = 1.0, effect: str = "", pre: float = 0.0) -> None:

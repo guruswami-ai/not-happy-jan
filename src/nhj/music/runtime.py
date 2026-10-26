@@ -14,6 +14,7 @@ from nhj.music.director import MANUAL_BUSY, Director
 from nhj.music.pack import PackError, load_pack
 
 
+DEFAULT_ACCENT_GAIN = 0.5        # stinger level (peak 1.0 x this); about the voice level at the onset, mostly outside speech bands
 DEFAULT_ACCENT_TTL_S = 8.0       # used when the muzak module (or a test double) does not define ACCENT_TTL_S
 
 
@@ -62,7 +63,8 @@ def make_source(cfg: dict | None = None):
     from nhj.music.source import StemSource
     director = Director(long_after_s=float(cfg.get("long_after_s", 30)), long_ramp_s=float(cfg.get("long_ramp_s", 30)))
     composer = Composer(pack, cfg.get("continuation") or {})
-    return (lambda buf, paused: StemSource(pack, director, buf, paused, composer)), director
+    accent_gain = float(cfg.get("accent_gain", DEFAULT_ACCENT_GAIN))
+    return (lambda buf, paused: StemSource(pack, director, buf, paused, composer, accent_gain)), director
 
 
 def busy_count(M, state=None) -> int:

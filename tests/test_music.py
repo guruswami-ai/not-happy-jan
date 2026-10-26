@@ -616,3 +616,156 @@ def test_music_status_says_whether_hold_music_is_on(monkeypatch):
     set_flag("muzak", True)
     on = CliRunner().invoke(cli.cli, ["music", "status"])
     assert on.exit_code == 0 and "hold music: on" in on.output
+
+
+# ---- accent stingers (louder err/ok accents) ----------------------------------------------
+def test_stingers_are_deterministic_normalised_and_sound_on_the_hit():
+    for kind in synth.STINGERS:
+        a = synth.render_stinger(kind)
+        assert a.dtype == np.float32 and a.ndim == 2 and a.shape[1] == 2
+        assert np.isfinite(a).all()
+        assert float(np.abs(a).max()) == pytest.approx(1.0, abs=1e-4)          # the player sets the level
+        assert np.array_equal(a, synth.render_stinger(kind))
+        head = float(np.sqrt(np.mean(a[:12000] ** 2)))
+        tail = float(np.sqrt(np.mean(a[-4800:] ** 2)))
+        assert head > 0.05 and tail < head / 10                                # a hit that decays, no click at the end
+        assert 1.0 < len(a) / packmod.SR < 2.0
+    with pytest.raises(ValueError):
+        synth.render_stinger("warn")
+
+
+def test_plan_flags_the_accent_bar_exactly_once():
+    d = Director(breakdown_bars=4)
+    d.update(1, 0)
+    assert d.at_bar(0).accent == ""
+    d.accent("err")
+    flagged = [d.at_bar(b).accent for b in range(1, 7)]
+    assert flagged == ["err", "", "", "", "", ""]                              # first bar of the breakdown only
+    d.accent("ok")
+    assert [d.at_bar(b).accent for b in (7, 8)] == ["ok", ""]
+
+
+def test_accents_that_change_nothing_do_not_flag():
+    d = Director(breakdown_bars=4, accent_ttl_s=8.0, clock=iter([0.0, 0.0, 100.0, 100.0]).__next__)
+    d.update(4, 0)
+    d.accent("err")                                      # asked at t=0
+    assert d.at_bar(0).accent == "err"
+    d.accent("ok")                                       # inside the breakdown: ignored, so no stinger either
+    assert d.at_bar(1).accent == ""
+    d2 = Director(accent_ttl_s=8.0, clock=iter([0.0, 100.0]).__next__)
+    d2.accent("err")                                     # stale by the time a bar line comes round
+    assert d2.at_bar(0).accent == ""
+    d3 = Director()
+    d3.accent("warn")
+    assert d3.at_bar(0).accent == ""
+
+
+def test_release_is_the_full_arrangement_so_it_lifts_a_sparse_bed():
+    d = Director()
+    d.update(1, 0)
+    assert d.at_bar(0).layers == frozenset({"kick", "bass"})
+    d.accent("ok")
+    rel = d.at_bar(1)
+    assert rel.label == "release" and rel.layers == frozenset({"kick", "bass", "hats", "clap", "arp", "pad"})
+    assert d.at_bar(2).layers == frozenset({"kick", "bass"})
+
+
+def test_source_calls_back_once_per_accent_with_the_stinger_and_gain():
+    pk = _const_pack(kick=0.2, bass=0.2, pad=0.2)
+    d = Director(breakdown_bars=1)
+    d.update(1, 0)
+    src = StemSource(pk, d, [], threading.Event(), accent_gain=0.4)
+    hits = []
+    src.on_accent = lambda data, gain: hits.append((len(data), gain))
+    gen = src.iter_blocks()
+    for _ in range(3):
+        next(gen)
+    assert hits == []
+    d.accent("err")
+    for _ in range(int(2 * pk.spb // 1024) + 4):                                # run past the next bar line
+        next(gen)
+    assert hits == [(len(synth.render_stinger("err")), 0.4)]
+
+
+def test_gain_zero_or_no_player_means_no_stinger_and_a_failing_player_never_breaks_the_bed():
+    pk = _const_pack(kick=0.2)
+    for gain, wire in ((0.0, True), (0.5, False)):
+        d = Director()
+        d.update(1, 0)
+        src = StemSource(pk, d, [], threading.Event(), accent_gain=gain)
+        calls = []
+        if wire:
+            src.on_accent = lambda *a: calls.append(a)
+        d.accent("err")
+        gen = src.iter_blocks()
+        for _ in range(int(2 * pk.spb // 1024) + 4):
+            next(gen)
+        assert calls == []
+    d = Director()
+    d.update(1, 0)
+    src = StemSource(pk, d, [], threading.Event(), accent_gain=0.5)
+
+    def boom(*_a):
+        raise RuntimeError("no audio device")
+    src.on_accent = boom
+    d.accent("err")
+    gen = src.iter_blocks()
+    blocks = [next(gen) for _ in range(int(2 * pk.spb // 1024) + 4)]
+    assert all(np.isfinite(b).all() for b in blocks)                            # still playing
+
+
+def test_render_timeline_lays_the_stinger_on_the_accent_bar_line():
+    pk = _const_pack(kick=0.1, bass=0.1)
+    bar = int(pk.spb)
+    script = [(2 * bar / packmod.SR, 1, 0.0, None), (0.01, 1, 0.0, "err"), (3 * bar / packmod.SR, 1, 0.0, None)]
+    quiet, _ = render_timeline(pk, Director(clock=lambda: 0.0), script, accent_gain=0.0)
+    loud, log = render_timeline(pk, Director(clock=lambda: 0.0), script, accent_gain=0.6)
+    diff = np.abs(loud - quiet).max(axis=1)
+    start = int(np.argmax(diff > 1e-6))
+    bar_of_breakdown = next(i for i, (b, lab) in enumerate(log) if lab == "breakdown")
+    assert start == int(round(log[bar_of_breakdown][0] * pk.spb))               # exactly on that bar's first sample
+    assert float(diff.max()) == pytest.approx(0.6, abs=0.05)                    # peak 1.0 x gain
+    assert np.array_equal(loud[:start], quiet[:start])                          # nothing before the hit
+
+
+def test_mixer_places_the_accent_on_the_unducked_fx_bus_after_the_buffered_music():
+    from nhj import duck_player
+    mixer = duck_player.Mixer([])
+    try:
+        for _ in range(3):
+            mixer.buf.append(np.zeros((duck_player.SR // 2, 2), np.float32))    # 1.5 s still queued ahead of playback
+        hit = np.ones((100, 2), np.float32)
+        mixer._play_accent(hit, 0.5)
+        (clip,) = mixer._fx
+        assert clip.gain == 0.5
+        assert len(clip.data) == int(1.5 * duck_player.SR) + 100               # waits for the buffered music
+        assert not clip.data[: int(1.5 * duck_player.SR)].any() and clip.data[-1].all()
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_mixer_hooks_a_generative_source_but_leaves_recorded_alone():
+    from nhj import duck_player
+    pk = _const_pack(kick=0.2)
+    holder = {}
+
+    def factory(buf, paused):
+        holder["src"] = StemSource(pk, Director(), buf, paused, accent_gain=0.5)
+        return holder["src"]
+    mixer = duck_player.Mixer([], source=factory)
+    try:
+        assert holder["src"].on_accent == mixer._play_accent
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+    plain = duck_player.Mixer([])
+    assert not hasattr(plain._decoder, "on_accent")
+
+
+def test_accent_gain_config_is_validated_and_defaulted():
+    assert config_schema.Music(accent_gain=0.5).accent_gain == 0.5
+    assert config_schema.Music(accent_gain=0).accent_gain == 0
+    for bad in (-0.1, 2.5):
+        with pytest.raises(Exception):
+            config_schema.Music(accent_gain=bad)
+    from nhj import config
+    assert config.get()["music"]["accent_gain"] == runtime.DEFAULT_ACCENT_GAIN == 0.5

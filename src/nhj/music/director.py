@@ -11,7 +11,10 @@ the arrangement only ever changes on the beat grid. That is what makes it sound 
     4+     + pad (full arrangement)
     long   tension ramps 0 -> 1 (a rising high-pass sweep) after `long_after_s`
     err    breakdown for `breakdown_bars` (pad + arp, no drums or bass), then back
-    ok     one bar of release (kick + bass + pad), then back
+    ok     one bar of release (the full arrangement, whatever was playing), then back
+
+The bar an accent starts on is flagged (`Plan.accent`) exactly once, so the player can lay a
+one-shot stinger on top of it: layer changes alone are quieter, not louder.
 
 Nobody busy means silence; the controller pauses the bed then, exactly as for recorded music.
 `warn` and `attn` accents are accepted and ignored for now.
@@ -29,7 +32,7 @@ _LADDER = (
     frozenset({"kick", "bass", "hats", "clap", "arp", "pad"}),
 )
 _BREAKDOWN = frozenset({"pad", "arp"})
-_RELEASE = frozenset({"kick", "bass", "pad"})
+_RELEASE = _LADDER[-1]
 MANUAL_BUSY = 4                      # `nhj mode rave` / `nhj muzak start`: the full arrangement
 
 
@@ -38,6 +41,7 @@ class Plan:
     layers: frozenset
     tension: float                   # 0..1
     label: str                       # "busy:2", "breakdown", "release", ... (for logs and the demo)
+    accent: str = ""                 # "err" | "ok" on the single bar an accent starts, else ""
 
 
 class Director:
@@ -70,6 +74,7 @@ class Director:
     def at_bar(self, bar: int) -> Plan:
         """The plan for the bar that starts now. Consumes pending accents."""
         with self._lock:
+            fired = ""
             while self._pending:
                 intent, asked = self._pending.pop(0)
                 if self._clock() - asked > self.accent_ttl_s:
@@ -77,13 +82,15 @@ class Director:
                 if intent == "err":
                     self._hold_until, self._hold_layers, self._hold_label = (
                         bar + self.breakdown_bars, _BREAKDOWN, "breakdown")
+                    fired = "err"
                 elif intent == "ok" and bar >= self._hold_until:       # never cut a breakdown short
                     self._hold_until, self._hold_layers, self._hold_label = bar + 1, _RELEASE, "release"
+                    fired = fired or "ok"                  # an err in the same tick wins
             tension = 0.0
             if self._elapsed > self.long_after_s:
                 tension = min(1.0, (self._elapsed - self.long_after_s) / self.long_ramp_s)
             if bar < self._hold_until:
-                return Plan(self._hold_layers, 0.0, self._hold_label)
+                return Plan(self._hold_layers, 0.0, self._hold_label, fired)
             if self._busy <= 0:
                 return Plan(frozenset(), 0.0, "idle")
             return Plan(_LADDER[min(self._busy, len(_LADDER)) - 1], tension, f"busy:{self._busy}")

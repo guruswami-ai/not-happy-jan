@@ -123,6 +123,9 @@ music:
   pack: ""
   long_after_s: 30
   long_ramp_s: 30
+  # Level of the err/ok accent stingers laid over the bed (1.0 = full scale peak; 0 = no stingers,
+  # layer changes only). They bypass the voice duck on purpose, so they are heard under a spoken line.
+  accent_gain: 0.5
   continuation:
     enabled: false
 

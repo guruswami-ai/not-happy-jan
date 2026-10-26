@@ -150,6 +150,57 @@ def render_stems(seed: int = 7, bars: int = BARS) -> dict[str, np.ndarray]:
     return out
 
 
+STINGERS = ("err", "ok")
+
+
+def render_stinger(kind: str, seed: int = 7) -> np.ndarray:
+    """A one-shot accent sound, (n, 2) float32 peaking at 1.0 (the player applies the gain).
+
+    These are mixed ON TOP of the bed at full level, so a hit is heard even while the voice
+    ducks the music. `err`: sub boom, falling noise sweep and a dissonant low stab, ~1.6 s.
+    `ok`: bright crash plus a quick rising chime, ~1.4 s. Energy sits in the sub and above
+    ~1.5 kHz so the line being spoken over it stays clear. Deterministic.
+    """
+    if kind not in STINGERS:
+        raise ValueError(f"unknown stinger {kind!r}; expected one of {STINGERS}")
+    rng = np.random.default_rng(seed + (0 if kind == "err" else 1))
+    n = int((1.6 if kind == "err" else 1.4) * SR)
+    t = np.arange(n) / SR
+    out = np.zeros((n, 2))
+    if kind == "err":
+        ph = 2 * np.pi * np.cumsum(34 + 70 * np.exp(-t / 0.18)) / SR              # pitch-dropping sub boom
+        boom = np.sin(ph) * np.exp(-t / 0.45)
+        sweep = np.zeros(n)
+        m = int(0.9 * SR)                                                          # downlifter: 8 kHz -> 1.5 kHz
+        fc = 8000.0 * (1500.0 / 8000.0) ** (np.arange(m) / m)
+        a = np.exp(-2 * np.pi * fc / SR)
+        noise = rng.standard_normal(m)
+        lp = np.zeros(m)
+        y = 0.0
+        for i in range(m):                                                         # one-pole low-pass with a moving corner
+            y = (1 - a[i]) * noise[i] + a[i] * y
+            lp[i] = y
+        sweep[:m] = signal.sosfilt(_sos("hp", 1200), lp) * np.exp(-np.arange(m) / (0.45 * SR)) * 6.0
+        stab = (_saw(_hz(45), n) + _saw(_hz(51), n)) * np.exp(-t / 0.28)           # A2 + Eb3, a tritone
+        stab = signal.sosfilt(_sos("lp", 900, 2), stab) * 0.35
+        mono = boom * 0.9 + sweep * 0.55 + stab
+        out[:, 0], out[:, 1] = mono, np.roll(mono, int(0.0004 * SR))               # a touch of width
+    else:
+        crash = signal.sosfilt(_sos("hp", 4500), rng.standard_normal(n)) * np.exp(-t / 0.42)
+        thump = np.sin(2 * np.pi * np.cumsum(55 + 60 * np.exp(-t / 0.03)) / SR) * np.exp(-t / 0.16)
+        chime = np.zeros(n)
+        for k, (note, at) in enumerate(((93, 0.0), (100, 0.07), (105, 0.14))):     # A6, E7, A7 up the open fifth
+            o = int(at * SR)
+            f = _hz(note)
+            tone = (np.sin(2 * np.pi * f * t[: n - o]) + 0.4 * np.sin(2 * np.pi * 2.01 * f * t[: n - o]))
+            chime[o:] += tone * np.exp(-t[: n - o] / 0.34) * (0.7 + 0.1 * k)
+        mono = crash * 0.7 + thump * 0.8 + chime * 0.3
+        out[:, 0], out[:, 1] = mono, np.roll(mono, int(0.0003 * SR))
+    fade = int(0.02 * SR)
+    out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None]
+    return (out / max(float(np.abs(out).max()), 1e-9)).astype(np.float32)
+
+
 def build_default_pack(dest, seed: int = 7):
     return save_pack(dest, "nhj-synth-trance", BPM, BARS, render_stems(seed), {
         "generator": "nhj.music.synth", "seed": seed, "licence": "MIT (original NHJ code)",

@@ -41,9 +41,17 @@ class SectionProvider(Protocol):
 
 
 class StemSource(_Decoder):
-    def __init__(self, pack: Pack, director: Director, buf, paused, sections: SectionProvider | None = None):
+    """Plays the bed. When `accent_gain > 0` and `on_accent` is set, the bar an err/ok accent starts on
+    also calls `on_accent(stinger, gain)` so the player can lay a one-shot over the bed (it is
+    called at render time, which runs ahead of playback; the player owns that offset)."""
+
+    def __init__(self, pack: Pack, director: Director, buf, paused, sections: SectionProvider | None = None,
+                 accent_gain: float = 0.0):
         super().__init__([], buf, paused)
         self.pack, self.director, self.sections = pack, director, sections
+        self.accent_gain = max(0.0, float(accent_gain))
+        self.on_accent = None                                  # callable(np.ndarray, float) | None
+        self._stingers: dict[str, np.ndarray] = {}
         self.plan_log: list[tuple[int, str]] = []              # (bar, label); small, for the demo and tests
 
     def run(self) -> None:
@@ -56,6 +64,17 @@ class StemSource(_Decoder):
             except Exception as e:                             # one bad block must not silence the bed
                 resources.debug(f"music: stem source error, restarting the arrangement: {type(e).__name__}: {e}")
                 time.sleep(0.2)
+
+    def _hit(self, intent: str) -> None:
+        if self.accent_gain <= 0.0 or self.on_accent is None:
+            return
+        try:
+            if intent not in self._stingers:
+                from nhj.music import synth
+                self._stingers[intent] = synth.render_stinger(intent)
+            self.on_accent(self._stingers[intent], self.accent_gain)
+        except Exception as e:                                 # an accent must never silence the bed
+            resources.debug(f"music: accent stinger failed: {type(e).__name__}: {e}")
 
     def iter_blocks(self):
         pack, spb, n_loop = self.pack, self.pack.spb, self.pack.n
@@ -77,6 +96,8 @@ class StemSource(_Decoder):
                 boundary, nxt = nxt, start_of(bar + 1)
                 plan = self.director.at_bar(bar)
                 self.plan_log.append((bar, plan.label))
+                if plan.accent:
+                    self._hit(plan.accent)
                 frm = {k: to.get(k, 0.0) for k in pack.layers}
                 to = {k: (1.0 if k in plan.layers else 0.0) for k in pack.layers}
                 tens_from, tens_to = tens_to, plan.tension
@@ -125,11 +146,15 @@ class StemSource(_Decoder):
 
 
 def render_timeline(pack: Pack, director: Director, script: list[tuple[float, int, float, str | None]],
-                    sections: SectionProvider | None = None) -> tuple[np.ndarray, list[tuple[int, str]]]:
+                    sections: SectionProvider | None = None,
+                    accent_gain: float = 0.0) -> tuple[np.ndarray, list[tuple[int, str]]]:
     """Offline render. *script* = [(seconds, busy, elapsed_s, accent), ...] applied in order; the
     director state changes at each entry's start (a real controller updates continuously, the
     bar lines decide when it is heard). Returns (audio, plan log)."""
-    src = StemSource(pack, director, [], threading.Event(), sections)
+    src = StemSource(pack, director, [], threading.Event(), sections, accent_gain=accent_gain)
+    hits: list[tuple[int, np.ndarray]] = []
+    emitted = 0
+    src.on_accent = lambda data, gain: hits.append((emitted, data * gain))
     gen = src.iter_blocks()
     out: list[np.ndarray] = []
     for seconds, busy, elapsed, accent in script:
@@ -142,4 +167,9 @@ def render_timeline(pack: Pack, director: Director, script: list[tuple[float, in
             blk = next(gen)
             out.append(blk)
             got += len(blk)
-    return np.concatenate(out), src.plan_log
+            emitted += len(blk)
+    audio = np.concatenate(out)
+    for at, hit in hits:                                       # stingers land on their bar line
+        end = min(len(audio), at + len(hit))
+        audio[at:end] += hit[: end - at]
+    return audio, src.plan_log
