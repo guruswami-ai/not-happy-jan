@@ -34,6 +34,7 @@ SR = 48000          # output samplerate
 CH = 2              # stereo
 BLOCK = 1024        # ~21ms per callback
 _STATE_TICK_S = 0.25   # music.json cadence. The play-event spool stays on the 50 ms wake.
+_ACCENT_STALE_S = 8.0   # a waiting accent is dropped if the bed stays paused this long (matches the director's TTL)
 _BUF_MAX = 48       # bounded music decode buffer (~1s) → frozen position when full/paused
 _LAZY_ATTRS = ("_EVENTS",)
 
@@ -292,7 +293,8 @@ class Mixer:
         self._music_gain = 1.0
         self.duck_external = False                           # set by control loop (cross-proc flag)
         self._fx: list[_Clip] = []                           # concurrent one-shots
-        self._accent_q: list[list] = []                      # [frames until it starts, clip]: not sounding yet, so not ducking yet
+        self._accent_q: list[list] = []                      # [bed frames until it starts, clip]: not sounding yet, so not ducking yet
+        self._accent_stalled = 0                             # output frames the bed has been paused with an accent waiting
         self._ambient: list[_Clip] = []                      # concurrent beds (low; duck under voice)
         self._ambient_loop: _Clip | None = None              # looping mode bed (call-centre etc.)
         self._ambient_gated = False                          # True → loop sounds only while voice is active
@@ -319,8 +321,8 @@ class Mixer:
         out = np.zeros((frames, CH), dtype=np.float32)
 
         # music bed (skipped while paused → exact-resume)
+        filled = 0                                           # bed frames actually played this block
         if not self._paused_evt.is_set():
-            filled = 0
             while filled < frames and self.buf:
                 chunk = self.buf[0]
                 take = min(len(chunk), frames - filled)
@@ -335,7 +337,7 @@ class Mixer:
                 out = _tel_apply(self._tel_sos, self._tel_zi, out)
 
         with self._lock:
-            self._start_due_accents(frames)
+            self._start_due_accents(filled, frames)
             speaking = bool(self._fx) or self._voice_cur is not None or bool(self._voiceq)
         # sidechain duck while anything sounds; otherwise ride the long-session floor (the
         # controller eases music_floor down over a long inference, back to 1.0 when idle)
@@ -450,23 +452,35 @@ class Mixer:
         with self._lock:
             self._accent_q.append([lead, clip])
 
-    def _start_due_accents(self, frames: int) -> None:
+    def _start_due_accents(self, played: int, frames: int) -> None:
         """Move accents whose start falls in this block onto the fx bus (caller holds the lock).
 
         Only a *sounding* fx clip ducks the bed, so the wait for the bar line must not sit on
         the bus as leading silence: that would pull the music down up to a second early.
+        The countdown follows the bed, not the clock: *played* is how many bed frames this block
+        consumed, so a paused or starved bed freezes it and the hit still lands on its bar line
+        when playback resumes. A bed paused longer than the accent TTL drops it instead of
+        firing a stale hit at the start of the next turn.
         """
         if not self._accent_q:
+            self._accent_stalled = 0
             return
+        if played == 0 and self._paused_evt.is_set():
+            self._accent_stalled += frames
+            if self._accent_stalled > _ACCENT_STALE_S * SR:
+                self._accent_q.clear()
+                self._accent_stalled = 0
+            return
+        self._accent_stalled = 0
         waiting = []
         for item in self._accent_q:
             lead, clip = item
-            if lead < frames:
+            if lead < played:
                 if lead:
                     clip.data = np.concatenate([np.zeros((lead, CH), dtype=np.float32), clip.data])   # sample-accurate start
                 self._fx.append(clip)
             else:
-                item[0] = lead - frames
+                item[0] = lead - played
                 waiting.append(item)
         self._accent_q = waiting
 

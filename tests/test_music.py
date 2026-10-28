@@ -761,6 +761,7 @@ def test_a_waiting_accent_does_not_duck_the_bed_until_it_actually_sounds():
     mixer = _mixer_with_music(3)
     try:
         mixer._play_accent(np.ones((4096, 2), np.float32), 0.5)
+        mixer.buf.append(np.full((4096, 2), 0.5, np.float32))      # the next bar, as the generator pushes it
         gains = _run_blocks(mixer, 8)
         assert gains[:6] == [1.0] * 6                       # the whole buffered lead: bed untouched (was ducked early)
         assert gains[6] == pytest.approx(mixer._duck_floor)  # ducks when the hit starts
@@ -769,16 +770,70 @@ def test_a_waiting_accent_does_not_duck_the_bed_until_it_actually_sounds():
         mixer.stop() if hasattr(mixer, "stop") else None
 
 
+def _silent_bed(mixer, frames):
+    mixer._paused_evt.clear()
+    mixer.buf.clear()
+    mixer.buf.append(np.zeros((frames, 2), np.float32))     # a playing bed that adds nothing to the output
+
+
 def test_an_accent_starting_mid_block_starts_on_the_exact_sample():
     from nhj import duck_player
-    mixer = duck_player.Mixer([])                           # music paused: only the stinger is audible
+    mixer = duck_player.Mixer([])
     try:
+        _silent_bed(mixer, 4096)
         mixer._accent_q.append([1500, duck_player._Clip(np.ones((10, 2), np.float32), 1.0)])
         first, second = np.zeros((1024, 2), np.float32), np.zeros((1024, 2), np.float32)
         mixer._callback(first, 1024, None, None)
         mixer._callback(second, 1024, None, None)           # 1500 - 1024 = 476 frames into this block
         assert not first.any()
         assert not second[:476].any() and second[476].all() and second[485].all() and not second[486:].any()
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_a_paused_bed_freezes_the_accent_countdown_and_it_lands_on_the_bar_after_resume():
+    from nhj import duck_player
+    mixer = duck_player.Mixer([])
+    try:
+        mixer.buf.append(np.zeros((6144, 2), np.float32))
+        mixer._play_accent(np.ones((10, 2), np.float32), 1.0)         # paused: the bed is not draining
+        _run_blocks(mixer, 8)
+        assert mixer._accent_q[0][0] == 6144 and mixer._fx == []      # frozen, nothing heard over frozen music
+        assert len(mixer.buf) == 1 and len(mixer.buf[0]) == 6144
+        mixer._paused_evt.clear()                                     # resume: 6144 frames still to go
+        mixer.buf.append(np.zeros((4096, 2), np.float32))            # the next bar, as the generator pushes it
+        _run_blocks(mixer, 5)
+        assert mixer._accent_q and mixer._accent_q[0][0] == 6144 - 5 * 1024
+        _run_blocks(mixer, 1)
+        assert mixer._accent_q[0][0] == 0 and mixer._fx == []         # exactly on the bar line, not before
+        probe = np.zeros((1024, 2), np.float32)
+        mixer._callback(probe, 1024, None, None)
+        assert probe[0].all() and not mixer._accent_q
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_a_starved_bed_does_not_burn_the_countdown():
+    from nhj import duck_player
+    mixer = duck_player.Mixer([])
+    try:
+        _silent_bed(mixer, 500)                                       # only 500 frames, then an underrun
+        mixer._accent_q.append([1000, duck_player._Clip(np.ones((10, 2), np.float32), 1.0)])
+        _run_blocks(mixer, 5)
+        assert mixer._accent_q[0][0] == 500 and mixer._fx == []       # 500 consumed, then frozen
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_an_accent_waiting_on_a_long_paused_bed_is_dropped_not_fired_next_turn():
+    from nhj import duck_player
+    mixer = duck_player.Mixer([])
+    try:
+        mixer._accent_q.append([4096, duck_player._Clip(np.ones((10, 2), np.float32), 1.0)])
+        _run_blocks(mixer, int(7.0 * duck_player.SR / 1024))
+        assert mixer._accent_q                                        # 7 s: still waiting
+        _run_blocks(mixer, int(2.0 * duck_player.SR / 1024))
+        assert mixer._accent_q == [] and mixer._fx == []              # past 8 s: gone
     finally:
         mixer.stop() if hasattr(mixer, "stop") else None
 
