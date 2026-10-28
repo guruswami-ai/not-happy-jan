@@ -798,14 +798,14 @@ def test_a_paused_bed_freezes_the_accent_countdown_and_it_lands_on_the_bar_after
         mixer.buf.append(np.zeros((6144, 2), np.float32))
         mixer._play_accent(np.ones((10, 2), np.float32), 1.0)         # paused: the bed is not draining
         _run_blocks(mixer, 8)
-        assert mixer._accent_q[0][0] == 6144 and mixer._fx == []      # frozen, nothing heard over frozen music
+        assert mixer._accent_q[0][0] == 6144 and mixer._bed_played == 0 and mixer._fx == []   # frozen, nothing heard
         assert len(mixer.buf) == 1 and len(mixer.buf[0]) == 6144
         mixer._paused_evt.clear()                                     # resume: 6144 frames still to go
         mixer.buf.append(np.zeros((4096, 2), np.float32))            # the next bar, as the generator pushes it
         _run_blocks(mixer, 5)
-        assert mixer._accent_q and mixer._accent_q[0][0] == 6144 - 5 * 1024
+        assert mixer._accent_q and mixer._bed_played == 5 * 1024
         _run_blocks(mixer, 1)
-        assert mixer._accent_q[0][0] == 0 and mixer._fx == []         # exactly on the bar line, not before
+        assert mixer._bed_played == 6144 and mixer._fx == []          # the bar line is the next sample, not before
         probe = np.zeros((1024, 2), np.float32)
         mixer._callback(probe, 1024, None, None)
         assert probe[0].all() and not mixer._accent_q
@@ -820,7 +820,31 @@ def test_a_starved_bed_does_not_burn_the_countdown():
         _silent_bed(mixer, 500)                                       # only 500 frames, then an underrun
         mixer._accent_q.append([1000, duck_player._Clip(np.ones((10, 2), np.float32), 1.0)])
         _run_blocks(mixer, 5)
-        assert mixer._accent_q[0][0] == 500 and mixer._fx == []       # 500 consumed, then frozen
+        assert mixer._bed_played == 500 and mixer._accent_q[0][0] == 1000 and mixer._fx == []   # 500 played, then frozen
+    finally:
+        mixer.stop() if hasattr(mixer, "stop") else None
+
+
+def test_queueing_an_accent_between_the_drain_and_the_accent_step_does_not_double_count(monkeypatch):
+    """The source thread can call _play_accent after the callback drained the bed and before it starts accents."""
+    from nhj import duck_player
+    mixer = _mixer_with_music(3)                            # 6144 frames queued: the bar line is frame 6144
+    try:
+        fired = []
+
+        def race_window(sos, zi, out):                      # runs between the drain and the accent step, outside the lock
+            if not fired:
+                fired.append(1)
+                mixer._play_accent(np.ones((10, 2), np.float32), 1.0)
+                mixer.buf.append(np.zeros((4096, 2), np.float32))    # then the bar itself, as the generator pushes it
+            return out
+        monkeypatch.setattr(duck_player, "_tel_apply", race_window)
+        mixer.music_phone = True
+        gains = _run_blocks(mixer, 8)
+        assert fired and mixer._accent_q == []
+        # queued after block 1 had already drained 1024 frames, yet it still starts at frame 6144:
+        # blocks 1-6 untouched, ducked from block 7 (the old double-count started a block early)
+        assert gains[:6] == [1.0] * 6 and gains[6] == pytest.approx(mixer._duck_floor)
     finally:
         mixer.stop() if hasattr(mixer, "stop") else None
 
