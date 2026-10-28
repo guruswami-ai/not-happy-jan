@@ -32,15 +32,28 @@ def default_pack_dir() -> Path:
     return resources.data_dir() / "music_packs" / "default"
 
 
+def pack_style(cfg: dict) -> str:
+    """The built-in style a config selects: a bare style name in music.pack, else the original trance pack."""
+    from nhj.music import styles
+    return cfg["pack"] if styles.is_style(cfg.get("pack")) else "trance"
+
+
 def pack_dir(cfg: dict) -> Path:
-    return Path(cfg["pack"]).expanduser() if cfg.get("pack") else default_pack_dir()
+    """music.pack is a directory, or a bare built-in style name (lofi-rhodes, ...) kept in the data dir."""
+    from nhj.music import styles
+    raw = cfg.get("pack")
+    if not raw:
+        return default_pack_dir()
+    if styles.is_style(raw):
+        return resources.data_dir() / "music_packs" / styles.pack_subdir(raw)
+    return Path(raw).expanduser()
 
 
-def build_default_pack_async(dest: Path) -> None:
+def build_default_pack_async(dest: Path, style: str = "trance") -> None:
     def _go():
         try:
-            from nhj.music import synth
-            synth.build_default_pack(dest)
+            from nhj.music import styles
+            styles.build(dest, style)
         except Exception:
             resources.debug("music: default pack build failed")
     threading.Thread(target=_go, daemon=True).start()
@@ -55,13 +68,16 @@ def make_source(cfg: dict | None = None):
     try:
         pack = load_pack(dest)
     except PackError:
-        if not cfg.get("pack"):
-            build_default_pack_async(dest)               # ready from the next session
+        from nhj.music import styles
+        if not cfg.get("pack") or styles.is_style(cfg.get("pack")):
+            style = pack_style(cfg)                              # ready from the next session
+            build_default_pack_async(dest) if style == "trance" else build_default_pack_async(dest, style)
         resources.debug(f"music: no usable pack at {dest}; playing recorded tracks")
         return None
     from nhj.music.continuation import Composer
     from nhj.music.source import StemSource
-    director = Director(long_after_s=float(cfg.get("long_after_s", 30)), long_ramp_s=float(cfg.get("long_ramp_s", 30)))
+    director = Director(long_after_s=float(cfg.get("long_after_s", 30)), long_ramp_s=float(cfg.get("long_ramp_s", 30)),
+                        arrangement=pack.arrangement)
     composer = Composer(pack, cfg.get("continuation") or {})
     accent_gain = float(cfg.get("accent_gain", DEFAULT_ACCENT_GAIN))
     return (lambda buf, paused: StemSource(pack, director, buf, paused, composer, accent_gain)), director

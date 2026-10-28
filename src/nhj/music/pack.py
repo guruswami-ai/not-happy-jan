@@ -1,7 +1,14 @@
 """Stem packs: a directory of equal-length, bar-aligned WAV loops plus a manifest.
 
     manifest.json   {"format": 1, "name": ..., "bpm": 138, "bars": 16, "sr": 48000,
-                     "layers": {"kick": "kick.wav", ...}, "provenance": {...}}
+                     "layers": {"kick": "kick.wav", ...}, "provenance": {...},
+                     "arrangement": {...}}            (optional, see below)
+
+``arrangement`` lets a pack say which of its layers play for 1, 2, 3+ busy sessions
+(``ladder``: a list of layer-name lists, last one is the full arrangement), which layers
+make the ``err`` breakdown (``breakdown_bars`` long) and the ``ok`` release (default: the full arrangement), and how
+much of the rising long-turn sweep it takes (``tension``, 0..1; 0 turns it off). Without it
+the trance defaults in ``director.py`` apply.
 
 Every layer has exactly ``round(bars * 4 * 60 / bpm * sr)`` samples, so the whole pack loops
 seamlessly and the director can switch layers on bar lines. Only 16-bit/32-bit PCM or float
@@ -42,6 +49,7 @@ class Pack:
     bars: int
     layers: dict[str, np.ndarray]                    # name -> (N, 2) float32
     provenance: dict = field(default_factory=dict)
+    arrangement: dict = field(default_factory=dict)
 
     @property
     def spb(self) -> float:
@@ -85,8 +93,49 @@ def _read_wav(path: Path) -> np.ndarray:
     return (np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32767.0).reshape(-1, 2)
 
 
+def parse_arrangement(raw, layer_names, where: str = "arrangement") -> dict:
+    """Validate an arrangement block; returns a clean dict (possibly empty). Unknown layers are errors."""
+    if raw in (None, {}):
+        return {}
+    if not isinstance(raw, dict):
+        raise PackError(f"{where}: must be an object")
+    known = set(layer_names)
+
+    def names(value, what):
+        if not isinstance(value, list) or not value or not all(isinstance(x, str) for x in value):
+            raise PackError(f"{where}.{what}: must be a non-empty list of layer names")
+        bad = sorted(set(value) - known)
+        if bad:
+            raise PackError(f"{where}.{what}: unknown layer(s) {', '.join(bad)}")
+        return list(dict.fromkeys(value))
+
+    out: dict = {}
+    if "ladder" in raw:
+        steps = raw["ladder"]
+        if not isinstance(steps, list) or not 1 <= len(steps) <= 8:
+            raise PackError(f"{where}.ladder: must be a list of 1-8 layer lists")
+        out["ladder"] = [names(st, f"ladder[{i}]") for i, st in enumerate(steps)]
+    for key in ("breakdown", "release"):
+        if key in raw:
+            out[key] = names(raw[key], key)
+    if "breakdown_bars" in raw:
+        bb = raw["breakdown_bars"]
+        if isinstance(bb, bool) or not isinstance(bb, int) or not 1 <= bb <= 8:
+            raise PackError(f"{where}.breakdown_bars: must be a whole number of bars, 1-8")
+        out["breakdown_bars"] = bb
+    if "tension" in raw:
+        try:
+            t = float(raw["tension"])
+        except (TypeError, ValueError) as e:
+            raise PackError(f"{where}.tension: must be a number 0..1") from e
+        if not 0.0 <= t <= 1.0:
+            raise PackError(f"{where}.tension: must be between 0 and 1")
+        out["tension"] = t
+    return out
+
+
 def save_pack(dest, name: str, bpm: float, bars: int, layers: dict[str, np.ndarray],
-              provenance: dict | None = None) -> Path:
+              provenance: dict | None = None, arrangement: dict | None = None) -> Path:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     n = loop_samples(bpm, bars)
@@ -100,6 +149,9 @@ def save_pack(dest, name: str, bpm: float, bars: int, layers: dict[str, np.ndarr
         files[lname] = f"{lname}.wav"
     manifest = {"format": FORMAT, "name": name, "bpm": bpm, "bars": bars, "sr": SR,
                 "layers": files, "provenance": provenance or {}}
+    arr = parse_arrangement(arrangement, layers)
+    if arr:
+        manifest["arrangement"] = arr
     tmp = dest / "manifest.json.tmp"
     tmp.write_text(json.dumps(manifest, indent=2))
     tmp.replace(dest / "manifest.json")                  # manifest last: a half-written pack is invisible
@@ -131,4 +183,5 @@ def load_pack(path) -> Pack:
             raise PackError(f"{root}: layer {lname!r} has {len(data)} samples, expected {n} "
                             f"({bars} bars at {bpm} BPM)")
         layers[str(lname)] = data
-    return Pack(str(m.get("name", root.name)), bpm, bars, layers, dict(m.get("provenance") or {}))
+    return Pack(str(m.get("name", root.name)), bpm, bars, layers, dict(m.get("provenance") or {}),
+                parse_arrangement(m.get("arrangement"), layers, f"{root}: arrangement"))

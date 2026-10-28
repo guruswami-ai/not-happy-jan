@@ -1594,13 +1594,42 @@ def _need_audio_extra() -> None:
 
 
 @music_cli.command("build-pack")
-def music_build_pack(dest: str = typer.Option("", "--dest", help="default: the data dir's music_packs/default")):
-    """Render the bundled synth's stem pack (a few seconds of CPU)."""
+def music_build_pack(
+    style: str = typer.Option("trance", "--style", help="trance | lofi-rhodes | lofi-nights | ambient-drift | ambient-glass"),
+    dest: str = typer.Option("", "--dest", help="default: the data dir's music_packs/<style> (trance: default)"),
+    every: bool = typer.Option(False, "--all", help="build every style into its default place"),
+):
+    """Render a built-in synth stem pack (about 10 seconds of CPU each)."""
     _need_audio_extra()
-    from nhj.music import runtime, synth
-    path = Path(dest).expanduser() if dest else runtime.default_pack_dir()
-    synth.build_default_pack(path)
-    app.print(f"[green]✓[/green] pack written to {path}")
+    from nhj import resources
+    from nhj.music import styles
+    names = list(styles.STYLES) if every else [style]
+    for name in names:
+        if not styles.is_style(name):
+            app.print(f"[red]unknown style {name!r}; choose one of: {', '.join(styles.STYLES)}[/red]")
+            raise typer.Exit(2)
+    if every and dest:
+        app.print("[red]--all and --dest cannot be combined[/red]")
+        raise typer.Exit(2)
+    for name in names:
+        path = Path(dest).expanduser() if dest else resources.data_dir() / "music_packs" / styles.pack_subdir(name)
+        styles.build(path, name)
+        app.print(f"[green]✓[/green] {name}: pack written to {path}")
+
+
+@music_cli.command("styles")
+def music_styles():
+    """List the built-in styles, which are built, and which one music.pack selects."""
+    _need_audio_extra()
+    from nhj import resources
+    from nhj.music import runtime, styles
+    chosen = runtime.pack_style(runtime.settings())
+    for name, st in styles.STYLES.items():
+        built = (resources.data_dir() / "music_packs" / styles.pack_subdir(name) / "manifest.json").exists()
+        mark = "[green]built[/green]" if built else "not built"
+        sel = " [bold]<- selected[/bold]" if name == chosen else ""
+        app.print(f"{name:14s} {st.bpm:3.0f} BPM  {mark:9s} {st.blurb}{sel}")
+    app.print("select one with `music.pack: NAME` in your config, then `nhj muzak stop` and `nhj busy`")
 
 
 @music_cli.command("status")
@@ -1645,7 +1674,7 @@ def music_demo(
     _need_audio_extra()
     import wave
     import numpy as np
-    from nhj.music import runtime, synth
+    from nhj.music import runtime, styles
     from nhj.music.continuation import Composer
     from nhj.music.director import Director
     from nhj.music.pack import PackError, load_pack
@@ -1655,9 +1684,9 @@ def music_demo(
     try:
         pack = load_pack(dest)
     except PackError:
-        synth.build_default_pack(dest)
+        styles.build(dest, runtime.pack_style(cfg))
         pack = load_pack(dest)
-    director = Director(long_after_s=8, long_ramp_s=12)
+    director = Director(long_after_s=8, long_ramp_s=12, arrangement=pack.arrangement)
     composer = None
     if continuation:
         composer = Composer(pack, cfg.get("continuation") or {})

@@ -46,10 +46,15 @@ class Plan:
 
 class Director:
     def __init__(self, long_after_s: float = 30.0, long_ramp_s: float = 30.0, breakdown_bars: int = 4,
-                 accent_ttl_s: float = 8.0, clock=time.monotonic):
+                 accent_ttl_s: float = 8.0, clock=time.monotonic, arrangement: dict | None = None):
+        arr = arrangement or {}                       # a pack's own arrangement (see pack.py); {} = the trance defaults
+        self._ladder = tuple(frozenset(step) for step in arr.get("ladder") or ()) or _LADDER
+        self._breakdown = frozenset(arr["breakdown"]) if arr.get("breakdown") else _BREAKDOWN
+        self._release = frozenset(arr["release"]) if arr.get("release") else self._ladder[-1]
+        self._tension_max = max(0.0, min(1.0, float(arr.get("tension", 1.0))))
         self.long_after_s = long_after_s
         self.long_ramp_s = max(1.0, long_ramp_s)
-        self.breakdown_bars = max(1, breakdown_bars)
+        self.breakdown_bars = int(arr["breakdown_bars"]) if arr.get("breakdown_bars") else max(1, breakdown_bars)
         self.accent_ttl_s = accent_ttl_s
         self._clock = clock
         self._lock = threading.Lock()
@@ -81,16 +86,16 @@ class Director:
                     continue                          # stale: it arrived while the bed was paused
                 if intent == "err":
                     self._hold_until, self._hold_layers, self._hold_label = (
-                        bar + self.breakdown_bars, _BREAKDOWN, "breakdown")
+                        bar + self.breakdown_bars, self._breakdown, "breakdown")
                     fired = "err"
                 elif intent == "ok" and bar >= self._hold_until:       # never cut a breakdown short
-                    self._hold_until, self._hold_layers, self._hold_label = bar + 1, _RELEASE, "release"
+                    self._hold_until, self._hold_layers, self._hold_label = bar + 1, self._release, "release"
                     fired = fired or "ok"                  # an err in the same tick wins
             tension = 0.0
             if self._elapsed > self.long_after_s:
-                tension = min(1.0, (self._elapsed - self.long_after_s) / self.long_ramp_s)
+                tension = min(1.0, (self._elapsed - self.long_after_s) / self.long_ramp_s) * self._tension_max
             if bar < self._hold_until:
                 return Plan(self._hold_layers, 0.0, self._hold_label, fired)
             if self._busy <= 0:
                 return Plan(frozenset(), 0.0, "idle")
-            return Plan(_LADDER[min(self._busy, len(_LADDER)) - 1], tension, f"busy:{self._busy}")
+            return Plan(self._ladder[min(self._busy, len(self._ladder)) - 1], tension, f"busy:{self._busy}")
