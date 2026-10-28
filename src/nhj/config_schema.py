@@ -123,6 +123,7 @@ class Music(_Forbid):
     pack: Optional[str] = None
     long_after_s: Optional[Annotated[Union[int, float], Field(ge=0)]] = None
     long_ramp_s: Optional[Annotated[Union[int, float], Field(gt=0)]] = None
+    accent_gain: Optional[Annotated[Union[int, float], Field(ge=0, le=2)]] = None
     continuation: Optional[Continuation] = None
 
     @field_validator("mode")

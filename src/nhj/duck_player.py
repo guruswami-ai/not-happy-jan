@@ -34,6 +34,7 @@ SR = 48000          # output samplerate
 CH = 2              # stereo
 BLOCK = 1024        # ~21ms per callback
 _STATE_TICK_S = 0.25   # music.json cadence. The play-event spool stays on the 50 ms wake.
+_ACCENT_STALE_S = 8.0   # a waiting accent is dropped if the bed stays paused this long (matches the director's TTL)
 _BUF_MAX = 48       # bounded music decode buffer (~1s) → frozen position when full/paused
 _LAZY_ATTRS = ("_EVENTS",)
 
@@ -279,6 +280,8 @@ class Mixer:
         self._paused_evt.set()                               # music starts silent
         # `source(buf, paused)` builds an alternative music producer (generative stems, #63)
         self._decoder = source(self.buf, self._paused_evt) if source else _Decoder(playlist, self.buf, self._paused_evt)
+        if hasattr(self._decoder, "on_accent"):                # generative source: stingers ride the fx bus
+            self._decoder.on_accent = self._play_accent
         try:
             self.master = float(os.getenv("NHJ_MUZAK_VOLUME", "0.5"))
         except ValueError:
@@ -290,6 +293,9 @@ class Mixer:
         self._music_gain = 1.0
         self.duck_external = False                           # set by control loop (cross-proc flag)
         self._fx: list[_Clip] = []                           # concurrent one-shots
+        self._accent_q: list[list] = []                      # [absolute bed frame it starts on, clip]: not sounding yet, so not ducking yet
+        self._bed_played = 0                                 # bed frames played so far (only advances while the bed does)
+        self._accent_stalled = 0                             # output frames the bed has been paused with an accent waiting
         self._ambient: list[_Clip] = []                      # concurrent beds (low; duck under voice)
         self._ambient_loop: _Clip | None = None              # looping mode bed (call-centre etc.)
         self._ambient_gated = False                          # True → loop sounds only while voice is active
@@ -316,22 +322,26 @@ class Mixer:
         out = np.zeros((frames, CH), dtype=np.float32)
 
         # music bed (skipped while paused → exact-resume)
+        filled = 0                                           # bed frames actually played this block
+        bed_before = self._bed_played
         if not self._paused_evt.is_set():
-            filled = 0
-            while filled < frames and self.buf:
-                chunk = self.buf[0]
-                take = min(len(chunk), frames - filled)
-                out[filled:filled + take] = chunk[:take]
-                if take == len(chunk):
-                    self.buf.popleft()
-                else:
-                    self.buf[0] = chunk[take:]
-                filled += take
+            with self._lock:                                 # drain + position move together (see _play_accent)
+                while filled < frames and self.buf:
+                    chunk = self.buf[0]
+                    take = min(len(chunk), frames - filled)
+                    out[filled:filled + take] = chunk[:take]
+                    if take == len(chunk):
+                        self.buf.popleft()
+                    else:
+                        self.buf[0] = chunk[take:]
+                    filled += take
+                self._bed_played += filled
             # tinny "on-hold" colour: phone-band the music bed (stateful → no glitches)
             if self.music_phone and self._tel_sos is not None and filled:
                 out = _tel_apply(self._tel_sos, self._tel_zi, out)
 
         with self._lock:
+            self._start_due_accents(bed_before, filled, frames)
             speaking = bool(self._fx) or self._voice_cur is not None or bool(self._voiceq)
         # sidechain duck while anything sounds; otherwise ride the long-session floor (the
         # controller eases music_floor down over a long inference, back to 1.0 when idle)
@@ -434,6 +444,52 @@ class Mixer:
         """True while any voice/fx clip is queued or playing (e.g. the on-hold intro +
         click). Used to hold the music bed paused until that sequence finishes."""
         return bool(self._fx) or self._voice_cur is not None or bool(self._voiceq)
+
+    def _play_accent(self, data: np.ndarray, gain: float) -> None:
+        """A one-shot over the bed, on the fx bus (not music-ducked, so it is heard under the voice).
+
+        The generator renders about a second ahead of playback, so the hit waits for the audio
+        already buffered: it then lands on the bar line the listener hears, not the one rendered.
+        """
+        clip = _Clip(np.ascontiguousarray(data, dtype=np.float32), gain)
+        with self._lock:
+            # An absolute position in the bed: frames played so far + frames still queued. The callback
+            # drains the buffer and advances the position under this same lock, so a newly queued accent
+            # can never see a post-drain buffer and also have that block's frames subtracted again.
+            start = self._bed_played + sum(len(c) for c in self.buf)
+            self._accent_q.append([start, clip])
+
+    def _start_due_accents(self, before: int, played: int, frames: int) -> None:
+        """Move accents whose start falls in this block onto the fx bus (caller holds the lock).
+
+        Only a *sounding* fx clip ducks the bed, so the wait for the bar line must not sit on
+        the bus as leading silence: that would pull the music down up to a second early.
+        Accents are scheduled on the bed's own frame position, not the clock: this block played bed
+        frames [*before*, *before* + *played*), so a paused or starved bed freezes them and the hit
+        still lands on its bar line when playback resumes. A bed paused longer than the accent TTL drops it instead of
+        firing a stale hit at the start of the next turn.
+        """
+        if not self._accent_q:
+            self._accent_stalled = 0
+            return
+        if played == 0 and self._paused_evt.is_set():
+            self._accent_stalled += frames
+            if self._accent_stalled > _ACCENT_STALE_S * SR:
+                self._accent_q.clear()
+                self._accent_stalled = 0
+            return
+        self._accent_stalled = 0
+        waiting = []
+        for item in self._accent_q:
+            start, clip = item
+            if start < before + played:
+                off = max(0, start - before)
+                if off:
+                    clip.data = np.concatenate([np.zeros((off, CH), dtype=np.float32), clip.data])    # sample-accurate start
+                self._fx.append(clip)
+            else:
+                waiting.append(item)
+        self._accent_q = waiting
 
     def play(self, path: str, bus: str = "voice", gain: float = 1.0,
              rate: float = 1.0, effect: str = "", pre: float = 0.0) -> None:

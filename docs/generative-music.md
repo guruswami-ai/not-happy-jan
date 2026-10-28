@@ -34,12 +34,16 @@ If hold music was already running (a session was busy, or you changed the mode l
    | 3 | + arp |
    | 4 or more (or `nhj mode rave`) | + pad: the full arrangement |
    | a long turn (`long_after_s`, default 30 s) | a rising high-pass sweep on everything but the kick |
-   | `err` accent | a 4-bar breakdown (pad and arp only) |
-   | `ok` accent | one bar of release (kick, bass, pad) |
+   | `err` accent | a 4-bar breakdown (pad and arp only), with a low boom, falling sweep and tritone stab on the first beat |
+   | `ok` accent | one bar of release (the full arrangement, whatever was playing), with a crash and a rising chime on the first beat |
 
 3. **The stem source** (`nhj.music.source`) renders the plan into the mixer's music buffer. The mixer's ducking under speech, master volume, pause/resume and output-device handling are unchanged.
 
 Accents come from real events. When the worker processes a verdict, `err` requests the breakdown and `ok` / `celebrate` request the release; an API failure (`StopFailure`) is an `err` too, subject to the same per-project voice setting. Because this happens where the event is *processed*, it works the same for a local hook, a remote hook (`NHJ_REMOTE_URL`: the accent lands on the daemon that owns the music bed) and `nhj vibe` from any CLI, and it follows the per-project voice setting (`nhj voice off` keeps that project from changing the music). The request travels through the muzak state file, only in `generative` mode, without importing the audio stack. It is a **musical** event for the sessions that are still busy: when the finishing session was the last busy one, the bed pauses as usual, and an accent that waits more than 8 seconds (the bed was paused) is discarded rather than played at the start of the next turn. With `NHJ_REMOTE_URL` a `StopFailure` accent is forwarded as a music-only MCP call (`nhj_music_accent`), behind the same LAN secret as `nhj_vibe`, so the bed moves without speech or display updates. `warn` and `attn` do not change the music. For testing, `nhj music accent err|ok` asks for one by hand.
+
+### Accent level
+
+Changing layers alone is quiet: a breakdown only removes sound, and the voice line ducks the whole bed by about 13 dB while the accent plays. So each accent also lays a short synthesized **stinger** (about 1.5 s) over the bed on the effects bus, on the bar line, at full level and not ducked by the voice. The stingers keep their energy in the sub-bass and above ~1.5 kHz so a spoken line stays clear. Tune the level with `music.accent_gain` (default `0.5`, peak 1.0 x gain; the onset is then about as loud as the speech, so a spoken line is not masked; `0` turns the stingers off and leaves the layer changes). It takes effect when the controller restarts (`nhj muzak stop`, then `nhj muzak on`). `nhj music demo` renders the stingers too, so you can judge the level offline.
 
 ## Continuation (optional, needs a GPU model)
 

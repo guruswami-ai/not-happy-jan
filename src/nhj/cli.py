@@ -1672,7 +1672,8 @@ def music_demo(
     script = [(4 * bar_s, 1, 0.0, None), (4 * bar_s, 2, 0.0, None), (4 * bar_s, 3, 0.0, None),
               (8 * bar_s, 4, 0.0, None), (8 * bar_s, 4, 12.0, None), (8 * bar_s, 4, 22.0, None),
               (4 * bar_s, 4, 0.0, "err"), (4 * bar_s, 4, 0.0, "ok"), (4 * bar_s, 2, 0.0, None)]
-    audio, log = render_timeline(pack, director, script, composer)
+    audio, log = render_timeline(pack, director, script, composer,
+                                 accent_gain=float(cfg.get("accent_gain", runtime.DEFAULT_ACCENT_GAIN)))
     pcm = (np.clip(audio, -1, 1) * 32767).astype("<i2")
     with wave.open(out, "wb") as w:
         w.setnchannels(2)
