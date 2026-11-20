@@ -94,6 +94,8 @@ _ENTRIES = [
     _e("NHJ_FOLLOW_DEVICE_POLL", "float", "4", None, "startup", "Default-device watcher interval (seconds)"),
     # --- hold music / mixer ------------------------------------------------------
     _e("NHJ_MUZAK_DIR", "path", "", None, "live", "Extra/replacement music directory for the hold bed"),
+    _e("NHJ_MUZAK_GENRES", "str", "", "music.genres", "startup", "Play only tracks under these genre folders (comma-separated; empty = all)"),
+    _e("NHJ_MUZAK_LANGUAGES", "str", "", "music.languages", "startup", "Play only tracks under these language folders (comma-separated; empty = all)"),
     _e("NHJ_MUZAK_STATE", "path", None, None, "live", "Override the music.json state file location"),
     _e("NHJ_MUZAK_VOLUME", "float", "0.5", None, "live", "Music bed level (0-1)"),
     _e("NHJ_MUSIC_MODE", "enum", None, "music.mode", "startup", "Hold-music source: recorded (default) or generative (stem pack + director)"),

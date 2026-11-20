@@ -121,6 +121,8 @@ class Continuation(_Forbid):
 class Music(_Forbid):
     mode: Optional[str] = None
     pack: Optional[str] = None
+    genres: Optional[list[str]] = None
+    languages: Optional[list[str]] = None
     long_after_s: Optional[Annotated[Union[int, float], Field(ge=0)]] = None
     long_ramp_s: Optional[Annotated[Union[int, float], Field(gt=0)]] = None
     accent_gain: Optional[Annotated[Union[int, float], Field(ge=0, le=2)]] = None

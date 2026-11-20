@@ -168,12 +168,72 @@ def _music_dirs() -> list[Path]:
     return dirs
 
 
-def tracks() -> list[Path]:
-    found: list[Path] = []
+def _tags(path: Path, root: Path) -> tuple[str, str]:
+    """A track's `(genre, language)`, read from its folder: `<genre>/<language>/<file>`.
+
+    Only the first two folder levels are tags; anything deeper is part of the genre's own layout.
+    A missing level is `""`, so a library may be shallow (`pub-rock/track.m4a`) or fully sorted, and
+    dot-folders are structure, not tags. Compared lower-cased.
+    """
+    levels = [p for p in path.relative_to(root).parts[:-1] if not p.startswith(".")]
+    genre = levels[0].lower() if levels else ""
+    language = levels[1].lower() if len(levels) > 1 else ""
+    return genre, language
+
+
+def _wanted(raw_env: str, cfg_key: str) -> set[str]:
+    """One filter as a lower-cased set, from the environment (comma or semicolon separated) or config."""
+    raw = raw_env.strip()
+    if not raw:
+        try:
+            from nhj import config
+            value = (config.get().get("music") or {}).get(cfg_key) or []
+        except Exception:
+            value = []
+        raw = ",".join(value) if isinstance(value, (list, tuple)) else str(value)
+    return {tag.strip().lower() for tag in raw.replace(";", ",").split(",") if tag.strip()}
+
+
+def _scan() -> list[tuple[Path, str, str]]:
+    """Every playable file under the music directories, each with its tags.
+
+    Recursive, so tracks in subfolders are found — they used to be skipped silently. Dot-folders and
+    dangling symlinks are dropped here rather than at play time, because the mixer opens whatever this
+    hands back and either would fail mid-hold.
+    """
+    found: list[tuple[Path, str, str]] = []
+    seen: set[Path] = set()
     for d in _music_dirs():
-        if d.is_dir():
-            found += [p for p in d.iterdir() if p.suffix.lower() in _AUDIO_EXT]
-    return sorted(found)
+        if not d.is_dir():
+            continue
+        for p in sorted(d.rglob("*")):
+            if p.suffix.lower() not in _AUDIO_EXT:
+                continue
+            if any(part.startswith(".") for part in p.relative_to(d).parts[:-1]):
+                continue
+            if not p.is_file():
+                continue
+            key = p.resolve()
+            if key in seen:                      # the same file reachable via two music dirs
+                continue
+            seen.add(key)
+            found.append((p, *_tags(p, d)))
+    return found
+
+
+def tracks() -> list[Path]:
+    """The playable pool, honouring `music.genres` / `music.languages` (or `NHJ_MUZAK_GENRES` /
+    `NHJ_MUZAK_LANGUAGES`). No filter set — the default — means everything, as before."""
+    found = _scan()
+    genres = _wanted(os.getenv("NHJ_MUZAK_GENRES", ""), "genres")
+    languages = _wanted(os.getenv("NHJ_MUZAK_LANGUAGES", ""), "languages")
+    if not (genres or languages):
+        return sorted(p for p, _, _ in found)
+    keep = [p for p, g, lang in found
+            if (not genres or g in genres) and (not languages or lang in languages)]
+    # Tags are strict: an untagged file matches no genre. But a filter that matches nothing must not
+    # silence a caller's hold, so an unmatched filter falls back to the unfiltered pool.
+    return sorted(keep) if keep else sorted(p for p, _, _ in found)
 
 
 # ---- busy-set / play decision ----------------------------------------------
