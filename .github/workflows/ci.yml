@@ -9,8 +9,12 @@ permissions:
   contents: read
 
 jobs:
+  # macos-14 is no longer schedulable for this repository - the job dies about a second in, annotated
+  # "The configuration 'macos-14-arm64-us-default' is not supported" - so the label tracks GitHub's
+  # current macOS generation rather than a pinned one. The required status checks are named after the
+  # jobs, not the label, so protection keeps matching without being touched.
   test:
-    runs-on: macos-14
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +53,7 @@ jobs:
           for f in install.sh scripts/*.sh integrations/hooks/*.sh; do bash -n "$f"; done
 
   package:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
