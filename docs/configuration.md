@@ -81,8 +81,10 @@ Generated from `src/nhj/env_registry.py` — edit the registry, not this table (
 | `NHJ_MUSIC_MODE` | enum | — | `music.mode` | startup | Hold-music source: recorded (default) or generative (stem pack + director) |
 | `NHJ_MUZAK_DIR` | path | — | — | live | Extra/replacement music directory for the hold bed |
 | `NHJ_MUZAK_DUCK_GAIN` | float | `0.22` | — | live | Music level while ducking under speech (0-1) |
+| `NHJ_MUZAK_GENRES` | str | — | `music.genres` | startup | Play only tracks under these genre folders (comma-separated; empty = all) |
 | `NHJ_MUZAK_INTRO` | bool | `1` | — | live | Play the hold intro sting |
 | `NHJ_MUZAK_INTRO_VOLUME` | float | `0.9` | — | live | Hold intro sting level |
+| `NHJ_MUZAK_LANGUAGES` | str | — | `music.languages` | startup | Play only tracks under these language folders (comma-separated; empty = all) |
 | `NHJ_MUZAK_RETURN` | bool | `1` | — | live | Play the reconnect ('you still there?') return clip |
 | `NHJ_MUZAK_STATE` | path | — | — | live | Override the music.json state file location |
 | `NHJ_MUZAK_TRANSFER` | bool | — | — | live | Transfer-button beep on hold transitions |
@@ -206,6 +208,28 @@ The bundled 4+ hours of hold music (and the SFX / voice clips / ambient beds) in
 > The release assets are public, so `nhj setup-media` downloads them directly — no `gh` or authentication needed. (If you fork into a private repo, or otherwise gate the release, `setup-media` automatically falls back to `gh release download` when the plain URL returns 401/403/404.)
 
 Drop your own tracks (`.m4a`, `.mp3`, `.wav`…) into `audio/music/`, or point `NHJ_MUZAK_DIR` at a folder; they shuffle-cycle. Set the level with `NHJ_MUZAK_VOLUME` (0–1, default `0.5`).
+
+### Choosing what plays: genre and language folders
+
+A music folder may be sorted into subfolders, and the first two levels become the track's tags:
+
+```
+music/
+├── bossa/japanese/hold-please.m4a   →  genre "bossa", language "japanese"
+├── pub-rock/cuda-oom.m4a            →  genre "pub-rock", no language
+└── unrated.m4a                      →  no tags at all
+```
+
+`music.genres` / `music.languages` in `config.yaml` (or `NHJ_MUZAK_GENRES` / `NHJ_MUZAK_LANGUAGES`,
+comma-separated) limit the pool to tracks carrying every tag you set — the two filters combine, names
+are matched case-insensitively, and leaving both unset (the default) plays everything, exactly as
+before. Tags are strict: an untagged file matches no genre, so a sorted library is genuinely selective
+and the bundled bed plays only while no filter is set. The one exception is a filter that matches
+**nothing** — a typo, or a genre you have not added tracks for yet — where NHJ plays the unfiltered
+pool rather than leave a caller in silence. Subfolders are playable whether or not you filter: they
+used to be skipped, so a folder you dropped files into and never heard is now heard.
+
+Tags are read when the mixer starts, so changing them needs a `nhj muzak off && nhj muzak on`.
 
 ## TTS backends
 
