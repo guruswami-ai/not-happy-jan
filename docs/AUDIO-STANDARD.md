@@ -177,6 +177,60 @@ recovers.
 
 ---
 
+## 9c. What the realtime path costs — `nhj stats`
+
+The mixer's callback has one hard deadline: the block it is filling (`BLOCK = 1024` frames at
+48 kHz ≈ **21.3 ms**). Miss it and PortAudio's next wake has nothing queued, which is a gap you
+hear — and until now nothing counted it, so "the audio is fine" meant "nobody complained".
+
+The callback tallies four things in memory and the controller publishes them every 2 s (into
+`nhj/stats.py`, read back by `nhj stats`):
+
+| Counter | What it means |
+|---|---|
+| `callback_p50/p95/max_us` | wall time actually spent inside the callback — the block is the deadline |
+| `deadline_misses` | callbacks that outlived the block they were filling |
+| `underruns` / `short_frames` | the bed asked for audio and got none: silence in the music |
+| `pa_flags` | whatever the device chose to report as an xrun — kept, but not relied on |
+
+The ring of per-callback times stays inside the mixer process and the percentiles are computed
+there, so `nhj stats` never reads a structure written by a thread it cannot synchronise with. A
+snapshot whose pid has died is reported **stale** rather than as live.
+
+Measured on the full mix the CI gate builds (bed + voice + fx + ambient + compressor, Linux
+x86_64): **p50 225 µs, p95 245 µs, max 864 µs** against a 21.3 ms block — about 1 % of the
+deadline, which is the evidence that this path does not need a different language. The gate is
+`tests/test_mixer_stats.py`, asserting p95 under 25 % of a block; `nhj stats --check` applies the
+same budget on a real host, and `--save-baseline` arms a 10 % regression gate per host once you
+like its current numbers.
+
+---
+
+## 9d. Voice rungs — the same command, the other audible path
+
+`SPEC.md` §9 promises *bank/chime ≤ 300 ms* and *live voice ≤ 2 s warm*. Those are per-rung numbers, so
+one "voice latency" average would have been useless. Every `AudioAdapter` dispatch appends one record of
+the rung that actually served it — `bank`, `cache`, `synth`, `fallback` (generic words after a synthesis
+failure), `chime` or `none` — with the engine that served it (`qwen`, `audiocpp`, `os`, `piper`), the
+ladder's wall time, the synthesis round trip on its own, the clip size and, on failure, the reason.
+
+That last field is why the file exists: an unreachable TTS server or an out-of-VRAM `audio.cpp` used to
+survive only as a line in `worker.log`, findable by a human with a grep. Now they are a per-engine error
+count on the rung that failed.
+
+Two honesty notes, both printed by `nhj stats` as well as here:
+
+- The window measured is **ladder decision to mixer hand-off**. The mixer queues asynchronously, so this
+  is the share the ladder controls; queue dispatch upstream and mixer buffering downstream are not in it.
+- `fallback` is not the same as a bank serve on a minimal install. One is the design working; the other is
+  a degraded vibe where Jan spoke generic words instead of your message.
+
+Nothing in §9's voice figures has been measured on your hardware yet — `nhj stats` is what measures it.
+If p95 turns out to miss on a CPU-only host, the honest fix is to amend §9 to what the machine does, not
+to declare the code broken against a number nobody has ever timed.
+
+---
+
 ## 10. Control reference
 
 ### Modes & settings

@@ -28,12 +28,15 @@ from pathlib import Path
 
 import numpy as np
 
-from nhj import resources
+from nhj import resources, stats
 
 SR = 48000          # output samplerate
 CH = 2              # stereo
 BLOCK = 1024        # ~21ms per callback
+_BLOCK_US = 1_000_000.0 * BLOCK / SR    # one callback's deadline in microseconds (~21333)
 _STATE_TICK_S = 0.25   # music.json cadence. The play-event spool stays on the 50 ms wake.
+_STATS_FLUSH_S = 2.0   # how often the controller publishes its counters for `nhj stats`
+_STATS_RING = 4096     # per-callback times kept for percentiles (~86 s at 47 blocks/s)
 _ACCENT_STALE_S = 8.0   # a waiting accent is dropped if the bed stays paused this long (matches the director's TTL)
 _BUF_MAX = 48       # bounded music decode buffer (~1s) → frozen position when full/paused
 _LAZY_ATTRS = ("_EVENTS",)
@@ -316,9 +319,20 @@ class Mixer:
             self._comp_drive = 1.6
         self._lock = threading.Lock()
         self._stream = None
+        # Realtime-path counters (see nhj.stats). Touched only by the callback thread and read by the
+        # controller loop a moment later — a torn read costs one stale sample, so no lock is spent.
+        self._t_start = time.monotonic()
+        self._blocks = 0
+        self._cb_us: collections.deque = collections.deque(maxlen=_STATS_RING)
+        self._cb_us_max = 0
+        self._underruns = 0
+        self._short_frames = 0
+        self._deadline_misses = 0
+        self._pa_flags = 0
 
     # ---- realtime callback (no I/O) -----------------------------------------
     def _callback(self, outdata, frames, time_info, status):
+        t0 = time.perf_counter_ns()
         out = np.zeros((frames, CH), dtype=np.float32)
 
         # music bed (skipped while paused → exact-resume)
@@ -401,6 +415,46 @@ class Mixer:
             out = np.tanh(out * d) * (1.0 / np.tanh(d))
         np.clip(out, -1.0, 1.0, out)                         # master safety limiter
         outdata[:] = out
+        self._tally(t0, frames, filled, status)
+
+    def _tally(self, t0: int, frames: int, bed_frames: int, status) -> None:
+        """Counters for the realtime path — memory only, published by the controller loop.
+
+        Runs at the end of every callback, so it is held to the same rule as the code above it: no I/O,
+        no allocation worth mentioning. The deadline that matters is one block. If a callback outlived the
+        block it was filling, PortAudio's next wake had nothing queued and the listener heard a gap — which
+        the device may or may not report back, hence timing our own wall clock as well as reading `status`.
+
+        `bed_frames` is what the bed actually got this block. A short bed while it is meant to be playing is
+        real silence in the music, and it is a failure mode NHJ has never been able to see.
+        """
+        us = (time.perf_counter_ns() - t0) // 1000
+        self._blocks += 1
+        self._cb_us.append(us)
+        if us > self._cb_us_max:
+            self._cb_us_max = us
+        if bed_frames < frames and not self._paused_evt.is_set():
+            self._underruns += 1
+            self._short_frames += frames - bed_frames
+        if us >= _BLOCK_US:
+            self._deadline_misses += 1
+        if status:
+            self._pa_flags |= int(status)
+
+    def stats(self) -> dict:
+        """The mixer's side of `nhj stats`. Percentiles are computed here so the ring of per-callback
+        times never has to leave the process that owns the realtime thread."""
+        from nhj import stats as S
+        times = list(self._cb_us)
+        return {"block_us": round(_BLOCK_US, 1), "block_frames": BLOCK, "sample_rate": SR,
+                "uptime_s": round(time.monotonic() - self._t_start, 1),
+                "blocks": self._blocks, "window_blocks": len(times),
+                "callback_p50_us": S.percentile(times, 50),
+                "callback_p95_us": S.percentile(times, 95),
+                "callback_max_us": self._cb_us_max,
+                "deadline_misses": self._deadline_misses,
+                "underruns": self._underruns, "short_frames": self._short_frames,
+                "pa_flags": self._pa_flags, "paused": self.paused}
 
     # ---- control surface -----------------------------------------------------
     def start(self) -> None:
@@ -583,6 +637,25 @@ class Mixer:
                 self._stream.stop(); self._stream.close()
             except Exception:
                 pass
+
+
+def publish_mixer_stats(mixer: "Mixer", keeper: "StreamKeeper | None" = None) -> dict:
+    """Publish the mixer's counters where `nhj stats` reads them.
+
+    Called from the controller loop and once on the way out — never from the callback, which is not
+    allowed to touch the filesystem. A failure is debug-logged and swallowed: a status file that will not
+    write must not be the reason the music stops.
+    """
+    try:
+        snap = mixer.stats()
+        if keeper is not None:
+            snap["stream_live"] = keeper.live
+            snap["stream_attempts"] = keeper.attempts
+        stats.write_mixer(snap)
+        return snap
+    except Exception as e:
+        resources.debug(f"mixer stats publish failed: {e}")
+        return {}
 
 
 class StreamKeeper:
@@ -827,6 +900,7 @@ def run_duck_controller() -> int:
         threading.Thread(target=_watch_device, daemon=True).start()
     keeper = StreamKeeper(mixer)
     last_state_at = 0.0
+    last_stats_at = 0.0
     st: dict = {}
     try:
         while True:
@@ -844,6 +918,9 @@ def run_duck_controller() -> int:
             # device-reopen, retried until it succeeds even if the device name doesn't change
             # again. Never kills the controller; queued voice keeps buffering meanwhile.
             keeper.ensure(now)
+            if now - last_stats_at >= _STATS_FLUSH_S:        # before any `continue` below: idle still counts
+                last_stats_at = now
+                publish_mixer_stats(mixer, keeper)
             mixer.pump_events()                              # spool stays on this wake (50 ms while busy)
             last_state_at, fresh = refresh_mixer_state(M, now, last_state_at)
             if fresh is not None:
@@ -928,6 +1005,7 @@ def run_duck_controller() -> int:
             time.sleep(0.05)
     finally:
         mixer.stop()
+        publish_mixer_stats(mixer, keeper)   # a controller that exits cleanly leaves its counters behind
 
         def _clear(d):
             if d.get("controller_pid") == os.getpid():
