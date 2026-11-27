@@ -277,7 +277,7 @@ For the three ways to run NHJ — silent, pre-recorded samples, or the full live
 
 | Tier | What you need | Notes |
 |---|---|---|
-| **Required** (core) | macOS **Apple Silicon (M1+)** *or* Linux (+ NVIDIA GPU for live voices) · Python 3.10+ · ~8 GB RAM (16 GB recommended) · ~5 GB disk | The Qwen3-TTS voice needs ~2.2 GB resident (Mac); Linux uses an audio.cpp server ([Linux guide](linux.md)). `TTS_ENGINE=none` runs it text-only (no voice). |
+| **Required** (core) | macOS **Apple Silicon (M1+)** *or* Linux (+ NVIDIA GPU for live voices) · Python 3.11+ · ~8 GB RAM (16 GB recommended) · ~5 GB disk | The Qwen3-TTS voice needs ~2.2 GB resident (Mac); Linux uses an audio.cpp server ([Linux guide](linux.md)). `TTS_ENGINE=none` runs it text-only (no voice). |
 | **Recommended** (everything local) | **+ ocker-bogan-nano** dynamic voice brain | ~940 MB download, +~0.5 GB RAM. Everything stays on-device — the complete ocker-bogan experience, no cloud. |
 | **Optional** | Hardware feedback — LaMetric · Ulanzi/AWTRIX · Divoom · ESP32 bell · haptic mouse | Visual/physical alerts beyond audio. Deferred/experimental in v1; set device IPs in `.env`. |
 

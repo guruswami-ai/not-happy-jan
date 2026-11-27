@@ -24,7 +24,7 @@
 curl -fsSL https://raw.githubusercontent.com/guruswami-ai/not-happy-jan/main/install.sh | bash
 ```
 
-One non-interactive command, **no `sudo`**. Requirements: Python 3.10+, about 8 GB RAM (16 GB recommended) and, for the default profile, about 5 GB disk. The full live-voice experience runs on **Apple Silicon** or **Linux with an NVIDIA GPU**; the minimal profile speaks from the bundled voice bank on any supported Mac or Linux box.
+One non-interactive command, **no `sudo`**. Requirements: Python 3.11+, about 8 GB RAM (16 GB recommended) and, for the default profile, about 5 GB disk. The full live-voice experience runs on **Apple Silicon** or **Linux with an NVIDIA GPU**; the minimal profile speaks from the bundled voice bank on any supported Mac or Linux box.
 
 | Profile | Use it when | Command |
 |---|---|---|

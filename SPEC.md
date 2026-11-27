@@ -20,7 +20,7 @@ or noticeably slow the coding agent it observes.
   minus MLX TTS (audio.cpp backend instead). Windows is explicitly
   out of scope for v1 (the code cannot import there today: unconditional
   `fcntl`, POSIX services and paths); revisit only with real demand.
-- **Python:** ≥3.10. **Install:** user-context only, no sudo, fully reversible
+- **Python:** ≥3.11. **Install:** user-context only, no sudo, fully reversible
   (`nhj uninstall`).
 - **Privacy:** inference MUST be local by default. The only network listeners are
   127.0.0.1 by default; LAN exposure is explicit opt-in. LAN mode uses the

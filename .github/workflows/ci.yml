@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.12"]
+        python: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -30,14 +30,14 @@ jobs:
       - run: bash -n install.sh
 
   # Linux leg: the README and docs/linux.md claim Linux support, so CI must exercise it. Its own job
-  # name (not a matrix leg of `test`) keeps the required `test (3.10)` / `test (3.12)` check names stable.
+  # name (not a matrix leg of `test`) keeps the `test-linux (...)` check names separate.
   test-linux:
     name: test-linux (${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.12"]
+        python: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
