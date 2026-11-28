@@ -211,7 +211,10 @@ fast renders plus one 3 s one, and `--check` passed a host running 50 % over bud
 Measured on the full mix the CI gate builds (bed + voice + fx + ambient + compressor, Linux x86_64,
 400 blocks — the line that prints under `pytest -s`): **p50 219–232 µs, p95 237–261 µs, max 528–610 µs**
 against a 21.3 ms block, about 1 % of the deadline, which is the evidence that this path does not need a
-different language. The gate is `tests/test_mixer_stats.py`, asserting p95 under 25 % of a block;
+different language. Read `max` for what it is — the worst single block the process ever ran, which on a
+loaded machine can be a 39 ms gc or scheduler stall rather than the mixer running out of budget. That is
+why the CI gate asserts **p95** and the underrun count, and keeps zero tolerance for a single missed block
+only where the process is actually playing music: in `nhj stats --check`. The gate is `tests/test_mixer_stats.py`, asserting p95 under 25 % of a block;
 `nhj stats --check` applies the same budget on a real host, and `--save-baseline` arms a 10 % regression
 gate per host once you like its current numbers — and fails loudly if the baseline file cannot be
 written, because a gate you believe is armed and is not is worse than no gate.
