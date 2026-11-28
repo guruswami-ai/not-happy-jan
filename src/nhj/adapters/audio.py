@@ -41,7 +41,7 @@ from nhj.adapters.base import NotificationAdapter
 if TYPE_CHECKING:
     from nhj.characters import Character
 
-from nhj import env_registry, resources
+from nhj import env_registry, resources, stats
 
 _LAZY_ATTRS = ("_VOICES_ROOT", "_AUDIO_ROOT", "_CLIPS_ROOT", "_TMP_ROOT", "_VOICE_TARGET_DBFS")
 
@@ -273,6 +273,24 @@ def pick_return_clip() -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Tier 3 — live synthesis (local Qwen3-TTS only)
 # ---------------------------------------------------------------------------
+#: Why the last synthesis failed, kept so the rung counter in nhj.stats can say more than "an error".
+#: These reasons already go to stderr; without this, `nhj stats` can count failures but not group them,
+#: and finding one still means opening worker.log by hand. One worker handles one vibe at a time, so
+#: last-writer-wins is the right semantics for a reason that is read a moment later in the same process.
+_LAST_SYNTH_ERROR: dict = {}
+
+#: Error sites log human-facing labels ("os TTS"). The counter groups by the same engine names the
+#: ladder and `_cache_backend_id` use, so `nhj stats` speaks one vocabulary rather than two.
+_ENGINE_NAMES = {"os tts": "os", "cpu-tts": "os", "qwen": "qwen", "audiocpp": "audiocpp",
+                 "piper": "piper"}
+
+
+def _note_synth_error(engine: str, msg) -> None:
+    _LAST_SYNTH_ERROR.clear()
+    _LAST_SYNTH_ERROR.update({"engine": _ENGINE_NAMES.get(engine.strip().lower(), engine.strip().lower()),
+                              "msg": str(msg)[:200]})
+
+
 def synth_qwen(text: str, base_url: str, voice: str = "jan",
                model_tier: str = "fast", instruct: str = "", speed: float = 1.0,
                temperature: Optional[float] = None, timeout: float = 30.0) -> Optional[bytes]:
@@ -296,10 +314,13 @@ def synth_qwen(text: str, base_url: str, voice: str = "jan",
         r.raise_for_status()
         body = r.json()
         if body.get("status") != "ok" or not body.get("audio_b64"):
+            _note_synth_error("qwen", f"{base_url} answered status={body.get('status')!r} "
+                                      f"with no audio")
             return None
         return base64.b64decode(body["audio_b64"])
     except Exception as e:
         print(f"[nhj] Qwen TTS error: {e}", file=sys.stderr)
+        _note_synth_error("qwen", e)
         return None
 
 
@@ -329,6 +350,7 @@ def synth_audiocpp(text: str, base_url: str, voice: str, voices_dir: str,
         reference_text = ref_txt.read_text().strip()
     except OSError:
         print(f"[nhj] audiocpp: no transcript {ref_txt} for voice {voice!r}", file=sys.stderr)
+        _note_synth_error("audiocpp", f"no transcript {ref_txt} for voice {voice!r}")
         return None
     body = {"model": "breeze", "input": text, "voice": voice, "response_format": "wav",
             "options": {"guidance_scale": "1.0", "stream_frames_per_event": "2",
@@ -340,10 +362,12 @@ def synth_audiocpp(text: str, base_url: str, voice: str, voices_dir: str,
         if len(wav) < 1024 or wav[:4] != b"RIFF":
             print(f"[nhj] audiocpp: empty/invalid audio ({len(wav)} B) — server out of VRAM?",
                   file=sys.stderr)
+            _note_synth_error("audiocpp", f"empty/invalid audio ({len(wav)} B) — server out of VRAM?")
             return None
         return wav
     except Exception as e:
         print(f"[nhj] audiocpp TTS error: {e}", file=sys.stderr)
+        _note_synth_error("audiocpp", e)
         return None
 
 
@@ -389,11 +413,13 @@ def _run_synth_cli(cmd: list, out: Path, stdin_text: str = "", timeout: float = 
         data = out.read_bytes()
     except Exception as e:
         print(f"[nhj] {label} error: {e}", file=sys.stderr)
+        _note_synth_error(label, e)
         return None
     finally:
         out.unlink(missing_ok=True)
     if len(data) < 44 or data[:4] not in (b"RIFF", b"FORM"):   # WAV or AIFF (say)
         print(f"[nhj] {label}: empty/invalid audio ({len(data)} B)", file=sys.stderr)
+        _note_synth_error(label, f"empty/invalid audio ({len(data)} B)")
         return None
     return data
 
@@ -411,6 +437,7 @@ def synth_os(text: str, voice: str = "jan", timeout: float = 30.0) -> Optional[b
     cmd, suffix = _os_command(text, voice)
     if cmd is None:
         print("[nhj] os TTS: no espeak-ng/espeak/say binary found", file=sys.stderr)
+        _note_synth_error("os", "no espeak-ng/espeak/say binary found")
         return None
     out = _synth_out_path(suffix)
     return _run_synth_cli([str(out) if a == "{out}" else a for a in cmd], out,
@@ -422,14 +449,17 @@ def synth_piper(text: str, model: str, timeout: float = 60.0) -> Optional[bytes]
     if not text.strip() or not model:
         if not model:
             print("[nhj] piper: NHJ_PIPER_MODEL is not set", file=sys.stderr)
+            _note_synth_error("piper", "NHJ_PIPER_MODEL is not set")
         return None
     model_path = Path(model).expanduser()
     if not model_path.is_file():
         print(f"[nhj] piper: no model at {model_path}", file=sys.stderr)
+        _note_synth_error("piper", f"no model at {model_path}")
         return None
     exe = shutil.which("piper")
     if not exe:
         print("[nhj] piper: piper binary not found on PATH", file=sys.stderr)
+        _note_synth_error("piper", "piper binary not found on PATH")
         return None
     out = _synth_out_path(".wav")
     cmd = [exe, "--model", str(model_path), "--output_file", str(out)]
@@ -512,6 +542,31 @@ class AudioAdapter(NotificationAdapter):
 
     def fire(self, intent: str, message: str, character: "Character",
              vibe_level: int = 5, **kwargs) -> bool:
+        """Speak one vibe, and record which rung served it and what it cost (`nhj stats`).
+
+        The measurement wraps the ladder instead of threading through it: `SPEC.md` §9 promises a
+        per-rung budget (bank/chime ≤ 300 ms, live voice ≤ 2 s warm) and nothing had ever timed any of
+        the three tiers, while the errors that did exist — an unreachable TTS server, an out-of-VRAM
+        audio.cpp — survived only as lines in worker.log.
+
+        The window is decision to hand-off. The mixer queues asynchronously and the sound comes out
+        later, so this is the part the ladder itself controls; queue dispatch upstream of it and the
+        mixer's buffering downstream are not in the number.
+        """
+        t0 = time.perf_counter()
+        meter = {"rung": "none", "engine": "", "render_s": None, "path": "", "error": ""}
+        try:
+            return self._ladder(intent, message, character, vibe_level, meter, **kwargs)
+        except Exception as e:
+            meter["error"] = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            stats.record_voice(meter["rung"], meter["engine"], time.perf_counter() - t0,
+                               render_s=meter["render_s"], path=meter["path"], error=meter["error"])
+
+    def _ladder(self, intent: str, message: str, character: "Character", vibe_level: int,
+                meter: dict, **kwargs) -> bool:
+        _LAST_SYNTH_ERROR.clear()          # a reason from an earlier vibe is not evidence about this one
         tts_enabled = os.getenv("TTS_ENGINE", "qwen").lower() != "none"
         # `nhj say`: speak exactly this text, nothing before it and nothing instead of it. With no
         # message there is nothing to be literal about, so a bare marker keeps its normal behaviour.
@@ -522,7 +577,11 @@ class AudioAdapter(NotificationAdapter):
         # talked over. The silent channels already fired.
         if kwargs.get("voice_mode") == "chime":
             from nhj import orchestration
-            return orchestration.play_chime()
+            played = orchestration.play_chime()
+            meter["rung"] = "chime" if played else "none"
+            if not played:
+                meter["error"] = "chime asked for and no earcon played"
+            return played
 
         # Coming off hold: the mixer already beeped the instant the music froze. Jan
         # reconnects ("you still there?") before the result. Both go on the mixer's voice
@@ -556,10 +615,14 @@ class AudioAdapter(NotificationAdapter):
 
         # Tier 1: bank clip (bare markers only) · Tier 2: message cache (per band)
         path = pick_bank_clip(voice, intent) if not message else None
+        if path is not None:
+            meter["rung"] = "bank"
         model_tier = os.getenv("NHJ_TTS_MODEL_TIER", d.model_tier)
         if path is None and tts_text:
             path = cache_hit(voice, tts_text, variant, model_tier)
             digest_delivered = bool(digest_n and path)        # a cached clip of the same sentence
+            if path is not None:
+                meter["rung"] = "cache"
 
         # Speed is applied ONCE, at playback (below) — never at synthesis. The deployed
         # Qwen backend ignores a synth-speed kwarg, and applying it at both synth and
@@ -574,6 +637,10 @@ class AudioAdapter(NotificationAdapter):
         ephemeral = False
         if path is None and tts_enabled:                      # Tier 3: live synth (unsped)
             engine = os.getenv("TTS_ENGINE", "qwen").lower()
+            meter["engine"] = engine
+            # render_s is the synthesis round trip alone — including the on-demand warm-up below,
+            # because a user waiting on a cold TTS server waits for that too.
+            t_synth = time.perf_counter()
             if engine == "os":
                 wav = synth_os(tts_text or intent, voice=voice)
             elif engine == "piper":
@@ -595,7 +662,9 @@ class AudioAdapter(NotificationAdapter):
                 wav = synth_qwen(tts_text or intent, base_url, voice=voice,
                                  model_tier=model_tier, instruct=d.instruct,
                                  temperature=d.temperature)
+            meter["render_s"] = time.perf_counter() - t_synth
             if wav:
+                meter["rung"] = "synth"
                 wav = _normalize_voice_wav(wav)           # level live TTS to match the banks
                 if tts_text:
                     _save_and_cache(voice, tts_text, wav, variant, model_tier)
@@ -604,6 +673,10 @@ class AudioAdapter(NotificationAdapter):
                 digest_delivered = bool(digest_n)
 
         if path is None:
+            # Why synthesis did not produce audio, if it was tried and did not. On the sample, so
+            # `nhj stats` names the engine instead of a person reading a log line to learn the same.
+            reason = (f"{_LAST_SYNTH_ERROR['engine']}: {_LAST_SYNTH_ERROR['msg']}"
+                      if _LAST_SYNTH_ERROR.get("msg") else "")
             # No bank/cache hit and no live voice (TTS_ENGINE=none, or synth failed/
             # unreachable) → fall back to the bundled bare-marker bank so the character
             # still speaks its generic in-character line. Keeps a minimal install — and
@@ -611,10 +684,17 @@ class AudioAdapter(NotificationAdapter):
             if literal:
                 # A literal `say` has no stand-in: a generic clip would be different words. Report
                 # "not spoken" (the CLI has already printed the text to stderr when it knew).
+                meter["error"] = reason or "a literal line had no clip"
                 return False
             path = pick_bank_clip(voice, intent)
             if path is None:
+                meter["error"] = reason or "no clip anywhere: the bank has nothing for this voice+intent"
                 return False
+            # Generic in-character words in place of the message. On a minimal install that is the
+            # designed behaviour and reads as a bank serve; after a synthesis attempt it is a degraded
+            # vibe, and the two must not look the same in the numbers.
+            meter["rung"] = "fallback" if meter["engine"] else "bank"
+            meter["error"] = reason
 
         if digest_n and digest_delivered:
             from nhj import orchestration
@@ -623,5 +703,6 @@ class AudioAdapter(NotificationAdapter):
         # The single point speed is applied — by resampling at playback. Resampling shifts
         # pitch (faster = higher); a pitch-preserving time-stretch would need a DSP dep we
         # deliberately avoid (see docs/AUDIO-STANDARD.md).
+        meter["path"] = path              # so the sample can carry the clip's size; see nhj.stats
         _emit_voice(path, rate=_effective_speed(user_speed, d.speed), ephemeral=ephemeral)
         return True

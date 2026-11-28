@@ -93,6 +93,7 @@ nav:
   - Under the hood:
       - Architecture: ARCHITECTURE.md
       - Developer guide: DEVELOPER-GUIDE.md
+      - NHJ v2 specification (draft): REDESIGN-2.md
   - Trust:
       - Media provenance & licenses: media-provenance.md
       - Security policy: https://github.com/guruswami-ai/not-happy-jan/blob/main/SECURITY.md

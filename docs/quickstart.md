@@ -21,6 +21,7 @@ queue; see [Configuration](configuration.md) and `nhj devices`.
 nhj voices     # the cast — bundled bank availability + live-TTS references per voice
 nhj devices    # the notification channels NHJ found and can reach
 nhj status     # current mode, dials, mute/muzak, censor
+nhj stats      # what the two audible paths cost: mixer callback, and each voice rung
 ```
 
 ## Tune it live — no restart

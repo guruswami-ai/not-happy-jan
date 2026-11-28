@@ -177,6 +177,81 @@ recovers.
 
 ---
 
+## 9c. What the realtime path costs — `nhj stats`
+
+The mixer's callback has one hard deadline: the block it is filling (`BLOCK = 1024` frames at
+48 kHz ≈ **21.3 ms**). Miss it and PortAudio's next wake has nothing queued, which is a gap you
+hear — and until now nothing counted it, so "the audio is fine" meant "nobody complained".
+
+The callback tallies four things in memory and the controller publishes them every 2 s (into
+`nhj/stats.py`, read back by `nhj stats`):
+
+| Counter | What it means |
+|---|---|
+| `callback_p50/p95/max_us` | wall time actually spent inside the callback — the block is the deadline |
+| `deadline_misses` | callbacks that outlived the block they were filling |
+| `underruns` / `short_frames` | the bed asked for audio and got none: silence in the music |
+| `pa_flags` | the **names** of the PortAudio flags that fired, e.g. `output_underflow` — kept, but not relied on |
+
+`pa_flags` holds names rather than a bitmask because `status` is not a number. sounddevice hands the
+callback `None` on a clean block and a `sounddevice.CallbackFlags` otherwise, and that class defines
+neither `__int__` nor `__index__`. The first version of this counter did `int(status)`, which raises
+`TypeError` *inside the callback* — sounddevice catches an exception from a callback, stops the stream and
+never calls us again, so the first xrun of an evening would have been the last sound the bed made while
+`StreamKeeper` went on believing the stream was live. The flags are read as properties and stored as an
+immutable set, rebound rather than mutated because the controller reads it from another thread.
+
+The ring of per-callback times stays inside the mixer process and the percentiles are computed
+there, so `nhj stats` never reads a structure written by a thread it cannot synchronise with. A
+snapshot whose pid has died is reported **stale** rather than as live. Percentiles are **nearest rank
+with the rank rounded up** (`ceil(q/100 × n)`): on eleven samples p95 is the eleventh, so one slow
+observation cannot be averaged away by a small window. Rounding the rank instead reported 100 ms for ten
+fast renders plus one 3 s one, and `--check` passed a host running 50 % over budget.
+
+Measured on the full mix the CI gate builds (bed + voice + fx + ambient + compressor, Linux x86_64,
+400 blocks — the line that prints under `pytest -s`): **p50 219–232 µs, p95 237–261 µs, max 528–610 µs**
+against a 21.3 ms block, about 1 % of the deadline, which is the evidence that this path does not need a
+different language. Read `max` for what it is — the worst single block the process ever ran, which on a
+loaded machine can be a 39 ms gc or scheduler stall rather than the mixer running out of budget. That is
+why the CI gate asserts **p95** and the underrun count, and keeps zero tolerance for a single missed block
+only where the process is actually playing music: in `nhj stats --check`. The gate is `tests/test_mixer_stats.py`, asserting p95 under 25 % of a block;
+`nhj stats --check` applies the same budget on a real host, and `--save-baseline` arms a 10 % regression
+gate per host once you like its current numbers — and fails loudly if the baseline file cannot be
+written, because a gate you believe is armed and is not is worse than no gate.
+
+---
+
+## 9d. Voice rungs — the same command, the other audible path
+
+`SPEC.md` §9 promises *bank/chime ≤ 300 ms* and *live voice ≤ 2 s warm*. Those are per-rung numbers, so
+one "voice latency" average would have been useless. Every `AudioAdapter` dispatch appends one record of
+the rung that actually served it — `bank`, `cache`, `synth`, `fallback` (generic words after a synthesis
+failure), `chime` or `none` — with the engine that served it (`qwen`, `audiocpp`, `os`, `piper`), the
+ladder's wall time, the synthesis round trip on its own, the clip size and, on failure, the reason.
+
+That last field is why the file exists: an unreachable TTS server or an out-of-VRAM `audio.cpp` used to
+survive only as a line in `worker.log`, findable by a human with a grep. Now they are a per-engine error
+count on the rung that failed.
+
+An engine is named in a record exactly where synthesis was attempted, so the engine table counts
+**attempts**, not successes. A call that fails leaves the rung at `none` — filtering engines by the
+synthesis rungs would then drop every row for an engine that fails every call, hiding both its errors and
+its slow failures in precisely the window you open `nhj stats` to read. The rung table keeps its rung
+filter, because its denominator is what actually got spoken.
+
+Two honesty notes, both printed by `nhj stats` as well as here:
+
+- The window measured is **ladder decision to mixer hand-off**. The mixer queues asynchronously, so this
+  is the share the ladder controls; queue dispatch upstream and mixer buffering downstream are not in it.
+- `fallback` is not the same as a bank serve on a minimal install. One is the design working; the other is
+  a degraded vibe where Jan spoke generic words instead of your message.
+
+Nothing in §9's voice figures has been measured on your hardware yet — `nhj stats` is what measures it.
+If p95 turns out to miss on a CPU-only host, the honest fix is to amend §9 to what the machine does, not
+to declare the code broken against a number nobody has ever timed.
+
+---
+
 ## 10. Control reference
 
 ### Modes & settings

@@ -870,6 +870,75 @@ def status():
     app.print(t)
 
 
+@cli.command()
+def stats(
+    json_out: bool = typer.Option(False, "--json", help="machine-readable output instead of tables"),
+    check: bool = typer.Option(False, "--check",
+                               help="exit 1 when a budget or the regression gate is missed"),
+    save_baseline: bool = typer.Option(
+        False, "--save-baseline",
+        help="record the current window as this host's regression baseline"),
+    reset: bool = typer.Option(False, "--reset",
+                               help="drop the retained samples, the mixer snapshot and the baseline"),
+):
+    """What the two audible paths actually cost — the mixer's realtime callback and the voice ladder.
+
+    `SPEC.md` §9 has promised a bank/chime voice within 300 ms and live voice within 2 s for as long as
+    those numbers have been written down, and nothing measured either one. The mixer had no underrun
+    counter, so "the audio is fine" meant "nobody has complained". This reads what the mixer publishes
+    about its own callback and what each spoken vibe recorded about the rung that served it.
+
+    The voice numbers are ladder decision to mixer hand-off, not ear time; the tables say so on screen
+    rather than letting a percentile look like more than it is.
+
+    Exit status: 0 normally, 1 with --check when something measured is over budget or has regressed more
+    than the gate (10 %) past `--save-baseline`, and 1 if a baseline could not be written. With --json,
+    stdout is one parseable document and --check complaints go to stderr.
+    """
+    from nhj import stats as S
+
+    if reset:
+        removed = S.reset()
+        app.print("[green]cleared[/green] " + (", ".join(removed) if removed else "nothing to clear"))
+        return
+
+    summ = S.summarise()
+
+    if save_baseline:
+        try:
+            payload = S.save_baseline(summ["mixer"], summ["voice"])
+        except OSError as e:
+            # Arming the gate is the whole point of this flag. Saying "saved" over a failed write leaves
+            # a host passing --check because it has no baseline to compare against.
+            app.print(f"[red]baseline NOT saved[/red] {e}")
+            raise typer.Exit(1)
+        if not payload["numbers"]:
+            app.print("[yellow]nothing to record[/yellow] — no measured numbers in the window yet.")
+            raise typer.Exit(1)
+        app.print(f"[green]baseline saved[/green] {len(payload['numbers'])} figure(s): "
+                  f"{', '.join(sorted(payload['numbers']))}")
+        return
+
+    if json_out:
+        typer.echo(json.dumps(summ, indent=2, sort_keys=True))
+    else:
+        for block in S.render(summ):
+            app.print(block)
+
+    if check:
+        fails = list(summ["budget_failures"]) + list(summ["regression_failures"])
+        for f in fails:
+            # In --json the stdout contract is "one parseable document", which is exactly when a
+            # consumer most needs to read it. Diagnostics go to stderr; the exit status still carries
+            # the verdict.
+            if json_out:
+                typer.echo(f"BUDGET {f}", err=True)
+            else:
+                app.print(f"[red]BUDGET[/red] {f}")
+        if fails:
+            raise typer.Exit(1)
+
+
 @cli.command("dynamic-test")
 def dynamic_test(
     message: str = typer.Option("the build passed", "--message", "-m"),

@@ -35,14 +35,17 @@ def test_speed_applied_once_at_playback_not_synthesis(monkeypatch):
     deliv = types.SimpleNamespace(voice="jan", text="hi", band="mid", speed=1.2,
                                   model_tier="fast", instruct="", temperature=0.8)
     char = types.SimpleNamespace(delivery=lambda intent, message: deliv)
+    # A real adapter, not `fire(None, ...)`: fire now wraps the ladder to measure it, so it needs an
+    # instance to wrap. Everything below this line is unchanged.
+    adapter = audio.AudioAdapter()
 
     # user speed 1.0 → band's 1.2 applied once at playback; synth never sees speed
-    audio.AudioAdapter.fire(None, "ok", "hi", char, vibe_level=5, speed=1.0)
+    adapter.fire("ok", "hi", char, vibe_level=5, speed=1.0)
     assert captured["rate"] == 1.2
     assert "speed" not in synth_kw, "speed must not be applied at synthesis"
 
     # explicit user speed overrides the band
-    audio.AudioAdapter.fire(None, "ok", "hi", char, vibe_level=5, speed=1.5)
+    adapter.fire("ok", "hi", char, vibe_level=5, speed=1.5)
     assert captured["rate"] == 1.5
 
 
