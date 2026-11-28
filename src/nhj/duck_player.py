@@ -37,6 +37,10 @@ _BLOCK_US = 1_000_000.0 * BLOCK / SR    # one callback's deadline in microsecond
 _STATE_TICK_S = 0.25   # music.json cadence. The play-event spool stays on the 50 ms wake.
 _STATS_FLUSH_S = 2.0   # how often the controller publishes its counters for `nhj stats`
 _STATS_RING = 4096     # per-callback times kept for percentiles (~86 s at 47 blocks/s)
+# sounddevice.CallbackFlags exposes exactly these five booleans. Named here because the callback may
+# only read them — the object itself cannot be turned into an int (see Mixer._note_pa_flags).
+_PA_FLAG_NAMES = ("input_overflow", "input_underflow", "output_overflow",
+                  "output_underflow", "priming_output")
 _ACCENT_STALE_S = 8.0   # a waiting accent is dropped if the bed stays paused this long (matches the director's TTL)
 _BUF_MAX = 48       # bounded music decode buffer (~1s) → frozen position when full/paused
 _LAZY_ATTRS = ("_EVENTS",)
@@ -328,7 +332,11 @@ class Mixer:
         self._underruns = 0
         self._short_frames = 0
         self._deadline_misses = 0
-        self._pa_flags = 0
+        # Flag names PortAudio reported, as an immutable set. Rebound rather than mutated: the
+        # controller loop reads it from another thread, and `sorted()` over a set the callback is
+        # adding to can raise mid-iteration. Rebinding costs one small allocation, and only on a
+        # callback that actually reported something.
+        self._pa_flags = frozenset()
 
     # ---- realtime callback (no I/O) -----------------------------------------
     def _callback(self, outdata, frames, time_info, status):
@@ -439,7 +447,23 @@ class Mixer:
         if us >= _BLOCK_US:
             self._deadline_misses += 1
         if status:
-            self._pa_flags |= int(status)
+            self._note_pa_flags(status)
+
+    def _note_pa_flags(self, status) -> None:
+        """Record which PortAudio flags fired, by name.
+
+        `status` is None on a clean callback and a `sounddevice.CallbackFlags` only when something went
+        wrong — and it is never a number. CallbackFlags defines neither `__int__` nor `__index__`, so
+        treating it as a bitmask with `int(status)` raises TypeError here, inside the callback.
+        sounddevice catches that, stops the stream and never calls us again: a momentary output
+        underflow would have been the last sound the bed ever made, while StreamKeeper went on believing
+        the stream was live. So the flag properties are read, never converted.
+        """
+        flags = self._pa_flags
+        for name in _PA_FLAG_NAMES:
+            if getattr(status, name, False) and name not in flags:
+                flags = flags | {name}
+        self._pa_flags = flags
 
     def stats(self) -> dict:
         """The mixer's side of `nhj stats`. Percentiles are computed here so the ring of per-callback
@@ -454,7 +478,7 @@ class Mixer:
                 "callback_max_us": self._cb_us_max,
                 "deadline_misses": self._deadline_misses,
                 "underruns": self._underruns, "short_frames": self._short_frames,
-                "pa_flags": self._pa_flags, "paused": self.paused}
+                "pa_flags": sorted(self._pa_flags), "paused": self.paused}
 
     # ---- control surface -----------------------------------------------------
     def start(self) -> None:

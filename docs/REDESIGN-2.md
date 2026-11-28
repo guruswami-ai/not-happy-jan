@@ -318,8 +318,9 @@ is a rewrite justified by a hunch about a path that has no recorded faults.
 
 `nhj stats` measures both paths: the mixer's own callback timing, deadline misses and bed underruns, and one
 record per spoken vibe — rung, engine, ladder wall time, synthesis round trip alone, clip size, failure
-reason. Measured on a full synthetic mix (bed + voice + fx + ambient + compressor, no audio device):
-**callback p50 225 µs, p95 245 µs, max 864 µs** against a 21.3 ms block — about 1 % of the deadline. ADR-5's
+reason. Measured on a full synthetic mix (bed + voice + fx + ambient + compressor, no audio device,
+400 blocks, both Python legs): **callback p50 219–232 µs, p95 237–261 µs, max 528–610 µs** against a
+21.3 ms block — about 1 % of the deadline. ADR-5's
 question is answered in the direction it expected: nothing here asks for another language, and §6 item 3 is
 now a thing a real session can report rather than a thing to argue about.
 
@@ -345,6 +346,26 @@ Two findings the instrument produced on its own:
   `@cli.command("dynamic-test")`, which removed a command from the product with no error anywhere and no
   test that read `--help`. A guard now asserts that every command-shaped function is registered.
 
+**Then the review round found five more, one of them serious.** Merging the branch as reviewed would have
+shipped a fault that stops the product's only audible output:
+
+- the flag counter did `int(status)`. sounddevice passes `None` on a clean block and a `CallbackFlags`
+  otherwise, and that class has neither `__int__` nor `__index__`, so the first real xrun raised
+  `TypeError` inside the callback — where sounddevice stops the stream and never calls again, while
+  `StreamKeeper`'s `live` flag stayed set and no one restarted it.
+- `percentile` rounded its rank instead of rounding up, so a small window could discard its slowest
+  observation and `--check` passed a host at 3000 ms against a 2 s budget.
+- `--save-baseline` swallowed a failed write and still reported the gate armed.
+- `--json --check` appended human verdict lines to the JSON document on stdout.
+- the engine table filtered on the spoken rungs, so an engine failing every call had no row — the opposite
+  of what ADR-10's `Done when` promises the `audiocpp` 500s buy.
+
+CodeQL added two `Empty except` alerts on the way. All seven are fixed, and each fix carries a test that
+was **mutation-checked**: put the old line back, the named test fails. The reason is the one lesson worth
+keeping from this — the test that hid the first finding handed the callback the integer `4`, because the
+code read it as a bitmask. A stub shaped like whatever the code expects proves nothing about the shape of
+the thing on the other end of it, and eleven green checks plus 797 passing tests did not get any closer.
+
 ## 6. Open questions
 
 **Resolved by the maintainer on 2026-11-27:** Windows is not a requirement (ADR-4 reduced to the
@@ -369,7 +390,7 @@ Three remain, and unlike the four above each has an answer you can go and get ra
    if p95 misses at the engine that wins the ladder most often, §9 is amended to what the hardware does
    and the budget becomes real instead of aspirational.
 3. **Does the interpreter ever delay the audio callback on a real host?** `max_callback_us` now exists, and
-   CI's synthetic full mix answers the pessimistic version: p95 245 µs against a 21.3 ms block with bed,
+   CI's synthetic full mix answers the pessimistic version: p95 237–261 µs against a 21.3 ms block with bed,
    voice, fx, ambient and the compressor all sounding at once. What is still unknown is the machine that also
    hosts a TTS model. If `nhj stats` shows callback time flat while TTS round trips and library rescans run in
    the same process, Python's sufficiency argument is closed for good. If it spikes in correlation with that

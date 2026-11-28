@@ -23,6 +23,7 @@ Three limits are deliberate, and stating them is part of the module:
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -69,11 +70,17 @@ def percentile(values, q: float):
 
     Nearest rank rather than interpolation: these are latency budgets, and reporting a value that was
     actually observed is more useful on a handful of samples than a fraction that exists between two.
+
+    The rank rounds **up** (`ceil(q/100 * n)`), which is what "nearest rank" means and is not a detail:
+    rounding or truncating drops the slowest observation in a small window, and the slowest observation
+    is the only one a budget gate cares about. Ten 100 ms renders plus one 3000 ms render is n=11, so
+    p95 is rank 11 — the 3000 ms sample. A rounded rank returned 100 ms there and `--check` passed a
+    host running 50 % over its 2 s budget.
     """
     vals = sorted(values)
     if not vals:
         return None
-    k = max(0, min(len(vals) - 1, int(round(q / 100.0 * len(vals))) - 1))
+    k = max(0, min(len(vals) - 1, math.ceil(q / 100.0 * len(vals)) - 1))
     return vals[k]
 
 
@@ -100,7 +107,7 @@ def record_voice(outcome: str, engine: str = "", ladder_s: float = 0.0, render_s
         try:
             rec["bytes"] = os.path.getsize(path)
         except OSError:
-            pass
+            pass                                   # a sample without a clip size is still a sample
     if error:
         rec["error"] = str(error)[:200]
     try:
@@ -120,7 +127,7 @@ def _debug(msg: str) -> None:
         from nhj import resources
         resources.debug(msg)
     except Exception:
-        pass
+        pass                                       # debug logging is never allowed to break a caller
 
 
 def read_voice(limit: int = VOICE_WINDOW) -> list[dict]:
@@ -172,7 +179,13 @@ def voice_summary(records: list[dict] | None = None) -> dict:
 
     engines: dict[str, list] = {}
     for r in rows:
-        if r.get("engine") and r["engine"] != "-" and r["outcome"] in SYNTH_RUNGS:
+        # An engine name is recorded only where synthesis was attempted (adapters/audio.py sets it on
+        # the synth rung), so its presence means "this engine was asked" — including the attempts that
+        # produced nothing. Filtering on the rung instead would hide the window that matters most: an
+        # engine timing out on every call leaves outcome "none" and would show no row at all, hiding
+        # both its errors and its slow failures. The rung table above keeps the rung filter, because
+        # its denominator is what actually got spoken.
+        if r.get("engine") and r["engine"] != "-":
             engines.setdefault(str(r["engine"]), []).append(r)
     for name, group in sorted(engines.items()):
         row = _rung_row(group)
@@ -318,14 +331,17 @@ REGRESSION_RATIO = 1.10      # REDESIGN-2 phase 1: fail past a 10 % measured reg
 
 
 def save_baseline(mixer: dict | None, voice: dict) -> dict:
+    """Arm the regression gate. Raises OSError if the file cannot be written.
+
+    Unlike the playback instrumentation, which loses a sample rather than silence a vibe, this is an
+    explicit user request: quietly returning a payload the caller then prints "baseline saved" over
+    leaves them believing a gate is armed when nothing was written.
+    """
     g = _gated_numbers(mixer, voice)
     payload = {"saved_at": round(time.time(), 3), "numbers": g}
-    try:
-        p = _state_path(BASELINE)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(payload, indent=2))
-    except Exception as e:
-        _debug(f"baseline write failed: {e}")
+    p = _state_path(BASELINE)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(payload, indent=2))
     return payload
 
 
@@ -436,7 +452,8 @@ def render(summ: dict) -> list:
         mt.add_row("bed underruns", "[green]0[/green]" if not und else f"[red]{und}[/red]",
                    f"{mixer.get('short_frames', 0)} silent frames — the bed asked for audio and got none")
         if mixer.get("pa_flags"):
-            mt.add_row("PortAudio flags", str(mixer["pa_flags"]), "device-side xrun reports")
+            mt.add_row("PortAudio flags", f"[red]{', '.join(mixer['pa_flags'])}[/red]",
+                       "device-side xrun reports")
         if mixer.get("stream_live") is False:
             mt.add_row("output stream", "[red]down[/red]", "the keeper is in backoff (StreamKeeper)")
     blocks.append(mt)

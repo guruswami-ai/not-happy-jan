@@ -892,7 +892,8 @@ def stats(
     rather than letting a percentile look like more than it is.
 
     Exit status: 0 normally, 1 with --check when something measured is over budget or has regressed more
-    than the gate (10 %) past `--save-baseline`.
+    than the gate (10 %) past `--save-baseline`, and 1 if a baseline could not be written. With --json,
+    stdout is one parseable document and --check complaints go to stderr.
     """
     from nhj import stats as S
 
@@ -904,7 +905,13 @@ def stats(
     summ = S.summarise()
 
     if save_baseline:
-        payload = S.save_baseline(summ["mixer"], summ["voice"])
+        try:
+            payload = S.save_baseline(summ["mixer"], summ["voice"])
+        except OSError as e:
+            # Arming the gate is the whole point of this flag. Saying "saved" over a failed write leaves
+            # a host passing --check because it has no baseline to compare against.
+            app.print(f"[red]baseline NOT saved[/red] {e}")
+            raise typer.Exit(1)
         if not payload["numbers"]:
             app.print("[yellow]nothing to record[/yellow] — no measured numbers in the window yet.")
             raise typer.Exit(1)
@@ -919,9 +926,16 @@ def stats(
             app.print(block)
 
     if check:
-        for f in list(summ["budget_failures"]) + list(summ["regression_failures"]):
-            app.print(f"[red]BUDGET[/red] {f}")
-        if list(summ["budget_failures"]) + list(summ["regression_failures"]):
+        fails = list(summ["budget_failures"]) + list(summ["regression_failures"])
+        for f in fails:
+            # In --json the stdout contract is "one parseable document", which is exactly when a
+            # consumer most needs to read it. Diagnostics go to stderr; the exit status still carries
+            # the verdict.
+            if json_out:
+                typer.echo(f"BUDGET {f}", err=True)
+            else:
+                app.print(f"[red]BUDGET[/red] {f}")
+        if fails:
             raise typer.Exit(1)
 
 

@@ -38,6 +38,23 @@ def test_percentile_reports_a_value_that_actually_happened():
     assert S.percentile(vals, 95) in vals
 
 
+def test_the_slowest_sample_survives_a_small_window():
+    """The rank rounds up, which is the difference between a gate and a decoration.
+
+    Ten 100 ms renders plus one 3000 ms render is n=11, so p95 is rank 11 — the outlier. The rank this
+    used to compute (round, not ceil) gave rank 10, reported 100 ms, and `--check` passed a host running
+    half again over its 2 s budget while the one sample that broke the budget sat in the window.
+    """
+    vals = [100.0] * 10 + [3000.0]
+    assert S.percentile(vals, 95) == 3000.0
+    rows = [{"t": float(i), "outcome": "synth", "engine": "qwen", "ladder_ms": v}
+            for i, v in enumerate(vals)]
+    voice = S.voice_summary(rows)
+    assert voice["rungs"]["synth"]["p95_ms"] == 3000.0
+    fails = S.budget_failures(None, voice)
+    assert any("live voice p95 3000 ms over its 2000 ms budget (n=11)" in f for f in fails)
+
+
 # ---- the voice window ------------------------------------------------------
 def test_record_voice_appends_and_read_returns_oldest_first():
     S.record_voice("bank", ladder_s=0.05, path=__file__)
@@ -116,6 +133,26 @@ def test_errors_are_grouped_so_one_log_grep_becomes_a_counter():
                      "error": "audiocpp: 500 Server Error"}]
     errs = {(e["engine"], e["error"]): e["n"] for e in S.voice_summary(rows)["errors"]}
     assert errs[("audiocpp", "audiocpp: 500 Server Error")] == 2
+
+
+def test_an_engine_that_failed_every_call_still_has_a_row():
+    """The window the engine table exists for: nothing got spoken, and the ladder said "none".
+
+    `meter["engine"]` is only ever set where synthesis was attempted, so a failed attempt still names the
+    engine — but its rung stays "none", and filtering the engine table on the synthesis rungs dropped it.
+    An engine timing out on every call showed no row, hiding both its error count and its slow failures,
+    which is the opposite of what ADR-10 promises the audiocpp 500s buy.
+    """
+    rows = [{"t": 1.0, "outcome": "none", "engine": "audiocpp", "ladder_ms": 2100.0,
+             "render_ms": 2050.0, "error": "audiocpp: 500 Server Error"},
+            {"t": 2.0, "outcome": "none", "engine": "audiocpp", "ladder_ms": 2200.0,
+             "render_ms": 2150.0, "error": "audiocpp: 500 Server Error"}]
+    s = S.voice_summary(rows)
+    eng = s["engines"]["audiocpp"]
+    assert eng["n"] == 2 and eng["renders"] == 2 and eng["errors"] == 2
+    assert eng["render_p95_ms"] == 2150.0
+    assert s["rungs"]["none"]["n"] == 2                    # the rung table still counts it as unspoken
+    assert s["hit_rate"] is None                           # and nothing was spoken, so no rate to quote
 
 
 def test_an_empty_window_summarises_without_dividing_by_zero():
@@ -283,6 +320,39 @@ def test_cli_check_exits_one_when_a_budget_is_missed():
     S.record_voice("synth", "audiocpp", ladder_s=3.0, render_s=2.9)
     r = _invoke("--check")
     assert r.exit_code == 1 and "BUDGET" in r.stdout and "live voice" in r.stdout
+
+
+def test_cli_json_check_keeps_stdout_parseable_when_the_check_fails():
+    """--json promises one document on stdout, and the moment a consumer needs to parse it is exactly the
+    moment the check failed. Verdict lines go to stderr; the exit status still carries the failure."""
+    S.record_voice("synth", "audiocpp", ladder_s=3.0, render_s=2.9)
+    r = _invoke("--json", "--check")
+    assert r.exit_code == 1
+    data = json.loads(r.stdout)                   # a BUDGET line on stdout would raise here
+    assert any("live voice" in f for f in data["budget_failures"])
+    assert "BUDGET" in r.stderr and "live voice" in r.stderr
+
+
+def test_cli_save_baseline_reports_a_write_it_could_not_make(tmp_path, monkeypatch):
+    """A "baseline saved" over a failed write is the worst outcome this command can produce: the operator
+    believes the regression gate is armed, and --check then passes because there is no baseline to
+    compare against. A read-only state dir or a full disk has to say so and fail."""
+    S.record_voice("synth", "qwen", ladder_s=0.9, render_s=0.8)      # there IS something worth saving
+    blocker = tmp_path / "blocker"
+    blocker.write_text("in the way of the state directory")
+    monkeypatch.setattr(S, "_state_path", lambda name: blocker / "nested" / name)
+    r = _invoke("--save-baseline")
+    assert r.exit_code == 1 and "NOT saved" in r.output
+
+
+def test_save_baseline_raises_instead_of_returning_a_payload_it_never_wrote(tmp_path, monkeypatch):
+    """Same fault at the library edge, so a caller other than the CLI cannot inherit the lie."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("in the way")
+    monkeypatch.setattr(S, "_state_path", lambda name: blocker / "nested" / name)
+    voice = S.voice_summary([{"t": 1.0, "outcome": "bank", "engine": "-", "ladder_ms": 5.0}])
+    with pytest.raises(OSError):
+        S.save_baseline(None, voice)
 
 
 def test_cli_check_exits_zero_within_budget():
